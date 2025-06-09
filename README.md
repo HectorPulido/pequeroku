@@ -2,6 +2,8 @@
 
 Welcome to **PequeRoku**, your 🎯 go-to micro container management platform! Built with Django, Docker, Redis, and Nginx, PequeRoku puts the power of containers at your fingertips with a fun and simple SPA frontend. 
 
+![brief animation on how the platform works](img/demo.gif)
+
 
 ## 📚 Table of Contents
 
