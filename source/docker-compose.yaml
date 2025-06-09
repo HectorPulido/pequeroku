@@ -1,0 +1,46 @@
+services:
+  web:
+    user: root
+    build: .
+    command: ./entrypoint.sh
+    volumes:
+      - ./:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - db
+      - redis
+    networks:
+      - pequeroku-net
+  db:
+    image: "postgres:16"
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+    volumes:
+      - .db_data:/var/lib/postgresql/data
+    networks:
+      - pequeroku-net
+
+  redis:
+    image: redis:7
+    networks:
+      - pequeroku-net
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx_static
+    ports:
+      - "80:80"
+    depends_on:
+      - web
+    volumes:
+      - ./front:/usr/share/nginx/html:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - pequeroku-net
+    restart: unless-stopped
+
+networks:
+  pequeroku-net:
+    external: false

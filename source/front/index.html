@@ -1,0 +1,92 @@
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PequeRoku – Just a piece</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div id="alert-box">
+  </div>
+
+  <!-- Login -->
+  <div id="login-container" class="login-container">
+    <form id="login-form" class="login-box">
+      <h2>Login</h2>
+      <input type="text" id="username" placeholder="Usuario" required />
+      <input type="password" id="password" placeholder="Contraseña" required />
+      <button type="submit" id="btn-login">Submit</button>
+      <p id="login-error" class="error-message"></p>
+    </form>
+  </div>
+
+  <!-- App Principal -->
+  <div id="app" class="hidden">
+    <header>
+      <h1>PequeRoku</h1>
+      <div class="user-info">
+        <h3 id="user_data">Hola usuario</h2>
+          <div>
+            <div class="dropdown header-dropdown">
+              <button>🤖</button>
+              <div class="dropdown-content">
+                <div>
+                  <pre id="quota_info">
+                  Hola mundo
+                  Hola mundo
+                  Hola mundo
+                  Hola mundo
+                  Hola mundo
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button id="btn-create" disabled>➕ New container</button>
+      </div>
+    </header>
+    <main>
+      <section id="container-list"></section>
+      <div id="upload-modal" class="hidden">
+        <div class="upload-container">
+          <div class="upload-header">
+            <span>Upload file</span>
+            <button id="btn-upload-close" class="top-btn">❌</button>
+          </div>
+          <div class="upload-body">
+            <input type="file" id="file-input" />
+            <button id="btn-upload">Upload</button>
+          </div>
+        </div>
+      </div>
+      <div id="console-modal" class="hidden">
+        <div class="console-header console">
+          <span id="console-title"></span>
+          <div>
+            <button id="btn-restart" class="top-btn">🔄</button>
+            <button id="btn-close" class="top-btn">❌</button>
+          </div>
+        </div>
+        <div id="console-logs" class="console-body console"></div>
+        <div class="console-input console">
+          <input type="text" id="cmd-input" placeholder="Writte your command..." />
+          <button id="btn-send">Enviar</button>
+          <div class="dropdown">
+            <button class="last-button">🔽</button>
+            <div class="dropdown-content">
+              <button class="btn-send" param="ctrld">Ctrl+D</button>
+              <button class="btn-send" param="ctrlc">Ctrl+C</button>
+              <button class="btn-send" param="clear">Clear</button>
+              <button id="btn-open-upload-modal">Upload file</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+
+</html>
