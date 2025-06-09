@@ -117,7 +117,7 @@ docker-compose up -d
 ### 📡 API Endpoints
 
 | 🔧 Method | 📍 Path                                   | 📖 Description                        |
-|  | -- | - |
+| -------- | ------- | -------- |
 | POST      | `/api/login/`                             | User login                            |
 | POST      | `/api/logout/`                            | User logout                           |
 | GET       | `/api/user_data/`                         | Fetch user info & quotas              |
