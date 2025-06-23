@@ -28,6 +28,7 @@ This project was created to give community members a slice of my servers where t
 
 * 🐳 **Container Management**: Instantly start, stop, and restart Docker containers with a click! 
 * 💻 **Interactive Shell**: Type commands and see real-time logs—just like magic! (AND 100% COMPATIBLE WITH CLOUDFLARE TUNNELS)
+* 🎉 **Live coding enviroment**: You can access your files, upload, edit and run without the console
 * 👥 **User management** Powered by django there is a powerfull user management admin
 * 🛡️ **Resource Quotas**: Keep things fair by limiting CPU, memory, and container counts per user. 
 * 📁 **File Upload**: Drag & drop files directly into your running containers. 
@@ -35,8 +36,8 @@ This project was created to give community members a slice of my servers where t
 * 🖥️ **SPA Frontend**: Fast, snappy single-page app written in vanilla JavaScript. 
 * 🌐 **Reverse Proxy**: Nginx for static assets + API proxying—rock-solid performance! 
 
+
 ## 💾 Todo
-* Live code enviroments
 * Guides and Tips
 * Multiples instances
 * More container management
