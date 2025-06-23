@@ -2,6 +2,8 @@
 
 Welcome to **PequeRoku**, your 🎯 go-to micro container management platform! Built with Django, Docker, Redis, and Nginx, PequeRoku puts the power of containers at your fingertips with a fun and simple SPA frontend. 
 
+![brief animation on how the platform works](img/demo.gif)
+
 
 ## 📚 Table of Contents
 
@@ -25,7 +27,7 @@ This project was created to give community members a slice of my servers where t
 ## ✨ Features
 
 * 🐳 **Container Management**: Instantly start, stop, and restart Docker containers with a click! 
-* 💻 **Interactive Shell**: Type commands and see real-time logs—just like magic! 
+* 💻 **Interactive Shell**: Type commands and see real-time logs—just like magic! (AND 100% COMPATIBLE WITH CLOUDFLARE TUNNELS)
 * 👥 **User management** Powered by django there is a powerfull user management admin
 * 🛡️ **Resource Quotas**: Keep things fair by limiting CPU, memory, and container counts per user. 
 * 📁 **File Upload**: Drag & drop files directly into your running containers. 
@@ -115,7 +117,7 @@ docker-compose up -d
 ### 📡 API Endpoints
 
 | 🔧 Method | 📍 Path                                   | 📖 Description                        |
-|  | -- | - |
+| -------- | ------- | -------- |
 | POST      | `/api/login/`                             | User login                            |
 | POST      | `/api/logout/`                            | User logout                           |
 | GET       | `/api/user_data/`                         | Fetch user info & quotas              |
