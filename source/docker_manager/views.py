@@ -16,6 +16,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import JSONParser
 
+from docker import DockerClient
+
 from .models import Container, ResourceQuota
 from .serializers import ContainerSerializer
 from .session import DockerSession
@@ -55,7 +57,8 @@ class ContainersViewSet(viewsets.ModelViewSet):
         cpu_quota = int(quota.max_cpu_percent * 1000)
 
         image_to_use = DockerSession.ensure_utils_image()
-        cont = settings.DOCKER_CLIENT.containers.run(
+        docker_client: DockerClient = settings.DOCKER_CLIENT
+        cont = docker_client.containers.run(
             image_to_use,
             command="/bin/bash",
             detach=True,
@@ -66,6 +69,13 @@ class ContainersViewSet(viewsets.ModelViewSet):
             cpu_quota=cpu_quota,
             network_mode="bridge",
             dns=["8.8.8.8", "8.8.4.4"],
+            devices=["/dev/net/tun:/dev/net/tun", "/dev/fuse:/dev/fuse"],
+            cap_add=["NET_ADMIN", "NET_RAW", "SYS_ADMIN"],
+            security_opt=[
+                "seccomp=unconfined",  # para que no bloquee montajes
+                "apparmor=unconfined",
+            ],
+            volumes={"/sys/fs/cgroup": {"bind": "/sys/fs/cgroup", "mode": "rw"}},
         )
         obj = Container.objects.create(
             user=request.user, container_id=cont.id, status="running"
@@ -198,6 +208,7 @@ class ContainersViewSet(viewsets.ModelViewSet):
         tar_stream, _ = container.get_archive(path)
         # Extraer sólo el archivo solicitado
         import tarfile, io
+
         tf = tarfile.open(fileobj=io.BytesIO(b"".join(tar_stream)), mode="r:")
         member = tf.next()
         content = tf.extractfile(member).read().decode()
@@ -217,6 +228,7 @@ class ContainersViewSet(viewsets.ModelViewSet):
 
         # Empaquetar un tar con el archivo en memoria
         import io, tarfile, os
+
         dirname = os.path.dirname(path)
         filename = os.path.basename(path)
         tar_stream = io.BytesIO()
@@ -239,24 +251,28 @@ class ContainersViewSet(viewsets.ModelViewSet):
         Lista recursivamente todos los subdirectorios y archivos dentro del contenedor,
         usando `find` para obtener rutas y tipos.
         """
-        container = settings.DOCKER_CLIENT.containers.get(self.get_object().container_id)
-        dir_path = request.query_params.get('path', '/').rstrip('/')
-        
+        container = settings.DOCKER_CLIENT.containers.get(
+            self.get_object().container_id
+        )
+        dir_path = request.query_params.get("path", "/").rstrip("/")
+
         # -mindepth 1 evita listar la propia carpeta raíz
         cmd = f"find {dir_path} -mindepth 1 -printf '%p:%y\n'"
         exit_code, output = container.exec_run(cmd)
         if exit_code != 0:
-            return Response({'error': output.decode()}, status=400)
-        
+            return Response({"error": output.decode()}, status=400)
+
         tree = []
         for line in output.decode().splitlines():
-            path, kind = line.split(':', 1)
-            tree.append({
-                'name': os.path.basename(path),
-                'path': path,
-                'type': 'directory' if kind == 'd' else 'file'
-            })
-        
+            path, kind = line.split(":", 1)
+            tree.append(
+                {
+                    "name": os.path.basename(path),
+                    "path": path,
+                    "type": "directory" if kind == "d" else "file",
+                }
+            )
+
         return Response(tree)
 
     @action(detail=True, methods=["post"])
@@ -265,8 +281,10 @@ class ContainersViewSet(viewsets.ModelViewSet):
         Crea una carpeta dentro del contenedor.
         JSON body: { "path": "/app/nueva_carpeta" }
         """
-        container = settings.DOCKER_CLIENT.containers.get(self.get_object().container_id)
-        path = request.data.get('path')
+        container = settings.DOCKER_CLIENT.containers.get(
+            self.get_object().container_id
+        )
+        path = request.data.get("path")
         if not path:
             return Response({"error": "Se requiere 'path'"}, status=400)
         # Ejecutamos mkdir -p dentro del contenedor
@@ -274,6 +292,7 @@ class ContainersViewSet(viewsets.ModelViewSet):
         if exit_code != 0:
             return Response({"error": output.decode()}, status=400)
         return Response({"status": "created", "path": path})
+
 
 class UserViewSet(APIView):
     permission_classes = [permissions.IsAuthenticated]

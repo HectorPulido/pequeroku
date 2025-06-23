@@ -1,0 +1,8 @@
+version: "3.8"
+
+services:
+  web:
+    image: nginx:alpine
+    network_mode: host    # <- Other network mode is not allowed for now
+    volumes:
+      - ./web:/usr/share/nginx/html:ro

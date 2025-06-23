@@ -42,10 +42,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "thisisnotasecretkey")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [
-    "localhost",
-    os.environ.get("ALLOWED_HOSTS", "allowed_hosts")
-]
+ALLOWED_HOSTS = ["localhost", os.environ.get("ALLOWED_HOSTS", "allowed_hosts")]
 
 CSRF_TRUSTED_ORIGINS = ["https://" + os.environ.get("ALLOWED_HOST", "allowed_host")]
 
@@ -112,8 +109,8 @@ DATABASES = {
 }
 
 REST_FRAMEWORK = {
-    'DEFAULT_PARSER_CLASSES': [
-        'rest_framework.parsers.JSONParser',
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
     ],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",

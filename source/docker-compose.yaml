@@ -3,12 +3,16 @@ services:
     user: root
     build: .
     command: ./entrypoint.sh
+    privileged: true
     volumes:
       - ./:/app
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - db
       - redis
+    devices:
+      - /dev/net/tun:/dev/net/tun
+      - /dev/fuse:/dev/fuse
     networks:
       - pequeroku-net
   db:

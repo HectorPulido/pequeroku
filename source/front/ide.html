@@ -64,6 +64,8 @@
         }
 
         .toolbar {
+            align-items: anchor-center;
+            justify-content: space-between;
             background: #2d2d2d;
             padding: 4px;
             display: flex;
@@ -72,7 +74,7 @@
 
         .console {
             height: 150px;
-            background: #1e1e1e;
+            background: #2d2d2d;
             color: #eee;
             padding: 4px;
             overflow-y: auto;
@@ -96,6 +98,100 @@
             border-radius: 4px;
             padding: 4px 8px;
         }
+
+        button:hover {
+            background: #303030;
+        }
+
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            right: 0%;
+            z-index: 100;
+        }
+
+        .dropdown-content div {
+            background-color: #222;
+            width: 300px;
+            padding: 10px;
+        }
+
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        .dropdown-content .btn-send {
+            width: 100%;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Contenedor upload */
+        #upload-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .upload-container {
+            background: #fff;
+            width: 400px;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Header */
+        .upload-header {
+            background: #333;
+            color: #fff;
+            padding: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Body */
+        .upload-body {
+            padding: 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .upload-body input[type="file"] {
+            flex: 1;
+            padding: 0.4rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .upload-body button {
+            padding: 0.5rem 1rem;
+            border: none;
+            background: #17a2b8;
+            color: white;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .upload-body button:hover {
+            background: #138496;
+        }
     </style>
     <!-- Monaco web-component -->
     <script type="module" src="https://cdn.jsdelivr.net/gh/vanillawc/wc-monaco-editor@1/index.js"></script>
@@ -111,17 +207,43 @@
         </div>
         <div class="main">
             <div class="toolbar">
-                <button id="save-file">Save</button>
-                <button id="run-code">Run (Python)</button>
-                <button id="restart-container">Restart container</button>
-                <button id="upload-file">Upload file</button>
-                <span id="current_path_label"></span>
+                <div>
+                    <span id="current_path_label"></span>
+                </div>
+                <div>
+                    <button id="save-file">Save</button>
+                    <button id="run-code">Run (Docker)</button>
+                </div>
             </div>
             <wc-monaco-editor id="editor" language="python" theme="vs-dark" word-wrap="true"></wc-monaco-editor>
             <div class="console" id="console-log"></div>
             <div class="toolbar">
                 <input type="text" id="console-cmd" class="console-input" placeholder="bash command..." />
                 <button id="send-cmd">Send</button>
+
+                <div class="dropdown">
+                    <button class="last-button">🔽</button>
+                    <div class="dropdown-content">
+                        <button class="btn-send" param="ctrld">Ctrl+D</button>
+                        <button class="btn-send" param="ctrlc">Ctrl+C</button>
+                        <button class="btn-send" param="clear">Clear</button>
+                        <button id="restart-container">Reload console</button>
+                        <button id="btn-open-upload-modal">Upload file</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="upload-modal" class="hidden">
+                <div class="upload-container">
+                    <div class="upload-header">
+                        <span>Upload file</span>
+                        <button id="btn-upload-close" class="top-btn">❌</button>
+                    </div>
+                    <div class="upload-body">
+                        <input type="file" id="file-input" />
+                        <button id="btn-upload">Upload</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -131,6 +253,29 @@
         const containerId = urlParams.get('containerId');
         const apiBase = `/api/containers/${containerId}`;
         const pathLabel = document.getElementById('current_path_label');
+        const editor = document.getElementById('editor');
+        const refreshTree = document.getElementById('refresh-tree');
+        const fileTree = document.getElementById('file-tree');
+        const sendCMD = document.getElementById('send-cmd');
+        const consoleCMD = document.getElementById('console-cmd');
+        const restartContainer = document.getElementById('restart-container');
+        const runCode = document.getElementById('run-code');
+        const saveFile = document.getElementById('save-file');
+        const consoleLogs = document.getElementById('console-log');
+        const newFolder = document.getElementById('new-folder');
+        const newFile = document.getElementById('new-file');
+        const btnUpload = document.getElementById("btn-upload");
+        const btnOpenUpload = document.getElementById("btn-open-upload-modal");
+        const uploadModal = document.getElementById("upload-modal");
+        const btnUploadClose = document.getElementById("btn-upload-close");
+        const input = document.getElementById("file-input");
+
+        for (const btn of document.getElementsByClassName("btn-send")) {
+            btn.addEventListener("click", (e) =>
+                sendCommand(btn.getAttribute("param"))
+            );
+        }
+
 
         (async () => {
             await sleep(1 * 1000);
@@ -148,13 +293,51 @@
             return match ? match[1] : "";
         }
         // ====== UTILS ======
-        async function api(path, opts = {}) {
-            opts.headers = { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF() }
+        async function api(path, opts = {}, headersOverride = true) {
+            if (headersOverride)
+                opts.headers = { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF() }
             const res = await fetch(apiBase + path, opts);
             if (!res.ok) {
-                addAlert(await res.text(), "error");
+                parent.addAlert(await res.text(), "error");
             }
             return res.json();
+        }
+
+        // ====== UPLOADS
+        // 1) Abrir el modal de subida
+        btnOpenUpload.addEventListener("click", () => {
+            uploadModal.classList.remove("hidden");
+        });
+
+        // 2) Cerrar el modal
+        btnUploadClose.addEventListener("click", () => {
+            uploadModal.classList.add("hidden");
+        });
+
+        btnUpload.addEventListener("click", uploadFile);
+
+        async function uploadFile() {
+            const file = input.files[0];
+            if (!file) return alert("Selecciona un archivo primero.");
+
+            const form = new FormData();
+            form.append("file", file);
+            form.append("dest_path", "/app");
+
+            const j = await api(
+                /upload_file/,
+                {
+                    headers: { 'X-CSRFToken': getCSRF() },
+                    credentials: "same-origin",
+                    method: 'POST',
+                    body: form
+                },
+                false
+            );
+
+            parent.addAlert(`Uploaded to: ${j.dest}`, "success");
+            btnUploadClose.click();
+            refreshTree.click();
         }
 
         // ====== FILE TREE ======
@@ -162,9 +345,6 @@
             return api(`/list_dir?path=${encodeURIComponent(path)}`);
         }
 
-        /**
-         * Carga hijos directos de 'path' en el <ul> dado
-         */
         async function loadDir(path, ul) {
             ul.innerHTML = '';
             const items = await listDir(path);
@@ -206,39 +386,43 @@
         function sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
-        document.getElementById('refresh-tree').addEventListener('click', () => {
-            const root = document.getElementById('file-tree');
-            loadDir('/app', root);
+        refreshTree.addEventListener('click', () => {
+            loadDir('/app', fileTree);
         });
 
-        document.getElementById('save-file').addEventListener('click', async () => {
-            if (!currentFilePath) return alert('Open a file first');
-            const content = document.getElementById('editor').value;
+        saveFile.addEventListener('click', async () => {
+            if (!currentFilePath) parent.addAlert('Open a file first', "error");
+            const content = editor.value;
             await api('/write_file/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: currentFilePath, content })
             });
+            parent.addAlert('File ' + currentFilePath + ' saved', "Success");
         });
 
         // ====== CREATE FOLDER & FILE ======
-        document.getElementById('new-folder').addEventListener('click', async () => {
+        newFolder.addEventListener('click', async () => {
             const name = prompt('Folder name:'); if (!name) return;
             const path = `/app/${name}`;
             await api('/create_dir/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
-            document.getElementById('refresh-tree').click();
+            refreshTree.click();
         });
-        document.getElementById('new-file').addEventListener('click', async () => {
+        newFile.addEventListener('click', async () => {
             const name = prompt('File name:'); if (!name) return;
             changePath(`/app/${name}`)
-            document.getElementById('editor').value = '';
-            document.getElementById('save-file').click();
-            document.getElementById('refresh-tree').click();
+            editor.value = '';
+            saveFile.click();
+            refreshTree.click();
         });
 
         async function openFile(path) {
+            const ext = path.split('.').pop().toLowerCase();
+            const lang = langMap[ext] || 'plaintext';
+            monaco.editor.setModelLanguage(editor.editor.getModel(), lang)
+
             const { content } = await api(`/read_file/?path=${encodeURIComponent(path)}`);
-            document.getElementById('editor').value = content;
+            editor.value = content;
             changePath(path);
         }
 
@@ -246,44 +430,149 @@
         async function sendCommand(cmd) {
             await api('/send_command/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: cmd }) });
         }
+
+        let lastLogs = null;
         async function readLogs() {
             const { logs } = await api('/read_logs/');
-            const cons = document.getElementById('console-log');
-            cons.innerHTML = logs.map((l) => `<div>${l}</div>`).join("");
-            cons.scrollTop = cons.scrollHeight;
+            const logsStr = JSON.stringify(logs);
+            if (logsStr !== lastLogs) {
+                lastLogs = logsStr;
+                consoleLogs.innerHTML = logs.map(l => `<div>${l}</div>`).join("");
+                consoleLogs.scrollTop = consoleLogs.scrollHeight;
+            }
         }
-        document.getElementById('send-cmd').addEventListener('click', () => {
-            const inp = document.getElementById('console-cmd');
-            sendCommand(inp.value).then(() => inp.value = '');
+        sendCMD.addEventListener('click', () => {
+            sendCommand(consoleCMD.value).then(() => consoleCMD.value = '');
         });
         setInterval(readLogs, 1000);
 
         // ====== RUN PYTHON CODE ======
-        document.getElementById('run-code').addEventListener('click', async () => {
-            if (currentFilePath) {
-                // save before running
-                document.getElementById('save-file').click();
-                const cmd = `python ${currentFilePath}`;
-                await sendCommand(cmd);
-            } else {
-                alert('Open or create a .py file first');
-            }
+        runCode.addEventListener('click', async () => {
+            saveFile.click();
+            await sendCommand("docker compose up -d");
         });
 
-        document.getElementById('restart-container').addEventListener('click', async () => {
+        restartContainer.addEventListener('click', async () => {
             await api('/restart_container/', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
         });
 
-        document.getElementById('console-cmd').addEventListener(
+        consoleCMD.addEventListener(
             "keydown",
             // biome-ignore lint/style/noCommaOperator: <explanation>
-            (e) => e.key === "Enter" && (e.preventDefault(), document.getElementById('send-cmd').click()),
+            (e) => e.key === "Enter" && (e.preventDefault(), sendCMD.click()),
         );
 
         // INITIAL
-        document.getElementById('refresh-tree').click();
+        refreshTree.click();
 
-
+        const langMap = {
+            // **Scripting & marcados**
+            txt: 'plaintext',
+            log: 'log',
+            md: 'markdown',
+            markdown: 'markdown',
+            mdx: 'markdown',
+            html: 'html',
+            htm: 'html',
+            xml: 'xml',
+            xsd: 'xml',
+            xsl: 'xml',
+            svg: 'xml',
+            json: 'json',
+            yml: 'yaml',
+            yaml: 'yaml',
+            toml: 'toml',
+            ini: 'ini',
+            cfg: 'ini',
+            conf: 'ini',
+            // **Styles**
+            css: 'css',
+            scss: 'scss',
+            sass: 'sass',
+            less: 'less',
+            // **Shell & CI**
+            sh: 'shell',
+            bash: 'shell',
+            zsh: 'shell',
+            fish: 'shell',
+            ps1: 'powershell',
+            psm1: 'powershell',
+            psd1: 'powershell',
+            dockerfile: 'dockerfile',
+            gitignore: 'git-commit',    // usa el highlighter de Git
+            // **Web / Front-end**
+            js: 'javascript',
+            jsx: 'javascript',
+            ts: 'typescript',
+            tsx: 'typescript',
+            vue: 'vue',
+            // **Back-end / General purpose**
+            py: 'python',
+            rb: 'ruby',
+            php: 'php',
+            pl: 'perl',
+            pm: 'perl',
+            r: 'r',
+            go: 'go',
+            rs: 'rust',
+            java: 'java',
+            kt: 'kotlin',
+            kts: 'kotlin',
+            swift: 'swift',
+            dart: 'dart',
+            lua: 'lua',
+            // **.NET**
+            cs: 'csharp',
+            fs: 'fsharp',
+            vb: 'vb',
+            // **C / C++ / Objective-C**
+            c: 'c',
+            cpp: 'cpp',
+            cc: 'cpp',
+            cxx: 'cpp',
+            h: 'cpp',
+            hpp: 'cpp',
+            mm: 'objective-c',
+            m: 'objective-c',
+            objc: 'objective-c',
+            // **Functional & others**
+            hs: 'haskell',
+            erl: 'erlang',
+            ex: 'elixir',
+            exs: 'elixir',
+            clj: 'clojure',
+            cljs: 'clojure',
+            scala: 'scala',
+            groovy: 'groovy',
+            coffee: 'coffeescript',
+            // **DevOps / Infra as Code**
+            tf: 'terraform',
+            tfvars: 'terraform',
+            yml: 'yaml',
+            ansible: 'yaml',
+            // **Build / CI files**
+            makefile: 'makefile',
+            mk: 'makefile',
+            cmake: 'cmake',
+            cmakelists: 'cmake',
+            gradle: 'groovy',
+            pom: 'xml',        // Maven POM
+            // **Database / Query**
+            sql: 'sql',
+            cypher: 'cypher',
+            graphql: 'graphql',
+            // **LaTeX / Academia**
+            tex: 'latex',
+            sty: 'latex',
+            cls: 'latex',
+            bib: 'bibtex',
+            // **Extras**
+            ps1: 'powershell',
+            bat: 'bat',
+            vbs: 'vbscript',
+            // fallback
+            default: 'plaintext'
+        };
     </script>
 </body>
 

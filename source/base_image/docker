@@ -1,0 +1,7 @@
+#!/bin/bash
+if [ "$1" = "compose" ]; then
+  shift
+  exec podman-compose "$@"
+else
+  exec podman "$@"
+fi

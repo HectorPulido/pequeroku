@@ -60,7 +60,7 @@ class DockerSession:
                 path=docker_path,
                 dockerfile="Dockerfile",
                 tag=image_name,
-                rm=True,            # limpia contenedores intermedios
+                rm=True,  # limpia contenedores intermedios
             )
             print(f"Imagen {image_name} construida con éxito.")
         return image_name
