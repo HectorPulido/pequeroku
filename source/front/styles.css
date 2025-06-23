@@ -131,16 +131,17 @@ main {
 	border-top-left-radius: 6px;
 	border-top-right-radius: 6px;
 	width: 600px;
-
 	height: 3rem;
 }
 .console-body {
 	background: #000;
 	color: #0f0;
 	font-family: monospace;
-	padding: .5rem;
 	height: 300px;
 	overflow-y: auto;
+	height: 80%;
+	border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
 }
 .console {
 	width: 80%;
@@ -303,4 +304,53 @@ main {
 	display: flex;
 	align-items: center;
 	gap: 10px;
+}
+
+/* Editor modal */
+#editor-modal {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2000;
+}
+.modal-content {
+  background: #fff;
+  width: 80%;
+  max-width: 800px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  background: #333;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.editor-container {
+  flex: 1;
+  /* wc-monaco-editor ocupa todo */
+}
+.modal-footer {
+  padding: 0.5rem;
+  text-align: right;
+  background: #f9f9f9;
+}
+.modal-footer button {
+  margin-left: 0.5rem;
+}
+.hidden {
+  display: none !important;
+}
+.top-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
 }

@@ -65,28 +65,16 @@
         <div class="console-header console">
           <span id="console-title"></span>
           <div>
-            <button id="btn-restart" class="top-btn">🔄</button>
             <button id="btn-close" class="top-btn">❌</button>
           </div>
         </div>
-        <div id="console-logs" class="console-body console"></div>
-        <div class="console-input console">
-          <input type="text" id="cmd-input" placeholder="Writte your command..." />
-          <button id="btn-send">Enviar</button>
-          <div class="dropdown">
-            <button class="last-button">🔽</button>
-            <div class="dropdown-content">
-              <button class="btn-send" param="ctrld">Ctrl+D</button>
-              <button class="btn-send" param="ctrlc">Ctrl+C</button>
-              <button class="btn-send" param="clear">Clear</button>
-              <button id="btn-open-upload-modal">Upload file</button>
-            </div>
-          </div>
-        </div>
+        <div id="console-modal-body" class="console-body console" ></div>
       </div>
+
     </main>
   </div>
   <script src="app.js"></script>
+  <script type="module" src="https://cdn.jsdelivr.net/gh/vanillawc/wc-monaco-editor@1/index.js"></script>
 </body>
 
 </html>

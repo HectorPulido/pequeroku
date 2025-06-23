@@ -1,4 +1,5 @@
 import io
+import os
 import re
 import tarfile
 
@@ -13,6 +14,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.parsers import JSONParser
 
 from .models import Container, ResourceQuota
 from .serializers import ContainerSerializer
@@ -52,8 +54,9 @@ class ContainersViewSet(viewsets.ModelViewSet):
         mem_limit = f"{quota.max_memory_mb}m"  # ej. "256m"
         cpu_quota = int(quota.max_cpu_percent * 1000)
 
+        image_to_use = DockerSession.ensure_utils_image()
         cont = settings.DOCKER_CLIENT.containers.run(
-            "ubuntu:latest",
+            image_to_use,
             command="/bin/bash",
             detach=True,
             tty=True,
@@ -181,6 +184,96 @@ class ContainersViewSet(viewsets.ModelViewSet):
 
         return Response({"status": "archivo copiado", "dest": dest_path})
 
+    @action(detail=True, methods=["get"])
+    def read_file(self, request, pk=None):
+        """
+        Devuelve el contenido de un archivo dentro del contenedor.
+        Parámetros GET: ?path=/ruta/al/archivo.py
+        """
+        obj = self.get_object()
+        path = request.query_params.get("path")
+        if not path:
+            return Response({"error": "Se requiere 'path'"}, status=400)
+        container = settings.DOCKER_CLIENT.containers.get(obj.container_id)
+        tar_stream, _ = container.get_archive(path)
+        # Extraer sólo el archivo solicitado
+        import tarfile, io
+        tf = tarfile.open(fileobj=io.BytesIO(b"".join(tar_stream)), mode="r:")
+        member = tf.next()
+        content = tf.extractfile(member).read().decode()
+        return Response({"content": content})
+
+    @action(detail=True, methods=["post"], parser_classes=[JSONParser])
+    def write_file(self, request, pk=None):
+        """
+        Escribe/crea un archivo dentro del contenedor.
+        JSON body: { "path": "/ruta/al/archivo.py", "content": "print('Hola')" }
+        """
+        obj = self.get_object()
+        path = request.data.get("path")
+        content = request.data.get("content", "")
+        if not path:
+            return Response({"error": "Se requiere 'path'"}, status=400)
+
+        # Empaquetar un tar con el archivo en memoria
+        import io, tarfile, os
+        dirname = os.path.dirname(path)
+        filename = os.path.basename(path)
+        tar_stream = io.BytesIO()
+        with tarfile.open(fileobj=tar_stream, mode="w") as tar:
+            data = content.encode("utf-8")
+            info = tarfile.TarInfo(name=filename)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+        tar_stream.seek(0)
+
+        container = settings.DOCKER_CLIENT.containers.get(obj.container_id)
+        success = container.put_archive(dirname or "/", tar_stream.read())
+        if not success:
+            return Response({"error": "Fallo al escribir el archivo."}, status=500)
+        return Response({"status": "archivo escrito", "path": path})
+
+    @action(detail=True, methods=["get"])
+    def list_dir(self, request, pk=None):
+        """
+        Lista recursivamente todos los subdirectorios y archivos dentro del contenedor,
+        usando `find` para obtener rutas y tipos.
+        """
+        container = settings.DOCKER_CLIENT.containers.get(self.get_object().container_id)
+        dir_path = request.query_params.get('path', '/').rstrip('/')
+        
+        # -mindepth 1 evita listar la propia carpeta raíz
+        cmd = f"find {dir_path} -mindepth 1 -printf '%p:%y\n'"
+        exit_code, output = container.exec_run(cmd)
+        if exit_code != 0:
+            return Response({'error': output.decode()}, status=400)
+        
+        tree = []
+        for line in output.decode().splitlines():
+            path, kind = line.split(':', 1)
+            tree.append({
+                'name': os.path.basename(path),
+                'path': path,
+                'type': 'directory' if kind == 'd' else 'file'
+            })
+        
+        return Response(tree)
+
+    @action(detail=True, methods=["post"])
+    def create_dir(self, request, pk=None):
+        """
+        Crea una carpeta dentro del contenedor.
+        JSON body: { "path": "/app/nueva_carpeta" }
+        """
+        container = settings.DOCKER_CLIENT.containers.get(self.get_object().container_id)
+        path = request.data.get('path')
+        if not path:
+            return Response({"error": "Se requiere 'path'"}, status=400)
+        # Ejecutamos mkdir -p dentro del contenedor
+        exit_code, output = container.exec_run(cmd=["mkdir", "-p", path])
+        if exit_code != 0:
+            return Response({"error": output.decode()}, status=400)
+        return Response({"status": "created", "path": path})
 
 class UserViewSet(APIView):
     permission_classes = [permissions.IsAuthenticated]

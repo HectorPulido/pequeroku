@@ -23,12 +23,15 @@ REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 REDIS_CLIENT = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
-DOCKER_CLIENT = DockerClient.from_env()
-
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+# DOCKER
+DOCKER_CLIENT = DockerClient.from_env()
+DOCKER_IMAGE_NAME = "my-ubuntu-utils:latest"
+DOCKER_IMAGE_PATH = os.path.join(BASE_DIR, "base_image")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -39,8 +42,12 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "thisisnotasecretkey")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "localhost",
+    os.environ.get("ALLOWED_HOSTS", "allowed_hosts")
+]
 
+CSRF_TRUSTED_ORIGINS = ["https://" + os.environ.get("ALLOWED_HOST", "allowed_host")]
 
 # Application definition
 INSTALLED_APPS = [
@@ -105,6 +112,9 @@ DATABASES = {
 }
 
 REST_FRAMEWORK = {
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.BasicAuthentication",
