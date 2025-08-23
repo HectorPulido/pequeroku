@@ -3,6 +3,7 @@ djangorestframework
 psycopg2-binary
 docker
 gunicorn==23.0.0
-channels
-redis
 python-dotenv
+
+daphne
+channels

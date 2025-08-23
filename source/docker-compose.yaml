@@ -9,7 +9,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - db
-      - redis
     devices:
       - /dev/net/tun:/dev/net/tun
       - /dev/fuse:/dev/fuse
@@ -23,11 +22,6 @@ services:
       POSTGRES_PASSWORD: mypassword
     volumes:
       - .db_data:/var/lib/postgresql/data
-    networks:
-      - pequeroku-net
-
-  redis:
-    image: redis:7
     networks:
       - pequeroku-net
 

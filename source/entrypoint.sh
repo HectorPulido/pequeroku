@@ -1,14 +1,18 @@
 #!/bin/sh
+set -e
+
 python manage.py migrate
 python manage.py collectstatic --no-input
 
-if [ "$DJANGO_SUPERUSER_USERNAME" ]
-then
-    python manage.py createsuperuser \
-        --noinput \
-        --username $DJANGO_SUPERUSER_USERNAME \
-        --email $DJANGO_SUPERUSER_EMAIL
+if [ -n "$DJANGO_SUPERUSER_USERNAME" ]; then
+  python manage.py createsuperuser --noinput \
+    --username "$DJANGO_SUPERUSER_USERNAME" \
+    --email "$DJANGO_SUPERUSER_EMAIL" || true
 fi
-$@
 
-gunicorn pequeroku.wsgi:application --bind 0.0.0.0:8000  --timeout 240 --workers 3 --log-level=debug
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+else
+  # ASGI server para websockets
+  exec daphne -b 0.0.0.0 -p 8000 pequeroku.asgi:application
+fi

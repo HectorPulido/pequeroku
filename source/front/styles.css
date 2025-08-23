@@ -5,10 +5,12 @@
 	padding: 0;
 	font-family: sans-serif;
 }
+
 body {
 	background: #f4f4f4;
 	color: #333;
 }
+
 header {
 	background: #222;
 	color: #fff;
@@ -17,6 +19,7 @@ header {
 	justify-content: space-between;
 	align-items: center;
 }
+
 header h1 {
 	font-size: 1.5rem;
 }
@@ -38,29 +41,36 @@ button:disabled {
 main {
 	padding: 1rem;
 }
+
 #container-list {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 	gap: 1rem;
 }
+
 .container-card {
 	background: white;
 	padding: 1rem;
 	border-radius: 6px;
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
+
 .container-card h2 {
 	font-size: 1.1rem;
 }
+
 .container-card small {
 	color: #666;
 }
+
 .container-card button {
 	margin-right: .5rem;
 }
+
 .container-card div {
 	margin-top: 1rem;
 }
+
 .hidden {
 	display: none !important;
 }
@@ -72,6 +82,7 @@ main {
 	align-items: center;
 	justify-content: center;
 }
+
 .login-box {
 	background: #fff;
 	padding: 2rem;
@@ -81,9 +92,11 @@ main {
 	max-width: 320px;
 	text-align: center;
 }
+
 .login-box h2 {
 	margin-bottom: 1rem;
 }
+
 .login-box input {
 	width: 100%;
 	padding: .75rem;
@@ -91,6 +104,7 @@ main {
 	border: 1px solid #ccc;
 	border-radius: 4px;
 }
+
 .login-box button {
 	width: 100%;
 	padding: .75rem;
@@ -100,9 +114,11 @@ main {
 	border-radius: 4px;
 	cursor: pointer;
 }
+
 .login-box button:hover {
 	background: #218838;
 }
+
 .error-message {
 	color: #c0392b;
 	margin-top: .5rem;
@@ -121,6 +137,7 @@ main {
 	align-items: center;
 	justify-content: center;
 }
+
 .console-header {
 	background: #333;
 	color: #fff;
@@ -133,6 +150,7 @@ main {
 	width: 600px;
 	height: 3rem;
 }
+
 .console-body {
 	background: #000;
 	color: #0f0;
@@ -141,21 +159,25 @@ main {
 	overflow-y: auto;
 	height: 80%;
 	border-bottom-left-radius: 6px;
-    border-bottom-right-radius: 6px;
+	border-bottom-right-radius: 6px;
 }
+
 .console {
-	width: 80%;
+	width: 95%;
 }
+
 .console-input {
 	height: 3rem;
 	display: flex;
 }
+
 .console-input input {
 	flex: 1;
 	padding: .5rem;
 	border: 1px solid #ccc;
 	border-bottom-left-radius: 6px;
 }
+
 .console-input button {
 	padding: .5rem 1rem;
 	border: none;
@@ -164,6 +186,7 @@ main {
 	cursor: pointer;
 	border-radius: 0%;
 }
+
 .last-button {
 	border-bottom-right-radius: 6px !important;
 	height: 100%;
@@ -173,12 +196,14 @@ main {
 	position: relative;
 	display: inline-block;
 }
+
 .dropdown-content {
 	display: none;
 	position: absolute;
 	z-index: 1;
 	right: 0px;
 }
+
 .dropdown-content div {
 	background-color: #222;
 	width: 300px;
@@ -308,49 +333,198 @@ main {
 
 /* Editor modal */
 #editor-modal {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100vw; height: 100vh;
-  background: rgba(0,0,0,0.6);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 2000;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	background: rgba(0, 0, 0, 0.6);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 2000;
 }
+
 .modal-content {
-  background: #fff;
-  width: 80%;
-  max-width: 800px;
-  border-radius: 8px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+	background: #fff;
+	width: 80%;
+	max-width: 800px;
+	border-radius: 8px;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
 }
+
 .modal-header {
-  background: #333;
-  color: #fff;
-  padding: 0.5rem 1rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+	background: #333;
+	color: #fff;
+	padding: 0.5rem 1rem;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
 }
+
 .editor-container {
-  flex: 1;
-  /* wc-monaco-editor ocupa todo */
+	flex: 1;
+	/* wc-monaco-editor ocupa todo */
 }
+
 .modal-footer {
-  padding: 0.5rem;
-  text-align: right;
-  background: #f9f9f9;
+	padding: 0.5rem;
+	text-align: right;
+	background: #f9f9f9;
 }
+
 .modal-footer button {
-  margin-left: 0.5rem;
+	margin-left: 0.5rem;
 }
+
 .hidden {
-  display: none !important;
+	display: none !important;
 }
+
 .top-btn {
-  background: none;
-  border: none;
-  color: #fff;
-  font-size: 1.2rem;
-  cursor: pointer;
+	background: none;
+	border: none;
+	color: #fff;
+	font-size: 1.2rem;
+	cursor: pointer;
+}
+
+
+/* ANSI → HTML */
+.ansi-bold {
+	font-weight: 700;
+}
+
+.ansi-underline {
+	text-decoration: underline;
+}
+
+.ansi-fg-30 {
+	color: #000;
+}
+
+.ansi-fg-31 {
+	color: #A00;
+}
+
+.ansi-fg-32 {
+	color: #0A0;
+}
+
+.ansi-fg-33 {
+	color: #A60;
+}
+
+.ansi-fg-34 {
+	color: #06C;
+}
+
+.ansi-fg-35 {
+	color: #A0A;
+}
+
+.ansi-fg-36 {
+	color: #0AA;
+}
+
+.ansi-fg-37 {
+	color: #AAA;
+}
+
+.ansi-fg-90 {
+	color: #555;
+}
+
+.ansi-fg-91 {
+	color: #F55;
+}
+
+.ansi-fg-92 {
+	color: #5F5;
+}
+
+.ansi-fg-93 {
+	color: #FF5;
+}
+
+.ansi-fg-94 {
+	color: #59F;
+}
+
+.ansi-fg-95 {
+	color: #F5F;
+}
+
+.ansi-fg-96 {
+	color: #5FF;
+}
+
+.ansi-fg-97 {
+	color: #FFF;
+}
+
+.ansi-bg-40 {
+	background: #000;
+}
+
+.ansi-bg-41 {
+	background: #A00;
+}
+
+.ansi-bg-42 {
+	background: #0A0;
+}
+
+.ansi-bg-43 {
+	background: #A60;
+}
+
+.ansi-bg-44 {
+	background: #06C;
+}
+
+.ansi-bg-45 {
+	background: #A0A;
+}
+
+.ansi-bg-46 {
+	background: #0AA;
+}
+
+.ansi-bg-47 {
+	background: #AAA;
+}
+
+.ansi-bg-100 {
+	background: #555;
+}
+
+.ansi-bg-101 {
+	background: #F55;
+}
+
+.ansi-bg-102 {
+	background: #5F5;
+}
+
+.ansi-bg-103 {
+	background: #FF5;
+}
+
+.ansi-bg-104 {
+	background: #59F;
+}
+
+.ansi-bg-105 {
+	background: #F5F;
+}
+
+.ansi-bg-106 {
+	background: #5FF;
+}
+
+.ansi-bg-107 {
+	background: #FFF;
 }

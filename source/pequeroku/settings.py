@@ -15,13 +15,8 @@ from pathlib import Path
 
 from docker import DockerClient
 from dotenv import load_dotenv
-import redis
 
 load_dotenv()
-
-REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
-REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
-REDIS_CLIENT = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -42,9 +37,13 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "thisisnotasecretkey")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", os.environ.get("ALLOWED_HOSTS", "allowed_hosts")]
+ALLOWED_HOSTS = ["localhost"] + [
+    h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()
+]
+CSRF_TRUSTED_ORIGINS = [f"http://{h}" for h in ALLOWED_HOSTS] + [
+    f"https://{h}" for h in ALLOWED_HOSTS
+]
 
-CSRF_TRUSTED_ORIGINS = ["https://" + os.environ.get("ALLOWED_HOST", "allowed_host")]
 
 # Application definition
 INSTALLED_APPS = [

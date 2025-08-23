@@ -5,204 +5,18 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Micro-IDE</title>
-    <style>
-        body {
-            margin: 0;
-            font-family: sans-serif;
-        }
-
-        #editor-modal {
-            position: fixed;
-            width: 100%;
-            height: 100%;
-            background: #1e1e1e;
-            color: #ddd;
-            display: flex;
-            border: 2px solid #444;
-            overflow: hidden;
-        }
-
-        .sidebar {
-            width: 200px;
-            background: #2d2d2d;
-            padding: 8px;
-            box-sizing: border-box;
-            overflow-y: auto;
-        }
-
-        .sidebar ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .sidebar li {
-            padding: 4px 8px;
-            cursor: pointer;
-        }
-
-        .sidebar li:hover {
-            background: #3e3e3e;
-        }
-
-        .sidebar li.directory::before {
-            content: '📁 ';
-        }
-
-        .sidebar li.file::before {
-            content: '📄 ';
-        }
-
-        .main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-
-        wc-monaco-editor {
-            flex: 1;
-        }
-
-        .toolbar {
-            align-items: anchor-center;
-            justify-content: space-between;
-            background: #2d2d2d;
-            padding: 4px;
-            display: flex;
-            gap: 4px;
-        }
-
-        .console {
-            height: 150px;
-            background: #2d2d2d;
-            color: #eee;
-            padding: 4px;
-            overflow-y: auto;
-            font-family: monospace;
-            white-space: pre-wrap;
-        }
-
-        .console-input {
-            flex: 1;
-        }
-
-        .sidebar ul ul {
-            padding-left: 12px;
-        }
-
-        button,
-        input[type="text"] {
-            background: #3e3e3e;
-            color: #eee;
-            border: 1px solid #555;
-            border-radius: 4px;
-            padding: 4px 8px;
-        }
-
-        button:hover {
-            background: #303030;
-        }
-
-        .dropdown {
-            position: relative;
-            display: inline-block;
-        }
-
-        .dropdown-content {
-            display: none;
-            position: absolute;
-            bottom: 100%;
-            right: 0%;
-            z-index: 100;
-        }
-
-        .dropdown-content div {
-            background-color: #222;
-            width: 300px;
-            padding: 10px;
-        }
-
-        .dropdown:hover .dropdown-content {
-            display: block;
-        }
-
-        .dropdown-content .btn-send {
-            width: 100%;
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        /* Contenedor upload */
-        #upload-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0, 0, 0, 0.6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        .upload-container {
-            background: #fff;
-            width: 400px;
-            border-radius: 6px;
-            overflow: hidden;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        /* Header */
-        .upload-header {
-            background: #333;
-            color: #fff;
-            padding: 0.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        /* Body */
-        .upload-body {
-            padding: 1rem;
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .upload-body input[type="file"] {
-            flex: 1;
-            padding: 0.4rem;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-
-        .upload-body button {
-            padding: 0.5rem 1rem;
-            border: none;
-            background: #17a2b8;
-            color: white;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-
-        .upload-body button:hover {
-            background: #138496;
-        }
-    </style>
-    <!-- Monaco web-component -->
+    <link rel="stylesheet" href="/ideStyles.css" />
     <script type="module" src="https://cdn.jsdelivr.net/gh/vanillawc/wc-monaco-editor@1/index.js"></script>
 </head>
 
 <body>
     <div id="editor-modal">
         <div class="sidebar">
-            <div><button id="refresh-tree">Refresh</button></div>
-            <div><button id="new-folder">New Folder</button></div>
-            <div><button id="new-file">New File</button></div>
+            <div>
+                <button id="refresh-tree">🔄</button>
+                <button id="new-folder">📂</button>
+                <button id="new-file">📄</button>
+            </div>
             <ul id="file-tree"></ul>
         </div>
         <div class="main">
@@ -211,7 +25,7 @@
                     <span id="current_path_label"></span>
                 </div>
                 <div>
-                    <button id="save-file">Save</button>
+                    <button id="save-file">💾</button>
                     <button id="run-code">Run (Docker)</button>
                 </div>
             </div>
@@ -229,10 +43,12 @@
                         <button class="btn-send" param="clear">Clear</button>
                         <button id="restart-container">Reload console</button>
                         <button id="btn-open-upload-modal">Upload file</button>
+                        <button id="btn-open-templates-modal">Templates</button>
                     </div>
                 </div>
             </div>
 
+            <!-- Upload modal -->
             <div id="upload-modal" class="hidden">
                 <div class="upload-container">
                     <div class="upload-header">
@@ -245,335 +61,32 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Templates modal -->
+            <div id="templates-modal" class="hidden">
+                <div class="upload-container">
+                    <div class="upload-header">
+                        <span>Templates</span>
+                        <button id="btn-templates-close" class="top-btn">❌</button>
+                    </div>
+                    <div class="upload-body" style="display:block; max-height: 70vh; overflow:auto;">
+                        <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <label>Destination</label>
+                            <input type="text" id="tpl-dest" placeholder="/app" value="/app" style="width:160px;" />
+                            <label style="display:flex; align-items:center; gap:6px;">
+                                <input type="checkbox" id="tpl-clean" checked />
+                                clean
+                            </label>
+                        </div>
+                        <div id="tpl-list"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
-    <script>
-        // ====== CONFIG ======
-        const urlParams = new URLSearchParams(window.location.search);
-        const containerId = urlParams.get('containerId');
-        const apiBase = `/api/containers/${containerId}`;
-        const pathLabel = document.getElementById('current_path_label');
-        const editor = document.getElementById('editor');
-        const refreshTree = document.getElementById('refresh-tree');
-        const fileTree = document.getElementById('file-tree');
-        const sendCMD = document.getElementById('send-cmd');
-        const consoleCMD = document.getElementById('console-cmd');
-        const restartContainer = document.getElementById('restart-container');
-        const runCode = document.getElementById('run-code');
-        const saveFile = document.getElementById('save-file');
-        const consoleLogs = document.getElementById('console-log');
-        const newFolder = document.getElementById('new-folder');
-        const newFile = document.getElementById('new-file');
-        const btnUpload = document.getElementById("btn-upload");
-        const btnOpenUpload = document.getElementById("btn-open-upload-modal");
-        const uploadModal = document.getElementById("upload-modal");
-        const btnUploadClose = document.getElementById("btn-upload-close");
-        const input = document.getElementById("file-input");
 
-        for (const btn of document.getElementsByClassName("btn-send")) {
-            btn.addEventListener("click", (e) =>
-                sendCommand(btn.getAttribute("param"))
-            );
-        }
-
-
-        (async () => {
-            await sleep(1 * 1000);
-            await openFile("/app/readme.txt");
-        })();
-
-        let currentFilePath = null;
-        function changePath(newPath) {
-            currentFilePath = newPath;
-            pathLabel.innerText = currentFilePath;
-        }
-
-        function getCSRF() {
-            const match = document.cookie.match(/csrftoken=([^;]+)/);
-            return match ? match[1] : "";
-        }
-        // ====== UTILS ======
-        async function api(path, opts = {}, headersOverride = true) {
-            if (headersOverride)
-                opts.headers = { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF() }
-            const res = await fetch(apiBase + path, opts);
-            if (!res.ok) {
-                parent.addAlert(await res.text(), "error");
-            }
-            return res.json();
-        }
-
-        // ====== UPLOADS
-        // 1) Abrir el modal de subida
-        btnOpenUpload.addEventListener("click", () => {
-            uploadModal.classList.remove("hidden");
-        });
-
-        // 2) Cerrar el modal
-        btnUploadClose.addEventListener("click", () => {
-            uploadModal.classList.add("hidden");
-        });
-
-        btnUpload.addEventListener("click", uploadFile);
-
-        async function uploadFile() {
-            const file = input.files[0];
-            if (!file) return alert("Selecciona un archivo primero.");
-
-            const form = new FormData();
-            form.append("file", file);
-            form.append("dest_path", "/app");
-
-            const j = await api(
-                /upload_file/,
-                {
-                    headers: { 'X-CSRFToken': getCSRF() },
-                    credentials: "same-origin",
-                    method: 'POST',
-                    body: form
-                },
-                false
-            );
-
-            parent.addAlert(`Uploaded to: ${j.dest}`, "success");
-            btnUploadClose.click();
-            refreshTree.click();
-        }
-
-        // ====== FILE TREE ======
-        async function listDir(path = '/app') {
-            return api(`/list_dir?path=${encodeURIComponent(path)}`);
-        }
-
-        async function loadDir(path, ul) {
-            ul.innerHTML = '';
-            const items = await listDir(path);
-            const prefix = path.replace(/\/$/, '') + '/';
-            const direct = items.filter(item => {
-                if (!item.path.startsWith(prefix)) return false;
-                const rel = item.path.slice(prefix.length);
-                return rel && !rel.includes('/');
-            });
-            direct.sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1);
-            direct.forEach(item => {
-                const li = document.createElement('li');
-                li.classList.add(item.type);
-                li.textContent = item.name;
-                li.dataset.path = item.path;
-                if (item.type === 'directory') {
-                    li.addEventListener('click', async e => {
-                        e.stopPropagation();
-                        const isExp = li.classList.toggle('expanded');
-                        if (isExp) {
-                            const subUl = document.createElement('ul');
-                            li.appendChild(subUl);
-                            await loadDir(item.path, subUl);
-                        } else {
-                            const subUl = li.querySelector('ul');
-                            if (subUl) li.removeChild(subUl);
-                        }
-                    });
-                } else {
-                    li.addEventListener('click', e => {
-                        e.stopPropagation();
-                        openFile(item.path);
-                    });
-                }
-                ul.appendChild(li);
-            });
-        }
-
-        function sleep(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
-        refreshTree.addEventListener('click', () => {
-            loadDir('/app', fileTree);
-        });
-
-        saveFile.addEventListener('click', async () => {
-            if (!currentFilePath) parent.addAlert('Open a file first', "error");
-            const content = editor.value;
-            await api('/write_file/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: currentFilePath, content })
-            });
-            parent.addAlert('File ' + currentFilePath + ' saved', "Success");
-        });
-
-        // ====== CREATE FOLDER & FILE ======
-        newFolder.addEventListener('click', async () => {
-            const name = prompt('Folder name:'); if (!name) return;
-            const path = `/app/${name}`;
-            await api('/create_dir/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
-            refreshTree.click();
-        });
-        newFile.addEventListener('click', async () => {
-            const name = prompt('File name:'); if (!name) return;
-            changePath(`/app/${name}`)
-            editor.value = '';
-            saveFile.click();
-            refreshTree.click();
-        });
-
-        async function openFile(path) {
-            const ext = path.split('.').pop().toLowerCase();
-            const lang = langMap[ext] || 'plaintext';
-            monaco.editor.setModelLanguage(editor.editor.getModel(), lang)
-
-            const { content } = await api(`/read_file/?path=${encodeURIComponent(path)}`);
-            editor.value = content;
-            changePath(path);
-        }
-
-        // ====== CONSOLE ======
-        async function sendCommand(cmd) {
-            await api('/send_command/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: cmd }) });
-        }
-
-        let lastLogs = null;
-        async function readLogs() {
-            const { logs } = await api('/read_logs/');
-            const logsStr = JSON.stringify(logs);
-            if (logsStr !== lastLogs) {
-                lastLogs = logsStr;
-                consoleLogs.innerHTML = logs.map(l => `<div>${l}</div>`).join("");
-                consoleLogs.scrollTop = consoleLogs.scrollHeight;
-            }
-        }
-        sendCMD.addEventListener('click', () => {
-            sendCommand(consoleCMD.value).then(() => consoleCMD.value = '');
-        });
-        setInterval(readLogs, 1000);
-
-        // ====== RUN PYTHON CODE ======
-        runCode.addEventListener('click', async () => {
-            saveFile.click();
-            await sendCommand("docker compose up -d");
-        });
-
-        restartContainer.addEventListener('click', async () => {
-            await api('/restart_container/', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-        });
-
-        consoleCMD.addEventListener(
-            "keydown",
-            // biome-ignore lint/style/noCommaOperator: <explanation>
-            (e) => e.key === "Enter" && (e.preventDefault(), sendCMD.click()),
-        );
-
-        // INITIAL
-        refreshTree.click();
-
-        const langMap = {
-            // **Scripting & marcados**
-            txt: 'plaintext',
-            log: 'log',
-            md: 'markdown',
-            markdown: 'markdown',
-            mdx: 'markdown',
-            html: 'html',
-            htm: 'html',
-            xml: 'xml',
-            xsd: 'xml',
-            xsl: 'xml',
-            svg: 'xml',
-            json: 'json',
-            yml: 'yaml',
-            yaml: 'yaml',
-            toml: 'toml',
-            ini: 'ini',
-            cfg: 'ini',
-            conf: 'ini',
-            // **Styles**
-            css: 'css',
-            scss: 'scss',
-            sass: 'sass',
-            less: 'less',
-            // **Shell & CI**
-            sh: 'shell',
-            bash: 'shell',
-            zsh: 'shell',
-            fish: 'shell',
-            ps1: 'powershell',
-            psm1: 'powershell',
-            psd1: 'powershell',
-            dockerfile: 'dockerfile',
-            gitignore: 'git-commit',    // usa el highlighter de Git
-            // **Web / Front-end**
-            js: 'javascript',
-            jsx: 'javascript',
-            ts: 'typescript',
-            tsx: 'typescript',
-            vue: 'vue',
-            // **Back-end / General purpose**
-            py: 'python',
-            rb: 'ruby',
-            php: 'php',
-            pl: 'perl',
-            pm: 'perl',
-            r: 'r',
-            go: 'go',
-            rs: 'rust',
-            java: 'java',
-            kt: 'kotlin',
-            kts: 'kotlin',
-            swift: 'swift',
-            dart: 'dart',
-            lua: 'lua',
-            // **.NET**
-            cs: 'csharp',
-            fs: 'fsharp',
-            vb: 'vb',
-            // **C / C++ / Objective-C**
-            c: 'c',
-            cpp: 'cpp',
-            cc: 'cpp',
-            cxx: 'cpp',
-            h: 'cpp',
-            hpp: 'cpp',
-            mm: 'objective-c',
-            m: 'objective-c',
-            objc: 'objective-c',
-            // **Functional & others**
-            hs: 'haskell',
-            erl: 'erlang',
-            ex: 'elixir',
-            exs: 'elixir',
-            clj: 'clojure',
-            cljs: 'clojure',
-            scala: 'scala',
-            groovy: 'groovy',
-            coffee: 'coffeescript',
-            // **DevOps / Infra as Code**
-            tf: 'terraform',
-            tfvars: 'terraform',
-            yml: 'yaml',
-            ansible: 'yaml',
-            // **Build / CI files**
-            makefile: 'makefile',
-            mk: 'makefile',
-            cmake: 'cmake',
-            cmakelists: 'cmake',
-            gradle: 'groovy',
-            pom: 'xml',        // Maven POM
-            // **Database / Query**
-            sql: 'sql',
-            cypher: 'cypher',
-            graphql: 'graphql',
-            // **LaTeX / Academia**
-            tex: 'latex',
-            sty: 'latex',
-            cls: 'latex',
-            bib: 'bibtex',
-            // **Extras**
-            ps1: 'powershell',
-            bat: 'bat',
-            vbs: 'vbscript',
-            // fallback
-            default: 'plaintext'
-        };
-    </script>
+    <script src="/langMap.js"></script>
+    <script src="/ide.js"></script>
 </body>
 
 </html>

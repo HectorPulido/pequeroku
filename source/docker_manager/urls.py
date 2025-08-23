@@ -1,9 +1,16 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import ContainersViewSet, LoginView, LogoutView, UserViewSet
+from .views import (
+    ContainersViewSet,
+    LoginView,
+    LogoutView,
+    UserViewSet,
+    FileTemplateViewSet,
+)
 
 router = DefaultRouter()
 router.register(r"containers", ContainersViewSet)
+router.register(r"templates", FileTemplateViewSet)
 
 urlpatterns = [
     path("", include(router.urls)),

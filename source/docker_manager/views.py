@@ -1,6 +1,6 @@
 import io
 import os
-import re
+import shlex
 import tarfile
 
 from django.conf import settings
@@ -18,8 +18,8 @@ from rest_framework.parsers import JSONParser
 
 from docker import DockerClient
 
-from .models import Container, ResourceQuota
-from .serializers import ContainerSerializer
+from .models import Container, ResourceQuota, FileTemplate
+from .serializers import ContainerSerializer, FileTemplateSerializer
 from .session import DockerSession
 
 SESSIONS = {}
@@ -92,7 +92,6 @@ class ContainersViewSet(viewsets.ModelViewSet):
             obj.status = "stopped"
             obj.save()
             sess = SESSIONS.pop(obj.id, None)
-            settings.REDIS_CLIENT.delete(sess.key)
             if sess:
                 sess.sock.close()
             self.perform_destroy(obj)
@@ -118,34 +117,16 @@ class ContainersViewSet(viewsets.ModelViewSet):
 
         print("Command: ", cmd)
         if cmd.strip() == "clear":
-            settings.REDIS_CLIENT.delete(sess.key)
+            return Response({"status": "cleared"})
 
         if cmd.strip() == "ctrlc":
-            cmd = "\x04"
+            cmd = "\x03"  # ETX (Ctrl+C)
 
         if cmd.strip() == "ctrld":
-            cmd = "\x03"
+            cmd = "\x04"  # EOT (Ctrl+D)
 
         sess.send(cmd)
         return Response({"status": "sent"})
-
-    @action(detail=True, methods=["get"])
-    def read_logs(self, request, pk):
-        key = f"logs:{pk}"
-        dirty = settings.REDIS_CLIENT.lrange(key, 0, -1)
-
-        ansi_escape = re.compile(
-            r"(?:" r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07" r")"
-        )
-
-        cleaned = []
-        for s in dirty:
-            no_ansi = ansi_escape.sub("", s)
-            no_ansi = no_ansi.replace("\x07", "")
-            if no_ansi.strip():
-                cleaned.append(no_ansi)
-
-        return Response({"logs": cleaned})
 
     @action(detail=True, methods=["post"])
     def restart_container(self, request, pk=None):
@@ -156,7 +137,6 @@ class ContainersViewSet(viewsets.ModelViewSet):
             ...
         sess = DockerSession(obj, settings.DOCKER_CLIENT)
         SESSIONS[pk] = sess
-        settings.REDIS_CLIENT.delete(sess.key)
 
         return Response({"status": "stopped"})
 
@@ -355,3 +335,74 @@ class LogoutView(APIView):
     def post(self, request):
         logout(request)
         return Response({"status": "ok"}, status=status.HTTP_200_OK)
+
+
+class FileTemplateViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = FileTemplateSerializer
+    queryset = FileTemplate.objects.all().order_by("-updated_at")
+
+    @action(detail=True, methods=["post"], parser_classes=[JSONParser])
+    def apply(self, request, pk=None):
+        """
+        Aplica el template a un contenedor.
+        Body JSON:
+        {
+          "container_id": 123,     # id del modelo Container
+          "dest_path": "/app",     # opcional (default /app)
+          "clean": true            # borra contenido previo
+        }
+        """
+        tpl = self.get_object()
+        container_model_id = request.data.get("container_id")
+        if not container_model_id:
+            return Response({"error": "Se requiere 'container_id'."}, status=400)
+
+        if request.user.is_superuser:
+            container_obj = get_object_or_404(Container, pk=container_model_id)
+        else:
+            container_obj = get_object_or_404(
+                Container, pk=container_model_id, user=request.user
+            )
+
+        dest_path = str(request.data.get("dest_path") or "/app").rstrip("/")
+        clean = bool(request.data.get("clean", True))
+
+        docker_client: DockerClient = settings.DOCKER_CLIENT
+        container = docker_client.containers.get(container_obj.container_id)
+
+        # Asegurar destino
+        container.exec_run(["mkdir", "-p", dest_path])
+
+        # Limpieza opcional
+        if clean:
+            quoted = shlex.quote(dest_path)
+            container.exec_run(["/bin/sh", "-lc", f"rm -rf {quoted}/*"])
+
+        # Armar tar sin comprimir con los items
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tar:
+            for it in tpl.items.all():
+                if not it.path or it.path.endswith("/"):
+                    continue
+                data = (it.content or "").encode("utf-8")
+                info = tarfile.TarInfo(name=it.path)
+                info.size = len(data)
+                info.mode = it.mode or 0o644
+                tar.addfile(info, io.BytesIO(data))
+        buf.seek(0)
+        ok = container.put_archive(dest_path, buf.read())
+        if not ok:
+            return Response(
+                {"error": "Fallo al copiar archivos al contenedor."}, status=500
+            )
+
+        return Response(
+            {
+                "status": "applied",
+                "template_id": tpl.pk,
+                "container": container_obj.pk,
+                "dest_path": dest_path,
+                "files_count": tpl.items.count(),
+            }
+        )

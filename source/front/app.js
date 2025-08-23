@@ -1,3 +1,8 @@
+function getCSRF() {
+	const match = document.cookie.match(/csrftoken=([^;]+)/);
+	return match ? match[1] : "";
+}
+
 document.addEventListener("DOMContentLoaded", () => {
 	const loginContainer = document.getElementById("login-container");
 	const loginForm = document.getElementById("login-form");
@@ -59,12 +64,11 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // Lógica SPA
+let containersCache = [];
 function initApp() {
+
 	const listEl = document.getElementById("container-list");
 	const btnCreate = document.getElementById("btn-create");
-	// const btnOpenUpload = document.getElementById("btn-open-upload-modal");
-	// const uploadModal = document.getElementById("upload-modal");
-	// const btnUploadClose = document.getElementById("btn-upload-close");
 
 	const btnClose = document.getElementById("btn-close");
 	const modal = document.getElementById("console-modal");
@@ -72,16 +76,6 @@ function initApp() {
 	const userData = document.getElementById("user_data");
 	const quotaInfo = document.getElementById("quota_info");
 
-
-	// // 1) Abrir el modal de subida
-	// btnOpenUpload.addEventListener("click", () => {
-	// 	uploadModal.classList.remove("hidden");
-	// });
-
-	// // 2) Cerrar el modal
-	// btnUploadClose.addEventListener("click", () => {
-	// 	uploadModal.classList.add("hidden");
-	// });
 
 	btnClose.addEventListener("click", closeConsole);
 	btnCreate.addEventListener("click", createContainer);
@@ -114,11 +108,6 @@ function initApp() {
 		}
 	}
 
-	function getCSRF() {
-		const match = document.cookie.match(/csrftoken=([^;]+)/);
-		return match ? match[1] : "";
-	}
-
 	async function fetchContainers() {
 		try {
 			const res = await fetch("/api/containers/", {
@@ -130,6 +119,7 @@ function initApp() {
 			}
 			const data = await res.json();
 			listEl.innerHTML = "";
+
 			// biome-ignore lint/complexity/noForEach: <explanation>
 			data.forEach((c) => {
 				const card = document.createElement("div");
@@ -197,34 +187,6 @@ function initApp() {
 		modal.classList.add("hidden");
 		modalBody.innerHTML = "";
 	}
-
-
-	// function uploadFile() {
-	// 	const input = document.getElementById("file-input");
-	// 	const file = input.files[0];
-	// 	if (!file) return alert("Selecciona un archivo primero.");
-
-	// 	const form = new FormData();
-	// 	form.append("file", file);
-	// 	// form.append("dest_path", "/app/data"); // si quieres ruta custom
-
-	// 	fetch(`/api/containers/${currentId}/upload_file/`, {
-	// 		method: "POST",
-	// 		body: form,
-	// 		credentials: "same-origin",
-	// 		headers: {
-	// 			"X-CSRFToken": getCSRF(),
-	// 		},
-	// 	})
-	// 		.then((r) => r.json())
-	// 		.then((j) => {
-	// 			if (j.error) {
-	// 				addAlert(`Error: ${j.error}`, "error");
-	// 			} else {
-	// 				addAlert(`Uploaded to: ${j.dest}`, "success");
-	// 			}
-	// 		});
-	// }
 }
 
 function addAlert(message, type) {
@@ -264,4 +226,10 @@ function addAlert(message, type) {
 
 function capitalizeFirstLetter(str) {
 	return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function escapeHtml(s) {
+	const d = document.createElement("div");
+	d.innerText = String(s);
+	return d.innerHTML;
 }
