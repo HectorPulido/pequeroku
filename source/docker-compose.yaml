@@ -1,14 +1,14 @@
 services:
   web:
-    build: .
+    build: ./web_service/.
     command: ./entrypoint.sh
     volumes:
-      - ./:/app
+      - ./web_service:/app
       - ./vm_data:/app/vm_data
       - ~/.ssh/id_vm_pequeroku:/root/.ssh/id_vm_pequeroku:ro
       - ~/.ssh/id_vm_pequeroku.pub:/root/.ssh/id_vm_pequeroku.pub:ro
-    devices:
-      - /dev/kvm:/dev/kvm
+    # devices:
+    #   - /dev/kvm:/dev/kvm
     # security_opt:
     #   - seccomp=unconfined
     #   - apparmor:unconfined

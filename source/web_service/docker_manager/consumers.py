@@ -7,7 +7,7 @@ from django.apps import apps
 from django.conf import settings
 from asgiref.sync import sync_to_async
 from django.db import DatabaseError
-from .session import DockerSession
+from .session import QemuSession
 from .views import SESSIONS
 
 CTRL_C = "\x03"
@@ -19,7 +19,7 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         super().__init__(*argv, **kwargs)
         self.pk = -1
         self.loop: "AbstractEventLoop" | None = None
-        self.session: "DockerSession" | None = None
+        self.session: "QemuSession" | None = None
 
     async def connect(self):
         if self.scope["user"].is_anonymous:
@@ -49,11 +49,8 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
                 await self.close(code=4404)
                 return
             self.session = await sync_to_async(
-                lambda: DockerSession(
-                    container_obj,
-                    settings.DOCKER_CLIENT,
-                    on_line=self._on_line,
-                    on_close=self._on_close,
+                lambda: QemuSession(
+                    container_obj, on_line=self._on_line, on_close=self._on_close
                 )
             )()
             SESSIONS[self.pk] = self.session
