@@ -1,9 +1,9 @@
 django>=4.2
 djangorestframework
 psycopg2-binary
-docker
 gunicorn==23.0.0
 python-dotenv
 
 daphne
 channels
+paramiko

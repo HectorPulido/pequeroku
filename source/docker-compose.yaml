@@ -1,17 +1,21 @@
 services:
   web:
-    user: root
-    build: ./web_service/.
+    build: .
     command: ./entrypoint.sh
-    privileged: true
     volumes:
-      - ./web_service:/app
-      - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      - db
+      - ./:/app
+      - ./vm_data:/app/vm_data
+      - ~/.ssh/id_vm_pequeroku:/root/.ssh/id_vm_pequeroku:ro
+      - ~/.ssh/id_vm_pequeroku.pub:/root/.ssh/id_vm_pequeroku.pub:ro
     devices:
-      - /dev/net/tun:/dev/net/tun
-      - /dev/fuse:/dev/fuse
+      - /dev/kvm:/dev/kvm
+    # security_opt:
+    #   - seccomp=unconfined
+    #   - apparmor:unconfined
+    environment:
+      VM_SSH_PRIVKEY: /root/.ssh/id_vm_pequeroku
+      VM_SSH_USER: ubuntu
+      VM_BASE_IMAGE: /app/vm_data/base/jammy-golden.qcow2
     networks:
       - pequeroku-net
   db:

@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from pathlib import Path
 
-from docker import DockerClient
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,11 +21,17 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-# DOCKER
-DOCKER_CLIENT = DockerClient.from_env()
-DOCKER_IMAGE_NAME = "my-ubuntu-utils:latest"
-DOCKER_IMAGE_PATH = os.path.join(BASE_DIR, "base_image")
+# VM
+VM_BASE_DIR = os.path.join(BASE_DIR, "vm_data")
+VM_BASE_IMAGE = os.environ.get(
+    "VM_BASE_IMAGE", os.path.join(VM_BASE_DIR, "base", "jammy-golden.qcow2")
+)
+VM_SSH_PRIVKEY = os.environ.get(
+    "VM_SSH_PRIVKEY", os.path.expanduser("~/.ssh/id_vm_pequeroku")
+)
+VM_SSH_USER = os.environ.get("VM_SSH_USER", "ubuntu")
+VM_QEMU_BIN = os.environ.get("VM_QEMU_BIN", "/usr/bin/qemu-system-x86_64")
+VM_TIMEOUT_BOOT_S = int(os.environ.get("VM_TIMEOUT_BOOT_S", "600"))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/

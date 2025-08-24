@@ -6,8 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBUG=0
 
-# Instalar dependencias del sistema
-RUN apk add --no-cache gcc postgresql-dev docker
+RUN apk add --no-cache \
+    gcc musl-dev libffi-dev openssl-dev \
+    qemu-system-x86_64 qemu-img cloud-image-utils cdrkit openssh-client \
+    postgresql-dev docker
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

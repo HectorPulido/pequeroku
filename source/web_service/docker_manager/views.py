@@ -2,25 +2,28 @@ import io
 import os
 import shlex
 import tarfile
+from io import BytesIO
+
+import paramiko
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.shortcuts import get_object_or_404
+
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import JSONParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.parsers import JSONParser
 
-from docker import DockerClient
-
-from .models import Container, ResourceQuota, FileTemplate
+from .models import Container, FileTemplate, ResourceQuota
 from .serializers import ContainerSerializer, FileTemplateSerializer
-from .session import DockerSession
+from .session import QemuSession
 
 SESSIONS = {}
 
@@ -38,240 +41,267 @@ class ContainersViewSet(viewsets.ModelViewSet):
         return qs.filter(user=self.request.user)
 
     def create(self, request, *args, **kwargs):
+        # En vez de crear un contenedor Docker, creamos registro y boot de VM en session
+        # Verificamos cuota
         try:
-            quota: ResourceQuota = request.user.quota
-        except Exception as e:
-            raise PermissionDenied(
-                "You have not assigned quota, contact with the admin"
-            ) from e
+            quota = request.user.quota
+        except Exception:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+        active = Container.objects.filter(user=request.user, status="running").count()
+        if active >= quota.max_containers:
+            return Response("Quota exceeded", status=status.HTTP_403_FORBIDDEN)
 
-        active_count = Container.objects.filter(
-            user=request.user, status="running"
-        ).count()
-        if active_count >= quota.max_containers:
-            raise ValidationError(
-                f"You reach your active containers limit {quota.max_containers}"
-            )
-
-        mem_limit = f"{quota.max_memory_mb}m"  # ej. "256m"
-        cpu_quota = int(quota.max_cpu_percent * 1000)
-
-        image_to_use = DockerSession.ensure_utils_image()
-        docker_client: DockerClient = settings.DOCKER_CLIENT
-        cont = docker_client.containers.run(
-            image_to_use,
-            command="/bin/bash",
-            detach=True,
-            tty=True,
-            stdin_open=True,
-            mem_limit=mem_limit,
-            cpu_period=100000,
-            cpu_quota=cpu_quota,
-            network_mode="bridge",
-            dns=["8.8.8.8", "8.8.4.4"],
-            devices=["/dev/net/tun:/dev/net/tun", "/dev/fuse:/dev/fuse"],
-            cap_add=["NET_ADMIN", "NET_RAW", "SYS_ADMIN"],
-            security_opt=[
-                "seccomp=unconfined",  # para que no bloquee montajes
-                "apparmor=unconfined",
-            ],
-            volumes={"/sys/fs/cgroup": {"bind": "/sys/fs/cgroup", "mode": "rw"}},
+        c = Container.objects.create(
+            user=request.user,
+            container_id="",  # se completa al boot en QemuSession
+            image="vm:ubuntu-jammy",
+            status="creating",
         )
-        obj = Container.objects.create(
-            user=request.user, container_id=cont.id, status="running"
-        )
-        SESSIONS[obj.pk] = DockerSession(obj, settings.DOCKER_CLIENT)
-        return Response(ContainerSerializer(obj).data, status=status.HTTP_201_CREATED)
+        # Crear sesión (esto arranca la VM y actualiza el container_id/status)
+        _ = QemuSession(c, on_line=None, on_close=None)
+        ser = self.get_serializer(c)
+        return Response(ser.data, status=status.HTTP_201_CREATED)
 
     def destroy(self, request, *args, **kwargs):
         obj = self.get_object()
-        try:
-            c = settings.DOCKER_CLIENT.containers.get(obj.container_id)
-            c.stop()
-            c.remove()
-            obj.status = "stopped"
-            obj.save()
-            sess = SESSIONS.pop(obj.id, None)
-            if sess:
-                sess.sock.close()
-            self.perform_destroy(obj)
-            return Response({"status": "stopped"})
-        except Exception as e:
-            self.perform_destroy(obj)
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        # No mantenemos PID del QEMU aquí; cerramos la shell (si hay) y marcamos detenido.
+        sess = SESSIONS.pop(obj.pk, None)
+        if sess:
+            try:
+                # envío de shutdown a la VM (suave)
+                sess.send("sudo shutdown -h now")
+            except Exception:
+                ...
+        obj.status = "stopped"
+        obj.save(update_fields=["status"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"])
     def send_command(self, request, pk=None):
         """
-        Returns all cards of the board.
+        Envía un comando “no interactivo” por REST (opcional: lo mantenemos para compatibilidad).
+        Nota: el IDE ahora usa WebSocket. Aquí simplemente abrimos/reutilizamos sesión y mandamos texto.
+        Body: { "command": "ls -la" }
         """
-        obj = get_object_or_404(Container, pk=pk, user=request.user)
-        cmd = request.data.get("command")
+        container = self.get_object()
+        cmd = request.data.get("command", "")
         if not cmd:
-            return Response(
-                {"error": "No command provided"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        sess = SESSIONS.get(pk) or DockerSession(obj, settings.DOCKER_CLIENT)
-        SESSIONS[pk] = sess
-
-        print("Command: ", cmd)
-        if cmd.strip() == "clear":
-            return Response({"status": "cleared"})
-
-        if cmd.strip() == "ctrlc":
-            cmd = "\x03"  # ETX (Ctrl+C)
-
-        if cmd.strip() == "ctrld":
-            cmd = "\x04"  # EOT (Ctrl+D)
-
-        sess.send(cmd)
-        return Response({"status": "sent"})
+            return Response({"error": "command required"}, status=400)
+        sess = SESSIONS.get(container.pk)
+        if not sess:
+            sess = QemuSession(container, None)
+            SESSIONS[container.pk] = sess
+        try:
+            sess.send(cmd)
+            return Response({"status": "sent"})
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
     @action(detail=True, methods=["post"])
     def restart_container(self, request, pk=None):
-        obj = get_object_or_404(Container, pk=pk, user=request.user)
-        try:
-            del SESSIONS[obj.pk]
-        except KeyError:
-            ...
-        sess = DockerSession(obj, settings.DOCKER_CLIENT)
-        SESSIONS[pk] = sess
-
-        return Response({"status": "stopped"})
+        """
+        Reabre el canal del shell (la VM sigue viva).
+        """
+        container = self.get_object()
+        sess = SESSIONS.get(container.pk)
+        if not sess:
+            sess = QemuSession(container, None)
+            SESSIONS[container.pk] = sess
+        else:
+            sess.reopen()
+        return Response({"status": "restarted"})
 
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
     def upload_file(self, request, pk=None):
         """
-        Recibe un archivo (multipart/form-data) y lo copia dentro del contenedor.
-        Parámetros opcionales en JSON: 'dest_path' (ruta destino en el contenedor).
+        Sube un archivo por SFTP a la VM
+        form-data: file, dest_path (default /app)
         """
-        obj = self.get_object()
-        container = settings.DOCKER_CLIENT.containers.get(obj.container_id)
+        container = self.get_object()
+        f = request.FILES.get("file")
+        dest = request.data.get("dest_path", "/app")
+        if not f:
+            return Response({"error": "file required"}, status=400)
 
-        # Archivo subido
-        upload = request.FILES.get("file")
-        if not upload:
-            return Response({"error": "No se ha enviado ningún archivo."}, status=400)
+        sess = SESSIONS.get(container.pk)
+        if not sess:
+            sess = QemuSession(container, None)
+            SESSIONS[container.pk] = sess
 
-        # Ruta destino en el contenedor (por defecto /app)
-        dest_path = request.data.get("dest_path", "/")
-
-        # Armamos un tar en memoria con el fichero
-        tar_stream = io.BytesIO()
-        with tarfile.open(fileobj=tar_stream, mode="w") as tar:
-            info = tarfile.TarInfo(name=upload.name)
-            upload.seek(0, io.SEEK_END)
-            info.size = upload.tell()
-            upload.seek(0)
-            tar.addfile(info, upload.file)
-        tar_stream.seek(0)
-
-        # Copiamos el tar dentro del contenedor
-        success = container.put_archive(dest_path, tar_stream.read())
-        if not success:
-            return Response({"error": "Fallo al copiar el archivo."}, status=500)
-
-        return Response({"status": "archivo copiado", "dest": dest_path})
+        # hacemos upload vía SFTP
+        try:
+            # reabrimos un cliente temporal para SFTP
+            k = paramiko.Ed25519Key.from_private_key_file(settings.VM_SSH_PRIVKEY)
+            cli = paramiko.SSHClient()
+            cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            # puerto desde container_id: qemu:<port>
+            port = int(container.container_id.split(":")[1])
+            cli.connect(
+                "127.0.0.1",
+                port=port,
+                username=settings.VM_SSH_USER,
+                pkey=k,
+                look_for_keys=False,
+            )
+            sftp = cli.open_sftp()
+            # asegúrate de que dest exista
+            try:
+                sess.send(f"mkdir -p {shlex.quote(dest)}")
+            except Exception:
+                ...
+            remote_path = os.path.join(dest, f.name)
+            with sftp.file(remote_path, "wb") as wf:
+                for chunk in f.chunks():
+                    wf.write(chunk)
+            sftp.close()
+            cli.close()
+            return Response({"dest": remote_path})
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
     @action(detail=True, methods=["get"])
     def read_file(self, request, pk=None):
         """
-        Devuelve el contenido de un archivo dentro del contenedor.
-        Parámetros GET: ?path=/ruta/al/archivo.py
+        Lee un archivo por SFTP
+        GET ?path=/ruta
         """
-        obj = self.get_object()
-        path = request.query_params.get("path")
+        container = self.get_object()
+        path = request.GET.get("path")
         if not path:
-            return Response({"error": "Se requiere 'path'"}, status=400)
-        container = settings.DOCKER_CLIENT.containers.get(obj.container_id)
-        tar_stream, _ = container.get_archive(path)
-        # Extraer sólo el archivo solicitado
-        import tarfile, io
-
-        tf = tarfile.open(fileobj=io.BytesIO(b"".join(tar_stream)), mode="r:")
-        member = tf.next()
-        content = tf.extractfile(member).read().decode()
-        return Response({"content": content})
+            return Response({"error": "path required"}, status=400)
+        try:
+            k = paramiko.Ed25519Key.from_private_key_file(settings.VM_SSH_PRIVKEY)
+            cli = paramiko.SSHClient()
+            cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            port = int(container.container_id.split(":")[1])
+            cli.connect(
+                "127.0.0.1",
+                port=port,
+                username=settings.VM_SSH_USER,
+                pkey=k,
+                look_for_keys=False,
+            )
+            sftp = cli.open_sftp()
+            with sftp.file(path, "rb") as rf:
+                data = rf.read().decode("utf-8", errors="ignore")
+            sftp.close()
+            cli.close()
+            return Response({"content": data})
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
     @action(detail=True, methods=["post"], parser_classes=[JSONParser])
     def write_file(self, request, pk=None):
         """
-        Escribe/crea un archivo dentro del contenedor.
-        JSON body: { "path": "/ruta/al/archivo.py", "content": "print('Hola')" }
+        Crea/Escribe un archivo
+        JSON: { "path": "/app/a.py", "content": "print(1)" }
         """
-        obj = self.get_object()
+        container = self.get_object()
         path = request.data.get("path")
         content = request.data.get("content", "")
         if not path:
-            return Response({"error": "Se requiere 'path'"}, status=400)
-
-        # Empaquetar un tar con el archivo en memoria
-        import io, tarfile, os
-
-        dirname = os.path.dirname(path)
-        filename = os.path.basename(path)
-        tar_stream = io.BytesIO()
-        with tarfile.open(fileobj=tar_stream, mode="w") as tar:
-            data = content.encode("utf-8")
-            info = tarfile.TarInfo(name=filename)
-            info.size = len(data)
-            tar.addfile(info, io.BytesIO(data))
-        tar_stream.seek(0)
-
-        container = settings.DOCKER_CLIENT.containers.get(obj.container_id)
-        success = container.put_archive(dirname or "/", tar_stream.read())
-        if not success:
-            return Response({"error": "Fallo al escribir el archivo."}, status=500)
-        return Response({"status": "archivo escrito", "path": path})
+            return Response({"error": "path required"}, status=400)
+        try:
+            k = paramiko.Ed25519Key.from_private_key_file(settings.VM_SSH_PRIVKEY)
+            cli = paramiko.SSHClient()
+            cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            port = int(container.container_id.split(":")[1])
+            cli.connect(
+                "127.0.0.1",
+                port=port,
+                username=settings.VM_SSH_USER,
+                pkey=k,
+                look_for_keys=False,
+            )
+            sftp = cli.open_sftp()
+            # asegurar directorio
+            dirn = os.path.dirname(path)
+            if dirn:
+                # crea por shell (más simple)
+                stdin, stdout, stderr = cli.exec_command(
+                    f"mkdir -p {shlex.quote(dirn)}"
+                )
+                stdout.channel.recv_exit_status()
+            with sftp.file(path, "wb") as wf:
+                wf.write(content.encode("utf-8"))
+            sftp.close()
+            cli.close()
+            return Response({"status": "ok"})
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
     @action(detail=True, methods=["get"])
     def list_dir(self, request, pk=None):
         """
-        Lista recursivamente todos los subdirectorios y archivos dentro del contenedor,
-        usando `find` para obtener rutas y tipos.
+        Lista recursivamente vía 'find' (como antes), devolviendo {path, name, type}
+        GET ?path=/app
         """
-        container = settings.DOCKER_CLIENT.containers.get(
-            self.get_object().container_id
-        )
-        dir_path = request.query_params.get("path", "/").rstrip("/")
-
-        # -mindepth 1 evita listar la propia carpeta raíz
-        cmd = f"find {dir_path} -mindepth 1 -printf '%p:%y\n'"
-        exit_code, output = container.exec_run(cmd)
-        if exit_code != 0:
-            return Response({"error": output.decode()}, status=400)
-
-        tree = []
-        for line in output.decode().splitlines():
-            path, kind = line.split(":", 1)
-            tree.append(
-                {
-                    "name": os.path.basename(path),
-                    "path": path,
-                    "type": "directory" if kind == "d" else "file",
-                }
+        container = self.get_object()
+        root = request.GET.get("path", "/app")
+        try:
+            k = paramiko.Ed25519Key.from_private_key_file(settings.VM_SSH_PRIVKEY)
+            cli = paramiko.SSHClient()
+            cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            port = int(container.container_id.split(":")[1])
+            cli.connect(
+                "127.0.0.1",
+                port=port,
+                username=settings.VM_SSH_USER,
+                pkey=k,
+                look_for_keys=False,
             )
-
-        return Response(tree)
+            cmd = f"find {shlex.quote(root)} -maxdepth 2 -printf '%p||%y\\n' 2>/dev/null || true"
+            _, stdout, _ = cli.exec_command(cmd)
+            lines = (stdout.read().decode() or "").strip().splitlines()
+            items = []
+            for ln in lines:
+                if "||" not in ln:
+                    continue
+                p, t = ln.split("||", 1)
+                base = os.path.basename(p.rstrip("/")) or p
+                items.append(
+                    {
+                        "path": p,
+                        "name": base,
+                        "type": "directory" if t == "d" else "file",
+                    }
+                )
+            cli.close()
+            return Response(items)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
     @action(detail=True, methods=["post"])
     def create_dir(self, request, pk=None):
         """
-        Crea una carpeta dentro del contenedor.
-        JSON body: { "path": "/app/nueva_carpeta" }
+        Crea carpeta en la VM
+        JSON: { "path": "/app/nueva" }
         """
-        container = settings.DOCKER_CLIENT.containers.get(
-            self.get_object().container_id
-        )
+        container = self.get_object()
         path = request.data.get("path")
         if not path:
-            return Response({"error": "Se requiere 'path'"}, status=400)
-        # Ejecutamos mkdir -p dentro del contenedor
-        exit_code, output = container.exec_run(cmd=["mkdir", "-p", path])
-        if exit_code != 0:
-            return Response({"error": output.decode()}, status=400)
-        return Response({"status": "created", "path": path})
+            return Response({"error": "path required"}, status=400)
+        try:
+            k = paramiko.Ed25519Key.from_private_key_file(settings.VM_SSH_PRIVKEY)
+            cli = paramiko.SSHClient()
+            cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            port = int(container.container_id.split(":")[1])
+            cli.connect(
+                "127.0.0.1",
+                port=port,
+                username=settings.VM_SSH_USER,
+                pkey=k,
+                look_for_keys=False,
+            )
+            _, stdout, _ = cli.exec_command(f"mkdir -p {shlex.quote(path)}")
+            rc = stdout.channel.recv_exit_status()
+            cli.close()
+            if rc == 0:
+                return Response({"status": "ok"})
+            return Response({"error": "mkdir failed"}, status=500)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
 
 
 class UserViewSet(APIView):
@@ -353,56 +383,4 @@ class FileTemplateViewSet(viewsets.ModelViewSet):
           "clean": true            # borra contenido previo
         }
         """
-        tpl = self.get_object()
-        container_model_id = request.data.get("container_id")
-        if not container_model_id:
-            return Response({"error": "Se requiere 'container_id'."}, status=400)
-
-        if request.user.is_superuser:
-            container_obj = get_object_or_404(Container, pk=container_model_id)
-        else:
-            container_obj = get_object_or_404(
-                Container, pk=container_model_id, user=request.user
-            )
-
-        dest_path = str(request.data.get("dest_path") or "/app").rstrip("/")
-        clean = bool(request.data.get("clean", True))
-
-        docker_client: DockerClient = settings.DOCKER_CLIENT
-        container = docker_client.containers.get(container_obj.container_id)
-
-        # Asegurar destino
-        container.exec_run(["mkdir", "-p", dest_path])
-
-        # Limpieza opcional
-        if clean:
-            quoted = shlex.quote(dest_path)
-            container.exec_run(["/bin/sh", "-lc", f"rm -rf {quoted}/*"])
-
-        # Armar tar sin comprimir con los items
-        buf = io.BytesIO()
-        with tarfile.open(fileobj=buf, mode="w") as tar:
-            for it in tpl.items.all():
-                if not it.path or it.path.endswith("/"):
-                    continue
-                data = (it.content or "").encode("utf-8")
-                info = tarfile.TarInfo(name=it.path)
-                info.size = len(data)
-                info.mode = it.mode or 0o644
-                tar.addfile(info, io.BytesIO(data))
-        buf.seek(0)
-        ok = container.put_archive(dest_path, buf.read())
-        if not ok:
-            return Response(
-                {"error": "Fallo al copiar archivos al contenedor."}, status=500
-            )
-
-        return Response(
-            {
-                "status": "applied",
-                "template_id": tpl.pk,
-                "container": container_obj.pk,
-                "dest_path": dest_path,
-                "files_count": tpl.items.count(),
-            }
-        )
+        
