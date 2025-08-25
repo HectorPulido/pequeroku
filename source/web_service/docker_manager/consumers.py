@@ -60,6 +60,7 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
 
         # Auto “ls” al entrar (si el exec está vivo)
         await self._ensure_alive()
+        await self._send_to_session("cd /app")
         await self._send_to_session("ls -la")
 
     def _on_line(self, line: str):

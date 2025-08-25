@@ -140,3 +140,6 @@ GitHub.sublime-settings
 !.vscode/launch.json 
 !.vscode/extensions.json 
 .history
+
+vm_data/base/*.qcow2
+vm_data/vms/*

@@ -1,0 +1,15 @@
+users:
+  - name: ubuntu
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: sudo
+    ssh_authorized_keys:
+      # public key
+      - ssh-ed25519 ...
+ssh_pwauth: false
+disable_root: true
+package_update: true
+packages:
+  - docker.io
+runcmd:
+  - systemctl enable --now docker
+  - mkdir -p /home/ubuntu/.ssh && chown -R ubuntu:ubuntu /home/ubuntu/.ssh

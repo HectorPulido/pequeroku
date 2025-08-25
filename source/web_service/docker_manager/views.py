@@ -25,6 +25,8 @@ from .models import Container, FileTemplate, ResourceQuota
 from .serializers import ContainerSerializer, FileTemplateSerializer
 from .session import QemuSession
 
+from .usecases.apply_template import _apply_template_to_vm
+
 SESSIONS = {}
 
 
@@ -40,6 +42,11 @@ class ContainersViewSet(viewsets.ModelViewSet):
             return qs
         return qs.filter(user=self.request.user)
 
+    def _rand_id(self, n=6):
+        import string, random
+
+        return "".join(random.choices(string.ascii_lowercase + string.digits, k=n))
+
     def create(self, request, *args, **kwargs):
         # En vez de crear un contenedor Docker, creamos registro y boot de VM en session
         # Verificamos cuota
@@ -53,12 +60,28 @@ class ContainersViewSet(viewsets.ModelViewSet):
 
         c = Container.objects.create(
             user=request.user,
-            container_id="",  # se completa al boot en QemuSession
+            container_id=self._rand_id(),
             image="vm:ubuntu-jammy",
             status="creating",
         )
-        # Crear sesión (esto arranca la VM y actualiza el container_id/status)
-        _ = QemuSession(c, on_line=None, on_close=None)
+        sess = QemuSession(c, on_line=None, on_close=None)
+        SESSIONS[c.pk] = sess
+
+        slug = getattr(settings, "DEFAULT_TEMPLATE_SLUG", None)
+        dest = getattr(settings, "DEFAULT_TEMPLATE_DEST", "/app")
+        clean = getattr(settings, "DEFAULT_TEMPLATE_CLEAN", True)
+        if slug:
+            try:
+                tpl = FileTemplate.objects.get(slug=slug)
+                _apply_template_to_vm(c, tpl, dest_path=dest, clean=clean)
+            except FileTemplate.DoesNotExist:
+                try:
+                    tpl = FileTemplate.objects.order_by("-updated_at").first()
+                    if tpl:
+                        _apply_template_to_vm(c, tpl, dest_path=dest, clean=clean)
+                except Exception:
+                    pass
+
         ser = self.get_serializer(c)
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
@@ -303,7 +326,6 @@ class ContainersViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=500)
 
 
-
 class UserViewSet(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -383,4 +405,27 @@ class FileTemplateViewSet(viewsets.ModelViewSet):
           "clean": true            # borra contenido previo
         }
         """
-        
+        tpl = self.get_object()
+        container_model_id = request.data.get("container_id")
+
+        if request.user.is_superuser:
+            container_obj = get_object_or_404(Container, pk=container_model_id)
+        else:
+            container_obj = get_object_or_404(
+                Container, pk=container_model_id, user=request.user
+            )
+
+        dest_path = str(request.data.get("dest_path") or "/app").rstrip("/")
+        clean = bool(request.data.get("clean", True))
+
+        _apply_template_to_vm(container_obj, tpl, dest_path=dest_path, clean=clean)
+
+        return Response(
+            {
+                "status": "applied",
+                "template_id": tpl.pk,
+                "container": container_obj.pk,
+                "dest_path": dest_path,
+                "files_count": tpl.items.count(),
+            }
+        )

@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 import threading
 import time
+import json
+import hashlib
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -21,6 +23,21 @@ def _pick_free_port() -> int:
     return port
 
 
+def _spec_hash(user: str, pubkey_path: str) -> str:
+    pub = open(pubkey_path).read().strip()
+    blob = json.dumps({"user": user, "pub": pub}, sort_keys=True).encode()
+    return hashlib.sha256(blob).hexdigest()
+
+
+def _load_pkey(path: str):
+    for K in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
+        try:
+            return K.from_private_key_file(path)
+        except Exception:
+            continue
+    raise RuntimeError(f"No pude cargar la clave privada: {path}")
+
+
 @dataclass
 class VMProc:
     workdir: str
@@ -32,6 +49,8 @@ class VMProc:
 
 
 def _make_overlay(base_image: str, overlay: str, disk_gib: int = 10):
+    if os.path.exists(overlay):
+        return
     subprocess.run(
         [
             "qemu-img",
@@ -50,26 +69,53 @@ def _make_overlay(base_image: str, overlay: str, disk_gib: int = 10):
 
 
 def _make_seed_iso(seed_iso: str, user: str, pubkey_path: str, instance_id: str):
+    spec_path = seed_iso + ".spec"
+    want = _spec_hash(user, pubkey_path)
+
+    if os.path.exists(seed_iso) and os.path.exists(spec_path):
+        if open(spec_path).read().strip() == want:
+            return
     assert os.path.exists(pubkey_path), f"No existe {pubkey_path}"
     pubkey = open(pubkey_path, encoding="utf-8").read().strip()
     user_data = f"""#cloud-config
+disable_root: false
+ssh_pwauth: false
+
 users:
-  - name: {user}
+  - name: {settings.VM_SSH_USER}   # p.ej. ubuntu si sigues usando eso
     sudo: ALL=(ALL) NOPASSWD:ALL
-    groups: sudo
+    groups: sudo,docker
     ssh_authorized_keys:
       - {pubkey}
-ssh_pwauth: false
-disable_root: true
-package_update: true
+  - name: root
+    ssh_authorized_keys:
+      - {pubkey}
+
 packages:
   - docker.io
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/pequeroku.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      PermitRootLogin yes
+      PasswordAuthentication no
+
 runcmd:
+  - systemctl restart ssh
+  - usermod -aG docker {settings.VM_SSH_USER}
+  - mkdir -p /app
+  - chown {settings.VM_SSH_USER}:{settings.VM_SSH_USER} /app
+  - chmod 0777 /app
   - systemctl enable --now docker
+  - cd /app
 """
     meta_data = f"""instance-id: {instance_id}
 local-hostname: {instance_id}
 """
+    open(spec_path, "w").write(want)
+
     wd = os.path.dirname(seed_iso)
     ud = os.path.join(wd, "user-data")
     md = os.path.join(wd, "meta-data")
@@ -105,7 +151,7 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str):
             with socket.create_connection(("127.0.0.1", port), timeout=2):
                 pass
             # prueba SSH real
-            k = paramiko.Ed25519Key.from_private_key_file(key_path)
+            k = _load_pkey(settings.VM_SSH_PRIVKEY)
             cli = paramiko.SSHClient()
             cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             cli.connect(
@@ -130,22 +176,21 @@ def _start_vm(workdir: str, vcpus=2, mem_mib=2048, disk_gib=10) -> VMProc:
     overlay = os.path.join(workdir, "disk.qcow2")
     seed_iso = os.path.join(workdir, "seed.iso")
     console_log = os.path.join(workdir, "console.log")
-    port = _pick_free_port()
 
     vm_base_image: str = settings.VM_BASE_IMAGE or ""
     vm_ssh_user: str = settings.VM_SSH_USER or ""
-    vm_ssh_user: str = settings.VM_SSH_PRIVKEY or ""
-    vm_timeout_boot_s: str = settings.VM_TIMEOUT_BOOT_S or ""
-    vm_ssh_user: str = settings.VM_SSH_USER or ""
     vm_ssh_privkey: str = settings.VM_SSH_PRIVKEY or ""
+    vm_timeout_boot_s: int = int(settings.VM_TIMEOUT_BOOT_S or "100")
 
     _make_overlay(vm_base_image, overlay, disk_gib=disk_gib)
     _make_seed_iso(
         seed_iso,
         vm_ssh_user,
-        vm_ssh_user + ".pub",
+        vm_ssh_privkey + ".pub",
         os.path.basename(workdir),
     )
+
+    port = _pick_free_port()
 
     args: list = [settings.VM_QEMU_BIN]
     if os.path.exists("/dev/kvm"):
@@ -245,34 +290,28 @@ class QemuSession:  # mantenemos el nombre para no tocar imports
 
     # ---- control de VM ----
     def _ensure_vm(self):
-        # Si ya hay un puerto recordado en container_id (guardamos ahí)
         if (
             self.container_obj.container_id
             and self.container_obj.container_id.startswith("qemu:")
         ):
-            # formato qemu:<port>
             try:
-                port = int(self.container_obj.container_id.split(":")[1])
+                old_port = int(self.container_obj.container_id.split(":")[1])
             except Exception:
-                port = None
+                old_port = None
         else:
-            port = None
+            old_port = None
 
-        # ¿puerto usable?
-        if port:
-            if self._ping_ssh_port(port):
-                self.vm = VMProc(
-                    workdir=self.workdir,
-                    overlay="",
-                    seed_iso="",
-                    port_ssh=port,
-                    proc=None,
-                )
-                return
+        if old_port and self._ping_ssh_port(old_port):
+            self.vm = VMProc(
+                workdir=self.workdir,
+                overlay="",
+                seed_iso="",
+                port_ssh=old_port,
+                proc=None,
+            )
+            return
 
-        # Arranca nueva VM
-        self.vm = _start_vm(self.workdir)
-        # Guarda el “id” como qemu:<port> para reusar
+        self.vm = _start_vm(self.workdir, 1, 512)
         self.container_obj.container_id = f"qemu:{self.vm.port_ssh}"
         self.container_obj.status = "running"
         self.container_obj.save(update_fields=["container_id", "status"])

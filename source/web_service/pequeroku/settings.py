@@ -29,9 +29,16 @@ VM_BASE_IMAGE = os.environ.get(
 VM_SSH_PRIVKEY = os.environ.get(
     "VM_SSH_PRIVKEY", os.path.expanduser("~/.ssh/id_vm_pequeroku")
 )
-VM_SSH_USER = os.environ.get("VM_SSH_USER", "ubuntu")
+VM_SSH_USER = os.environ.get("VM_SSH_USER", "root")
 VM_QEMU_BIN = os.environ.get("VM_QEMU_BIN", "/usr/bin/qemu-system-x86_64")
 VM_TIMEOUT_BOOT_S = int(os.environ.get("VM_TIMEOUT_BOOT_S", "600"))
+
+
+DEFAULT_TEMPLATE_SLUG = os.environ.get("DEFAULT_TEMPLATE_SLUG", "default")
+DEFAULT_TEMPLATE_DEST = os.environ.get("DEFAULT_TEMPLATE_DEST", "/app")
+DEFAULT_TEMPLATE_CLEAN = (
+    os.environ.get("DEFAULT_TEMPLATE_CLEAN", "true").lower() == "true"
+)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
