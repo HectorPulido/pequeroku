@@ -1,6 +1,6 @@
 # PequeRoku
 
-Welcome to **PequeRoku**, your 🎯 go-to micro container management platform! Built with Django, Docker, Redis, and Nginx, PequeRoku puts the power of containers at your fingertips with a fun and simple SPA frontend. 
+Welcome to **PequeRoku**, your 🎯 go-to MicroVM management platform! Built with Django, QEMU, Docker, Redis, and Nginx, PequeRoku puts the power of containers at your fingertips with a fun and simple SPA frontend. 
 
 ![brief animation on how the platform works](img/demo.gif)
 
@@ -26,7 +26,7 @@ This project was created to give community members a slice of my servers where t
 
 ## ✨ Features
 
-* 🐳 **Container Management**: Instantly start, stop, and restart Docker containers with a click! 
+* 🐳 **Container Management**: Instantly start, stop, and restart QEMU VM with a click! 
 * 💻 **Interactive Shell**: Type commands and see real-time logs—just like magic! (AND 100% COMPATIBLE WITH CLOUDFLARE TUNNELS)
 * 🎉 **Live coding enviroment**: You can access your files, upload, edit and run without the console
 * 👥 **User management** Powered by django there is a powerfull user management admin
@@ -48,9 +48,8 @@ This project was created to give community members a slice of my servers where t
 
 Configured in `docker-compose.yaml`:
 
-* **web**: Django + Gunicorn 🌟 (mounts code & Docker socket)
+* **web**: Django + Gunicorn 🌟
 * **db**: PostgreSQL 16 🗄️ (persistent volume)
-* **redis**: Redis 7 🌀 (log storage)
 * **nginx**: Nginx latest 🌐 (serves SPA + proxies API)
 
 All on network: `pequeroku-net` 🔗
@@ -77,6 +76,41 @@ git clone https://github.com/yourusername/pequeroku.git
 cd pequeroku
 ```
 
+### Create qcow2
+# Ubuntu/Debian
+
+1. Install dependencies
+```bash
+sudo apt-get update
+sudo apt-get install -y qemu-kvm qemu-utils cloud-image-utils genisoimage \
+                        libvirt-daemon-system libvirt-clients libvirt opcional
+```
+
+2. Download the base image
+```bash
+sudo mkdir -p /opt/qemu/base /opt/qemu/vms
+cd /opt/qemu/base
+# This for ubuntu
+sudo curl -LO https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img
+sudo qemu-img convert -O qcow2 jammy-server-cloudimg-amd64.img jammy-base.qcow2
+
+# Then flatten the image
+qemu-img info /opt/qemu/base/jammy-base.qcow2
+if backing file: /opt/qemu/base/jammy-base.qcow2... let's flatten
+
+qemu-img convert -O qcow2 /opt/qemu/base/jammy-base.qcow2 /opt/qemu/base/jammy-base-flat.qcow2
+mv /opt/qemu/base/jammy-base.qcow2 /opt/qemu/base/jammy-base.qcow2.bak
+mv /opt/qemu/base/jammy-base-flat.qcow2 /opt/qemu/base/jammy-base.qcow2
+
+qemu-img info /opt/qemu/base/jammy-base.qcow2 | grep -i backing || echo "Done flattening ✅"
+```
+
+3. Edit the docker-compose.yaml
+Add the ssh_authorized_keys on the docker-compose.yaml
+Adjust also the packages, activate the kvm, etc.
+
+
+
 ### 🔑 Environment Variables
 
 Create a `.env` file in the root folder:
@@ -88,8 +122,6 @@ DB_USER=myuser
 DB_PASSWORD=mypassword
 DB_HOST=db
 DB_PORT=5432
-REDIS_HOST=redis
-REDIS_PORT=6379
 DEBUG=1  # 0 for production
 ```
 
