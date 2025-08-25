@@ -15,7 +15,7 @@ services:
     environment:
       VM_SSH_PRIVKEY: /root/.ssh/id_vm_pequeroku
       VM_SSH_USER: root
-      VM_BASE_IMAGE: /app/vm_data/base/jammy-golden.qcow2
+      VM_BASE_IMAGE: /app/vm_data/base/debian12-golden.qcow2
     networks:
       - pequeroku-net
   db:

@@ -88,21 +88,26 @@ sudo apt-get install -y qemu-kvm qemu-utils cloud-image-utils genisoimage \
 
 2. Download the base image
 ```bash
-sudo mkdir -p /opt/qemu/base /opt/qemu/vms
-cd /opt/qemu/base
-# This for ubuntu
-sudo curl -LO https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img
-sudo qemu-img convert -O qcow2 jammy-server-cloudimg-amd64.img jammy-base.qcow2
+sudo curl -LO https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
+mv debian-12-genericcloud-amd64.qcow2 debian-raw.qcow2
+sudo apt-get install -y libguestfs-tools
+sudo virt-customize -a debian-raw.qcow2 \
+  --update \
+  --install ca-certificates,curl,gnupg,lsb-release \
+  --run-command 'install -m 0755 -d /etc/apt/keyrings' \
+  --run-command 'curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker-ce.gpg' \
+  --run-command 'chmod a+r /etc/apt/keyrings/docker-ce.gpg' \
+  --run-command 'sh -c "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker-ce.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable\" > /etc/apt/sources.list.d/docker.list"' \
+  --run-command 'apt-get update' \
+  --run-command 'apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin' \
+  --run-command 'systemctl enable docker' \
+  --run-command 'install -m 0755 -d /usr/share/keyrings' \
+  --run-command 'curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg' \
+  --append-line '/etc/apt/sources.list.d/cloudflared.list:deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' \
+  --run-command 'apt-get update && apt-get install -y cloudflared' \
+  --install python3,python3-pip,git
 
-# Then flatten the image
-qemu-img info /opt/qemu/base/jammy-base.qcow2
-if backing file: /opt/qemu/base/jammy-base.qcow2... let's flatten
-
-qemu-img convert -O qcow2 /opt/qemu/base/jammy-base.qcow2 /opt/qemu/base/jammy-base-flat.qcow2
-mv /opt/qemu/base/jammy-base.qcow2 /opt/qemu/base/jammy-base.qcow2.bak
-mv /opt/qemu/base/jammy-base-flat.qcow2 /opt/qemu/base/jammy-base.qcow2
-
-qemu-img info /opt/qemu/base/jammy-base.qcow2 | grep -i backing || echo "Done flattening ✅"
+sudo qemu-img convert -O qcow2 debian-raw.qcow2 debian12-golden.qcow2
 ```
 
 3. Edit the docker-compose.yaml
