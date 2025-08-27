@@ -189,7 +189,6 @@ def _vm_qemu_arm64_args(
     overlay,
     seed_iso,
 ):
-    # Detecta UEFI instalado
     uefi_candidates = [
         "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
         "/usr/share/AAVMF/AAVMF_CODE.fd",
@@ -203,7 +202,6 @@ def _vm_qemu_arm64_args(
     use_kvm = os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64")
     if use_kvm:
         print("Using KVM")
-        # ===== COMANDO EXACTO QUE TE FUNCIONÓ =====
         args += [
             "-accel",
             "kvm",
@@ -212,7 +210,7 @@ def _vm_qemu_arm64_args(
             "-M",
             "virt-7.1,gic-version=3,its=off",
             "-smp",
-            "1",  # 1 vCPU fijo como workaround
+            str(vcpus),
             "-m",
             str(mem_mib),
             "-nographic",
@@ -226,7 +224,6 @@ def _vm_qemu_arm64_args(
             f"user,id=n0,hostfwd=tcp:127.0.0.1:{port}-:22",
             "-device",
             "virtio-net-device,netdev=n0",
-            # SCSI controller + disco qcow2
             "-device",
             "virtio-scsi-device,id=scsi0",
             "-drive",
@@ -234,7 +231,6 @@ def _vm_qemu_arm64_args(
             "-device",
             "scsi-hd,drive=vd0,bus=scsi0.0",
         ]
-        # seed.iso por SCSI-CD si te lo pasan
         if seed_iso:
             args += [
                 "-drive",
@@ -244,7 +240,6 @@ def _vm_qemu_arm64_args(
             ]
     else:
         print("Not using KVM")
-        # Mantengo tu camino original para TCG
         args += [
             "-accel",
             "tcg,thread=multi",
