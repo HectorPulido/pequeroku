@@ -152,15 +152,16 @@ local-hostname: {instance_id}
 
 
 def _wait_ssh(port: int, timeout: int, user: str, key_path: str):
+    print("Start the _wait_ssh process...")
     start = time.time()
     try_number = 0
     while time.time() - start < timeout:
         try:
+            try_number += 1
+            print(
+                "Trying to connect to: ", port, "machine, try number:", try_number
+            )
             with socket.create_connection(("127.0.0.1", port), timeout=2):
-                try_number += 1
-                print(
-                    "Trying to connect to: ", port, "machine, try number:", try_number
-                )
                 pass
             k = _load_pkey(settings.VM_SSH_PRIVKEY)
             cli = paramiko.SSHClient()
