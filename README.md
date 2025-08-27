@@ -83,7 +83,7 @@ cd pequeroku
 ```bash
 sudo apt-get update
 sudo apt-get install -y qemu-kvm qemu-utils cloud-image-utils genisoimage \
-                        libvirt-daemon-system libvirt-clients libvirt opcional
+                        libvirt-daemon-system libvirt-clients libvirt
 ```
 
 2. Download the base image
@@ -110,10 +110,96 @@ sudo virt-customize -a debian-raw.qcow2 \
 sudo qemu-img convert -O qcow2 debian-raw.qcow2 debian12-golden.qcow2
 ```
 
-3. Edit the docker-compose.yaml
+3. Then move the debian12-golden.qcow2 to "source/web_service/vm_data/base/"
+
+4. Edit the docker-compose.yaml
 Add the ssh_authorized_keys on the docker-compose.yaml
 Adjust also the packages, activate the kvm, etc.
 
+### Create qcow2 ARM (Raspberry Pi or Orange pi)
+
+1. Install dependencies (Ubuntu ARM64)
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+    qemu-utils qemu-system-arm libguestfs-tools \
+    util-linux kpartx curl gnupg ca-certificates
+```
+
+
+2. Download the debian12 cloud image
+
+```bash
+curl -LO https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2
+mv debian-12-genericcloud-arm64.qcow2 debian-raw.qcow2
+```
+
+3. Generate the chroot
+
+```bash
+# Load the NBD kernel module with partition support
+sudo modprobe nbd max_part=16
+
+# Attach the qcow2 image to /dev/nbd0
+sudo qemu-nbd -c /dev/nbd0 debian-raw.qcow2
+
+# Get the root partition, it's usually `/dev/nbd0p1`.
+lsblk /dev/nbd0 -o NAME,SIZE,TYPE,MOUNTPOINTS
+
+sudo mkdir -p /mnt/img
+sudo mount /dev/nbd0p1 /mnt/img
+
+# Prepare the chroot environment
+sudo mount --bind /dev  /mnt/img/dev
+sudo mount --bind /proc /mnt/img/proc
+sudo mount --bind /sys  /mnt/img/sys
+sudo mount --bind /run  /mnt/img/run
+sudo cp /etc/resolv.conf /mnt/img/etc/resolv.conf
+sudo chroot /mnt/img /bin/bash
+```
+
+4. Now you’re **inside the Debian guest**. Run your customizations there:
+
+```bash
+set -e
+
+apt-get update
+apt-get install -y ca-certificates curl gnupg lsb-release
+
+# Docker
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker-ce.gpg
+chmod a+r /etc/apt/keyrings/docker-ce.gpg
+sh -c 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker-ce.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list'
+
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable docker || true 
+
+# Cloudflared
+install -m 0755 -d /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' > /etc/apt/sources.list.d/cloudflared.list
+
+apt-get update
+apt-get install -y cloudflared
+
+# Extra tools
+apt-get install -y python3 python3-pip git
+
+exit
+```
+
+5. Clean up and detach, generate and optimize
+
+```bash
+sudo umount -R /mnt/img
+sudo qemu-nbd -d /dev/nbd0
+sudo qemu-img convert -O qcow2 debian-raw.qcow2 debian12-golden.qcow2
+```
+
+6. Continue with the same path
 
 
 ### 🔑 Environment Variables
