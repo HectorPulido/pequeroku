@@ -66,17 +66,23 @@ document.addEventListener("DOMContentLoaded", () => {
 // Lógica SPA
 let containersCache = [];
 function initApp() {
+	let current_id = "";
 
 	const listEl = document.getElementById("container-list");
 	const btnCreate = document.getElementById("btn-create");
 
 	const btnClose = document.getElementById("btn-close");
+	const btnFullscreen = document.getElementById("btn-fullscreen");
 	const modal = document.getElementById("console-modal");
 	const modalBody = document.getElementById("console-modal-body");
 	const userData = document.getElementById("user_data");
 	const quotaInfo = document.getElementById("quota_info");
 
-
+	btnFullscreen.addEventListener("click", () => {
+		if (current_id) {
+			open("/ide/?containerId=" + current_id);
+		}
+	})
 	btnClose.addEventListener("click", closeConsole);
 	btnCreate.addEventListener("click", createContainer);
 	fetchContainers();
@@ -131,8 +137,9 @@ function initApp() {
 				<p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
 				<div>
 					<button class="btn-edit" ${!isRunning ? "disabled" : ""}>✏️ Let's Play</button>
-					<button class="btn-start" ${isRunning ? "disabled" : ""}>▶️ Start</button>
-					<button class="btn-stop" ${!isRunning ? "disabled" : ""}>⏹️ Stop</button>
+					${
+						isRunning ? "<button class=\"btn-start\">▶️ Start</button>" : "<button class=\"btn-stop\">⏹️ Stop</button>"
+					}
 					<button class="btn-delete">🗑️ Delete</button>
 				</div>`
 
@@ -190,6 +197,7 @@ function initApp() {
 	}
 
 	async function openConsole(id) {
+		current_id = id;
 		modal.classList.remove("hidden");
 		modalBody.innerHTML = `<iframe src="/ide/?containerId=${id}" frameborder="0" style="width: 100%; height: 100%;"></iframe>`
 	}
