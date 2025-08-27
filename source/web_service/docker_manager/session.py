@@ -181,8 +181,14 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str):
     raise TimeoutError("SSH timeout")
 
 
-def _vm_qemu_arm64_args(vcpus, mem_mib, console_log, port, overlay, seed_iso):
-    # Detectar UEFI disponible
+def _vm_qemu_arm64_args(
+    vcpus,
+    mem_mib,
+    console_log,
+    port,
+    overlay,
+    seed_iso,
+):
     uefi_candidates = [
         "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
         "/usr/share/AAVMF/AAVMF_CODE.fd",
@@ -191,50 +197,39 @@ def _vm_qemu_arm64_args(vcpus, mem_mib, console_log, port, overlay, seed_iso):
     if uefi is None:
         raise FileNotFoundError("Not valid UEFI installed")
 
-    use_kvm = os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64")
+    args: list = [settings.VM_QEMU_BIN]
 
-    args = [os.environ.get("VM_QEMU_BIN", "/usr/bin/qemu-system-aarch64")]
+    use_kvm = os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64")
+    smp_value = str(vcpus)
 
     if use_kvm:
+        print("Using KVM")
         args += ["-accel", "kvm", "-cpu", "host"]
+        machine_str = "virt-7.1,gic-version=3,its=off"
     else:
+        print("Not using KVM")
         args += ["-accel", "tcg,thread=multi", "-cpu", "max"]
-
-    # Workaround RK3588 SMP: its=off cuando hay >1 vCPU con KVM
-    machine = "virt,gic-version=3"
-    if use_kvm and int(vcpus) > 1:
-        machine += ",its=off"
+        machine_str = "virt"
 
     args += [
         "-machine",
-        machine,
+        machine_str,
         "-smp",
-        str(vcpus),
+        smp_value,
         "-m",
         str(mem_mib),
+        "-bios",
+        uefi,
         "-nographic",
         "-serial",
-        f"file:{console_log}",
+        "mon:stdio",
     ]
 
-    # Firmware
-    if os.path.basename(uefi).startswith("QEMU_EFI"):
-        args += ["-bios", uefi]
-    else:
-        # AAVMF: crear VARS temporal escribible
-        aavmf_vars_src = "/usr/share/AAVMF/AAVMF_VARS.fd"
-        if not os.path.exists(aavmf_vars_src):
-            raise FileNotFoundError("AAVMF_VARS.fd not found for AAVMF_CODE.fd")
-        vars_tmp = os.path.join(tempfile.gettempdir(), f"AAVMF_VARS.{os.getpid()}.fd")
-        shutil.copyfile(aavmf_vars_src, vars_tmp)
-        args += [
-            "-drive",
-            f"if=pflash,format=raw,readonly=on,file={uefi}",
-            "-drive",
-            f"if=pflash,format=raw,file={vars_tmp}",
-        ]
+    # Para reproducir tu línea funcional, añadimos esto sólo con KVM
+    if use_kvm:
+        args += ["-nodefaults", "-no-user-config"]
 
-    # Red (SLIRP con SSH forward)
+    # Red (igual que tu original)
     args += [
         "-netdev",
         f"user,id=n0,hostfwd=tcp:127.0.0.1:{port}-:22",
@@ -242,23 +237,33 @@ def _vm_qemu_arm64_args(vcpus, mem_mib, console_log, port, overlay, seed_iso):
         "virtio-net-device,netdev=n0",
     ]
 
-    # Disco con iothread y writeback
-    args += [
-        "-object",
-        "iothread,id=iothr0",
-        "-drive",
-        f"if=none,format=qcow2,cache=writeback,aio=io_uring,file={overlay},id=vd0",
-        "-device",
-        "virtio-blk-device,drive=vd0,iothread=iothr0",
-    ]
-
-    # Cloud-init seed
-    args += [
-        "-drive",
-        f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
-        "-device",
-        "virtio-blk-device,drive=cidata",
-    ]
+    # Almacenamiento:
+    if use_kvm:
+        # Layout que te funciona: un solo controlador SCSI y dos dispositivos colgados
+        args += [
+            "-device",
+            "virtio-scsi-device,id=scsi0",
+            "-drive",
+            f"if=none,format=qcow2,file={overlay},id=vd0",
+            "-device",
+            "scsi-hd,drive=vd0,bus=scsi0.0",
+            "-drive",
+            f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
+            "-device",
+            "scsi-cd,drive=cidata,bus=scsi0.0",
+        ]
+    else:
+        # Camino original (virtio-blk) si no hay KVM
+        args += [
+            "-drive",
+            f"if=none,format=qcow2,file={overlay},id=vd0",
+            "-device",
+            "virtio-blk-device,drive=vd0",
+            "-drive",
+            f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
+            "-device",
+            "virtio-blk-device,drive=cidata",
+        ]
 
     return args
 
