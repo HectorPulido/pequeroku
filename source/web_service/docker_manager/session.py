@@ -7,6 +7,7 @@ import threading
 import time
 import json
 import hashlib
+import platform
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -171,27 +172,71 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str):
     raise TimeoutError("SSH no respondió a tiempo")
 
 
-def _start_vm(workdir: str, vcpus=2, mem_mib=2048, disk_gib=10) -> VMProc:
-    os.makedirs(workdir, exist_ok=True)
-    overlay = os.path.join(workdir, "disk.qcow2")
-    seed_iso = os.path.join(workdir, "seed.iso")
-    console_log = os.path.join(workdir, "console.log")
+def _vm_qemu_arm64_args(
+    vcpus,
+    mem_mib,
+    console_log,
+    port,
+    overlay,
+    seed_iso,
+):
+    uefi_candidates = [
+        "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
+        "/usr/share/AAVMF/AAVMF_CODE.fd",
+    ]
+    uefi = None
+    for candidate in uefi_candidates:
+        if os.path.exists(candidate):
+            uefi = candidate
+            break
 
-    vm_base_image: str = settings.VM_BASE_IMAGE or ""
-    vm_ssh_user: str = settings.VM_SSH_USER or ""
-    vm_ssh_privkey: str = settings.VM_SSH_PRIVKEY or ""
-    vm_timeout_boot_s: int = int(settings.VM_TIMEOUT_BOOT_S or "100")
+    if uefi is None:
+        raise FileNotFoundError("Not valid UEFI installed")
 
-    _make_overlay(vm_base_image, overlay, disk_gib=disk_gib)
-    _make_seed_iso(
-        seed_iso,
-        vm_ssh_user,
-        vm_ssh_privkey + ".pub",
-        os.path.basename(workdir),
-    )
+    args: list = [settings.VM_QEMU_BIN]
+    if os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64"):
+        args += ["-accel", "kvm"]
+    else:
+        args += ["-accel", "tcg,thread=multi"]
 
-    port = _pick_free_port()
+    args += [
+        "-machine",
+        "virt",
+        "-cpu",
+        "cortex-a57",
+        "-smp",
+        str(vcpus),
+        "-m",
+        str(mem_mib),
+        "-bios",
+        uefi,
+        "-nographic",
+        "-serial",
+        f"file:{console_log}",
+        "-netdev",
+        f"user,id=n0,hostfwd=tcp:127.0.0.1:{port}-:22",
+        "-device",
+        "virtio-net-device,netdev=n0",
+        "-drive",
+        f"if=none,format=qcow2,file={overlay},id=vd0",
+        "-device",
+        "virtio-blk-device,drive=vd0",
+        "-drive",
+        f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
+        "-device",
+        "virtio-blk-device,drive=cidata",
+    ]
+    return args
 
+
+def _vm_qemu_x86_args(
+    vcpus,
+    mem_mib,
+    console_log,
+    port,
+    overlay,
+    seed_iso,
+):
     args: list = [settings.VM_QEMU_BIN]
     if os.path.exists("/dev/kvm"):
         args += ["-enable-kvm", "-machine", "accel=kvm,type=q35", "-cpu", "host"]
@@ -218,6 +263,49 @@ def _start_vm(workdir: str, vcpus=2, mem_mib=2048, disk_gib=10) -> VMProc:
         "-drive",
         f"if=virtio,format=raw,readonly=on,file={seed_iso}",
     ]
+    return args
+
+
+def _start_vm(workdir: str, vcpus=2, mem_mib=2048, disk_gib=10) -> VMProc:
+    os.makedirs(workdir, exist_ok=True)
+    overlay = os.path.join(workdir, "disk.qcow2")
+    seed_iso = os.path.join(workdir, "seed.iso")
+    console_log = os.path.join(workdir, "console.log")
+
+    vm_base_image: str = settings.VM_BASE_IMAGE or ""
+    vm_ssh_user: str = settings.VM_SSH_USER or ""
+    vm_ssh_privkey: str = settings.VM_SSH_PRIVKEY or ""
+    vm_timeout_boot_s: int = int(settings.VM_TIMEOUT_BOOT_S or "100")
+
+    _make_overlay(vm_base_image, overlay, disk_gib=disk_gib)
+    _make_seed_iso(
+        seed_iso,
+        vm_ssh_user,
+        vm_ssh_privkey + ".pub",
+        os.path.basename(workdir),
+    )
+
+    port = _pick_free_port()
+
+    args: list[str] = []
+    if platform.machine() in ("aarch64", "arm64"):
+        args = _vm_qemu_arm64_args(
+            vcpus,
+            mem_mib,
+            console_log,
+            port,
+            overlay,
+            seed_iso,
+        )
+    else:
+        args = _vm_qemu_x86_args(
+            vcpus,
+            mem_mib,
+            console_log,
+            port,
+            overlay,
+            seed_iso,
+        )
 
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     try:
