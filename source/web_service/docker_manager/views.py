@@ -325,6 +325,49 @@ class ContainersViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
+    @action(detail=True, methods=["post"])
+    def power_on(self, request, pk=None):
+        from io import StringIO
+        from django.core.management import call_command
+
+        buf = StringIO()
+        try:
+            call_command("vmctl", "start", str(pk), stdout=buf)
+            return Response({"status": "running", "log": buf.getvalue()})
+        except Exception as e:
+            return Response({"error": str(e), "log": buf.getvalue()}, status=500)
+
+    @action(detail=True, methods=["post"])
+    def power_off(self, request, pk=None):
+        from io import StringIO
+        from django.core.management import call_command
+
+        force = bool(request.data.get("force", False))
+        buf = StringIO()
+        try:
+            args = ["stop", str(pk)] + (["--force"] if force else [])
+            call_command("vmctl", *args, stdout=buf)
+            # lee estado actualizado
+            container = self.get_object()
+            return Response({"status": container.status, "log": buf.getvalue()})
+        except Exception as e:
+            return Response({"error": str(e), "log": buf.getvalue()}, status=500)
+
+    @action(detail=True, methods=["get"])
+    def real_status(self, request, pk=None):
+        from io import StringIO
+        from django.core.management import call_command
+
+        buf = StringIO()
+        try:
+            call_command("vmctl", "sync", "--id", str(pk), stdout=buf)
+        except Exception:
+            ...
+        container = self.get_object()
+        return Response(
+            {"status": container.status, "container_id": container.container_id}
+        )
+
 
 class UserViewSet(APIView):
     permission_classes = [permissions.IsAuthenticated]

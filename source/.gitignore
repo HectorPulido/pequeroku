@@ -143,3 +143,6 @@ GitHub.sublime-settings
 
 vm_data/base/*.qcow2
 vm_data/vms/*
+
+ignore-*
+out.txt

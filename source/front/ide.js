@@ -71,12 +71,14 @@ function getCSRF() {
 // ====== UTILS ======
 async function api(path, opts = {}, headersOverride = true) {
     if (headersOverride)
-        opts.headers = { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF() }
+        opts.headers = { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF(), ...(opts.headers || {}) };
     const res = await fetch(apiBase + path, opts);
+    const text = await res.text();
     if (!res.ok) {
-        parent.addAlert(await res.text(), "error");
+        parent.addAlert(text || res.statusText, "error");
+        throw new Error(text || res.statusText);
     }
-    return res.json();
+    return text ? JSON.parse(text) : {};
 }
 
 // ====== UPLOADS
@@ -192,6 +194,15 @@ newFile.addEventListener('click', async () => {
     refreshTree.click();
 });
 
+async function waitForMonacoReady() {
+    const max = 50;
+    for (let i = 0; i < max; i++) {
+        if (window.monaco && editor && editor.editor) return;
+        await sleep(100);
+    }
+    throw new Error("Monaco not ready");
+}
+
 async function openFile(path) {
     const ext = path.split('.').pop().toLowerCase();
     const lang = langMap[ext] || 'plaintext';
@@ -221,30 +232,29 @@ const wsUrl = (() => {
     return `${proto}://${location.host}/ws/containers/${containerId}/`;
 })();
 
-let ws;
+let ws, wsAttempts = 0, wsQueue = [];
+const maxBackoff = 8000;
 
 function connectWS() {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const wsUrl = `${proto}://${location.host}/ws/containers/${containerId}/`;
     ws = new WebSocket(wsUrl);
-    ws.onopen = () => addToConsole("[connected]");
-    ws.onmessage = (ev) => {
-        try {
-            const msg = JSON.parse(ev.data);
-            if (msg.type === "log") {
-                addToConsoleAnsi(msg.line);
-            } else if (msg.type === "clear") {
-                consoleLogs.innerHTML = "";
-            } else if (msg.type === "info") {
-                addToConsoleAnsi(`[info] ${msg.message}`);
-            } else if (msg.type === "error") {
-                parent.addAlert(msg.message, "error");
-            }
-        } catch {
-            addToConsoleAnsi(String(ev.data || ""));
-        }
+
+    ws.onopen = () => {
+        wsAttempts = 0;
+        addToConsoleAnsi("[connected]");
+        // drena cola
+        while (wsQueue.length) ws.send(wsQueue.shift());
     };
-    ws.onclose = () => addToConsole("[disconnected]");
+    ws.onmessage = handleWSMessage;
+    ws.onclose = () => {
+        addToConsoleAnsi("[disconnected]");
+        const wait = Math.min(maxBackoff, 500 * Math.pow(2, wsAttempts++));
+        setTimeout(connectWS, wait);
+    };
     ws.onerror = () => parent.addAlert("WebSocket error", "error");
 }
+
 
 function addToConsoleAnsi(raw) {
     // Si llega un "clear screen": \x1b[H\x1b[2J o \x1b[2J o \x1b[3J
@@ -339,15 +349,12 @@ function escapeHtml(s) {
 }
 
 // Enviar comandos por WS
-async function sendCommandWS(actionOrCmd) {
-    if (!ws || ws.readyState !== 1) connectWS();
-    if (typeof actionOrCmd === "string") {
-        ws.send(JSON.stringify({ action: "cmd", data: actionOrCmd }));
-    } else {
-        ws.send(JSON.stringify(actionOrCmd));
-    }
+function sendCommandWS(payload) {
+    const msg = typeof payload === "string" ? JSON.stringify({ action: "cmd", data: payload }) :
+        JSON.stringify(payload);
+    if (ws && ws.readyState === 1) ws.send(msg);
+    else wsQueue.push(msg);
 }
-
 // Reemplaza los uses de sendCommand(...)
 sendCMD.addEventListener('click', () => {
     const v = consoleCMD.value;

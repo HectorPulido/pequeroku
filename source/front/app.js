@@ -124,18 +124,29 @@ function initApp() {
 			data.forEach((c) => {
 				const card = document.createElement("div");
 				card.className = "container-card";
+				const isRunning = c.status === "running";
 				card.innerHTML = `
-        <h2>${c.id} — ${c.container_id.slice(0, 12)}</h2>
-        <small>${new Date(c.created_at).toLocaleString()}</small>
-        <p>Status: ${c.status}</p>
-		<div>
-		<button class="btn-edit">✏️ Let's Play</button>
-        <button class="btn-delete">⏹️ Stop</button>
-		</div>
-      `;
+				<h2>${c.id} — ${c.container_id.slice(0, 12)}</h2>
+				<small>${new Date(c.created_at).toLocaleString()}</small>
+				<p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
+				<div>
+					<button class="btn-edit" ${!isRunning ? "disabled" : ""}>✏️ Let's Play</button>
+					<button class="btn-start" ${isRunning ? "disabled" : ""}>▶️ Start</button>
+					<button class="btn-stop" ${!isRunning ? "disabled" : ""}>⏹️ Stop</button>
+					<button class="btn-delete">🗑️ Delete</button>
+				</div>`
+
 				card.querySelector(".btn-edit").onclick = () =>
 					openConsole(c.id);
 				card.querySelector(".btn-delete").onclick = () => deleteContainer(c.id);
+				card.querySelector(".btn-start").onclick = async () => {
+					await fetch(`/api/containers/${c.id}/power_on/`, { method: "POST", credentials: "same-origin", headers: { "X-CSRFToken": getCSRF() } });
+					await fetchContainers();
+				};
+				card.querySelector(".btn-stop").onclick = async () => {
+					await fetch(`/api/containers/${c.id}/power_off/`, { method: "POST", credentials: "same-origin", headers: { "X-CSRFToken": getCSRF(), "Content-Type": "application/json" }, body: JSON.stringify({ force: false }) });
+					await fetchContainers();
+				};
 				listEl.appendChild(card);
 			});
 
