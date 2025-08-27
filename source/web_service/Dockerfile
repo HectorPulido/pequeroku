@@ -10,7 +10,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       build-essential gcc libc6-dev libffi-dev libssl-dev libpq-dev \
       qemu-utils cloud-image-utils genisoimage openssh-client \
-      curl ca-certificates && \
+      curl ca-certificates ca-certificates iproute2 iptables && \
     case "$TARGETARCH" in \
       amd64) \
         apt-get install -y --no-install-recommends qemu-system-x86 ovmf \
