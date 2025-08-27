@@ -45,7 +45,7 @@ fi
 python manage.py migrate
 python manage.py collectstatic --no-input
 
-if [ -n "$DJANGO_SUPERUSER_USERNAME" ]; then
+if [ $# -ge 1 ] && [ -n "$DJANGO_SUPERUSER_USERNAME" ]; then
   python manage.py createsuperuser --noinput \
     --username "$DJANGO_SUPERUSER_USERNAME" \
     --email "$DJANGO_SUPERUSER_EMAIL" || true
