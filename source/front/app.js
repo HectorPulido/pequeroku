@@ -136,10 +136,9 @@ function initApp() {
 				<small>${new Date(c.created_at).toLocaleString()}</small>
 				<p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
 				<div>
-					<button class="btn-edit" ${!isRunning ? "disabled" : ""}>✏️ Let's Play</button>
-					${
-						isRunning ? "<button class=\"btn-start\">▶️ Start</button>" : "<button class=\"btn-stop\">⏹️ Stop</button>"
-					}
+					<button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Let's Play</button>
+					<button class="btn-start" ${isRunning ? "hidden" : ""}>▶️ Start</button>
+					<button class="btn-stop" ${!isRunning ? "hidden" : ""}>⏹️ Stop</button>
 					<button class="btn-delete">🗑️ Delete</button>
 				</div>`
 
