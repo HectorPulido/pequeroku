@@ -16,7 +16,7 @@ RUN apt-get update && \
         apt-get install -y --no-install-recommends qemu-system-x86 ovmf \
         ;; \
       arm64) \
-        apt-get install -y --no-install-recommends qemu-system-arm qemu-efi-aarch64 \
+        apt-get install -y --no-install-recommends qemu-system-arm qemu-efi-aarch64 ipxe-qemu qemu-system-data \
         ;; \
       *) echo "Unsupported TARGETARCH: $TARGETARCH" && exit 1 ;; \
     esac && \

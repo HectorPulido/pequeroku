@@ -158,9 +158,7 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str):
     while time.time() - start < timeout:
         try:
             try_number += 1
-            print(
-                "Trying to connect to: ", port, "machine, try number:", try_number
-            )
+            print("Trying to connect to: ", port, "machine, try number:", try_number)
             with socket.create_connection(("127.0.0.1", port), timeout=2):
                 pass
             k = _load_pkey(settings.VM_SSH_PRIVKEY)
@@ -183,60 +181,85 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str):
     raise TimeoutError("SSH timeout")
 
 
-def _vm_qemu_arm64_args(
-    vcpus,
-    mem_mib,
-    console_log,
-    port,
-    overlay,
-    seed_iso,
-):
+def _vm_qemu_arm64_args(vcpus, mem_mib, console_log, port, overlay, seed_iso):
+    # Detectar UEFI disponible
     uefi_candidates = [
         "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
         "/usr/share/AAVMF/AAVMF_CODE.fd",
     ]
-    uefi = None
-    for candidate in uefi_candidates:
-        if os.path.exists(candidate):
-            uefi = candidate
-            break
-
+    uefi = next((p for p in uefi_candidates if os.path.exists(p)), None)
     if uefi is None:
         raise FileNotFoundError("Not valid UEFI installed")
 
-    args: list = [settings.VM_QEMU_BIN]
-    if os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64"):
-        print("Using KVM")
+    use_kvm = os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64")
+
+    args = [os.environ.get("VM_QEMU_BIN", "/usr/bin/qemu-system-aarch64")]
+
+    if use_kvm:
         args += ["-accel", "kvm", "-cpu", "host"]
     else:
-        print("Not using KVM")
         args += ["-accel", "tcg,thread=multi", "-cpu", "max"]
+
+    # Workaround RK3588 SMP: its=off cuando hay >1 vCPU con KVM
+    machine = "virt,gic-version=3"
+    if use_kvm and int(vcpus) > 1:
+        machine += ",its=off"
 
     args += [
         "-machine",
-        "virt",
+        machine,
         "-smp",
         str(vcpus),
         "-m",
         str(mem_mib),
-        "-bios",
-        "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
         "-nographic",
         "-serial",
-        "mon:stdio",
+        f"file:{console_log}",
+    ]
+
+    # Firmware
+    if os.path.basename(uefi).startswith("QEMU_EFI"):
+        args += ["-bios", uefi]
+    else:
+        # AAVMF: crear VARS temporal escribible
+        aavmf_vars_src = "/usr/share/AAVMF/AAVMF_VARS.fd"
+        if not os.path.exists(aavmf_vars_src):
+            raise FileNotFoundError("AAVMF_VARS.fd not found for AAVMF_CODE.fd")
+        vars_tmp = os.path.join(tempfile.gettempdir(), f"AAVMF_VARS.{os.getpid()}.fd")
+        shutil.copyfile(aavmf_vars_src, vars_tmp)
+        args += [
+            "-drive",
+            f"if=pflash,format=raw,readonly=on,file={uefi}",
+            "-drive",
+            f"if=pflash,format=raw,file={vars_tmp}",
+        ]
+
+    # Red (SLIRP con SSH forward)
+    args += [
         "-netdev",
         f"user,id=n0,hostfwd=tcp:127.0.0.1:{port}-:22",
         "-device",
         "virtio-net-device,netdev=n0",
+    ]
+
+    # Disco con iothread y writeback
+    args += [
+        "-object",
+        "iothread,id=iothr0",
         "-drive",
-        f"if=none,format=qcow2,file={overlay},id=vd0",
+        f"if=none,format=qcow2,cache=writeback,aio=io_uring,file={overlay},id=vd0",
         "-device",
-        "virtio-blk-device,drive=vd0",
+        "virtio-blk-device,drive=vd0,iothread=iothr0",
+    ]
+
+    # Cloud-init seed
+    args += [
         "-drive",
         f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
         "-device",
         "virtio-blk-device,drive=cidata",
     ]
+
     return args
 
 
