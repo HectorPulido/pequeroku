@@ -51,7 +51,7 @@ def _load_pkey(path: str):
     raise RuntimeError(f"Could not load the private key: {path}")
 
 
-def _make_overlay(base_image: str, overlay: str, disk_gib: int = 10):
+def _make_overlay(base_image: str, overlay: str, disk_gib: int):
     print("Creating the overlay with: ", base_image, overlay, disk_gib)
     if os.path.exists(overlay):
         return
@@ -280,7 +280,7 @@ def _vm_qemu_x86_args(
     return args
 
 
-def _start_vm(workdir: str, vcpus=2, mem_mib=2048, disk_gib=10) -> VMProc:
+def _start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
     print("Starting vm...")
     os.makedirs(workdir, exist_ok=True)
     overlay = os.path.join(workdir, "disk.qcow2")
@@ -417,7 +417,12 @@ class QemuSession:  # mantenemos el nombre para no tocar imports
             )
             return
 
-        self.vm = _start_vm(self.workdir, 1, 512)
+        self.vm = _start_vm(
+            self.workdir,
+            settings.DEFAULT_VCPUS,
+            settings.DEFAULT_MEM_MIB,
+            settings.DEFAULT_DISK_GIB,
+        )
         self.container_obj.container_id = f"qemu:{self.vm.port_ssh}"
         self.container_obj.status = "running"
         self.container_obj.save(update_fields=["container_id", "status"])
