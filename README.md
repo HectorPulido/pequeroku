@@ -110,7 +110,7 @@ sudo virt-customize -a debian-raw.qcow2 \
 sudo qemu-img convert -O qcow2 debian-raw.qcow2 debian12-golden.qcow2
 ```
 
-3. Then move the debian12-golden.qcow2 to "source/web_service/vm_data/base/"
+3. Then move the debian12-golden.qcow2 to "source/vm_data/base/"
 
 4. Edit the docker-compose.yaml
 Add the ssh_authorized_keys on the docker-compose.yaml
@@ -204,15 +204,18 @@ sudo qemu-img convert -O qcow2 debian-raw.qcow2 debian12-golden.qcow2
 
 ### 🔑 Environment Variables
 
-Create a `.env` file in the root folder:
+Create a `.env` file in the source/web_service folder:
 
 ```env
-SECRET_KEY=<your-django-secret-key>
+SECRET_KEY=CHANGEME
 DB_NAME=mydb
 DB_USER=myuser
 DB_PASSWORD=mypassword
 DB_HOST=db
 DB_PORT=5432
+DJANGO_SUPERUSER_PASSWORD=testpassword
+DJANGO_SUPERUSER_EMAIL=example@example.com
+DJANGO_SUPERUSER_USERNAME=admin
 DEBUG=1  # 0 for production
 ```
 
@@ -226,6 +229,7 @@ docker-compose up -d
 * 🔍 Visit `http://localhost` to explore PequeRoku!
 * 🔐 Admin: `http://localhost/admin/`
 
+On the admin add Templates, and Quotas
 
 
 ## 🎮 Usage
