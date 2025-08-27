@@ -87,7 +87,6 @@ class ContainersViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         obj = self.get_object()
-        # No mantenemos PID del QEMU aquí; cerramos la shell (si hay) y marcamos detenido.
         sess = SESSIONS.pop(obj.pk, None)
         if sess:
             try:
@@ -95,9 +94,8 @@ class ContainersViewSet(viewsets.ModelViewSet):
                 sess.send("sudo shutdown -h now")
             except Exception:
                 ...
-        obj.status = "stopped"
-        obj.save(update_fields=["status"])
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        self.perform_destroy(obj)
+        return Response({"status": "stopped"})
 
     @action(detail=True, methods=["post"])
     def send_command(self, request, pk=None):

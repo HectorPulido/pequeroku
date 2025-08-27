@@ -255,6 +255,22 @@ function connectWS() {
     ws.onerror = () => parent.addAlert("WebSocket error", "error");
 }
 
+function handleWSMessage(ev) {
+    try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === "log") {
+            addToConsoleAnsi(msg.line);
+        } else if (msg.type === "clear") {
+            consoleLogs.innerHTML = "";
+        } else if (msg.type === "info") {
+            addToConsoleAnsi(`[info] ${msg.message}`);
+        } else if (msg.type === "error") {
+            parent.addAlert(msg.message, "error");
+        }
+    } catch {
+        addToConsoleAnsi(String(ev.data || ""));
+    }
+}
 
 function addToConsoleAnsi(raw) {
     // Si llega un "clear screen": \x1b[H\x1b[2J o \x1b[2J o \x1b[3J
