@@ -206,16 +206,14 @@ def _vm_qemu_arm64_args(
     args: list = [settings.VM_QEMU_BIN]
     if os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64"):
         print("Using KVM")
-        args += ["-accel", "kvm"]
+        args += ["-accel", "kvm", "-cpu", "host"]
     else:
         print("Not using KVM")
-        args += ["-accel", "tcg,thread=multi"]
+        args += ["-accel", "tcg,thread=multi", "-cpu", "max"]
 
     args += [
         "-machine",
         "virt",
-        "-cpu",
-        "max",
         "-smp",
         str(vcpus),
         "-m",
