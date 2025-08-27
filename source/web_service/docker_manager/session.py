@@ -189,6 +189,7 @@ def _vm_qemu_arm64_args(
     overlay,
     seed_iso,
 ):
+    # Detecta UEFI instalado
     uefi_candidates = [
         "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
         "/usr/share/AAVMF/AAVMF_CODE.fd",
@@ -200,70 +201,82 @@ def _vm_qemu_arm64_args(
     args: list = [settings.VM_QEMU_BIN]
 
     use_kvm = os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64")
-    smp_value = str(vcpus)
-
     if use_kvm:
         print("Using KVM")
-        args += ["-accel", "kvm", "-cpu", "host"]
-        machine_str = "virt-7.1,gic-version=3,its=off"
-    else:
-        print("Not using KVM")
-        args += ["-accel", "tcg,thread=multi", "-cpu", "max"]
-        machine_str = "virt"
-
-    args += [
-        "-machine",
-        machine_str,
-        "-smp",
-        smp_value,
-        "-m",
-        str(mem_mib),
-        "-bios",
-        uefi,
-        "-nographic",
-        "-serial",
-        "mon:stdio",
-    ]
-
-    # Para reproducir tu línea funcional, añadimos esto sólo con KVM
-    if use_kvm:
-        args += ["-nodefaults", "-no-user-config"]
-
-    # Red (igual que tu original)
-    args += [
-        "-netdev",
-        f"user,id=n0,hostfwd=tcp:127.0.0.1:{port}-:22",
-        "-device",
-        "virtio-net-device,netdev=n0",
-    ]
-
-    # Almacenamiento:
-    if use_kvm:
-        # Layout que te funciona: un solo controlador SCSI y dos dispositivos colgados
+        # ===== COMANDO EXACTO QUE TE FUNCIONÓ =====
         args += [
+            "-accel",
+            "kvm",
+            "-cpu",
+            "host",
+            "-M",
+            "virt-7.1,gic-version=3,its=off",
+            "-smp",
+            "1",  # 1 vCPU fijo como workaround
+            "-m",
+            str(mem_mib),
+            "-nographic",
+            "-serial",
+            "mon:stdio",
+            "-bios",
+            uefi,
+            "-nodefaults",
+            "-no-user-config",
+            "-netdev",
+            f"user,id=n0,hostfwd=tcp:127.0.0.1:{port}-:22",
+            "-device",
+            "virtio-net-device,netdev=n0",
+            # SCSI controller + disco qcow2
             "-device",
             "virtio-scsi-device,id=scsi0",
             "-drive",
             f"if=none,format=qcow2,file={overlay},id=vd0",
             "-device",
             "scsi-hd,drive=vd0,bus=scsi0.0",
-            "-drive",
-            f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
-            "-device",
-            "scsi-cd,drive=cidata,bus=scsi0.0",
         ]
+        # seed.iso por SCSI-CD si te lo pasan
+        if seed_iso:
+            args += [
+                "-drive",
+                f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
+                "-device",
+                "scsi-cd,drive=cidata,bus=scsi0.0",
+            ]
     else:
-        # Camino original (virtio-blk) si no hay KVM
+        print("Not using KVM")
+        # Mantengo tu camino original para TCG
         args += [
+            "-accel",
+            "tcg,thread=multi",
+            "-cpu",
+            "max",
+            "-machine",
+            "virt",
+            "-smp",
+            str(vcpus),
+            "-m",
+            str(mem_mib),
+            "-bios",
+            uefi,
+            "-nographic",
+            "-serial",
+            "mon:stdio",
+            "-netdev",
+            f"user,id=n0,hostfwd=tcp:127.0.0.1:{port}-:22",
+            "-device",
+            "virtio-net-device,netdev=n0",
             "-drive",
             f"if=none,format=qcow2,file={overlay},id=vd0",
             "-device",
             "virtio-blk-device,drive=vd0",
-            "-drive",
-            f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
-            "-device",
-            "virtio-blk-device,drive=cidata",
         ]
+        if seed_iso:
+            args += [
+                "-drive",
+                f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
+                "-device",
+                "virtio-blk-device,drive=cidata",
+            ]
 
     return args
 
