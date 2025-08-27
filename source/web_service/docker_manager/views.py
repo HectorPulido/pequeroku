@@ -336,9 +336,7 @@ class UserViewSet(APIView):
             quota = user.quota
         except Exception:
             ...
-        active_containers = Container.objects.filter(
-            user=request.user, status="running"
-        ).count()
+        active_containers = Container.objects.filter(user=request.user).count()
 
         quota_data = (
             {

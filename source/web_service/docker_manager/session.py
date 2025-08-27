@@ -320,6 +320,7 @@ def _start_vm(workdir: str, vcpus=2, mem_mib=2048, disk_gib=10) -> VMProc:
         )
 
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    print("Process executed", proc)
     try:
         _wait_ssh(
             port,
