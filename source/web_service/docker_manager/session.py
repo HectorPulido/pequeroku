@@ -15,12 +15,24 @@ import paramiko
 from django.conf import settings
 
 
+@dataclass
+class VMProc:
+    workdir: str
+    overlay: str
+    seed_iso: str
+    port_ssh: int
+    proc: Optional[subprocess.Popen] = None
+    console_log: Optional[str] = None
+
+
 # ========== QEMU helpers ==========
 def _pick_free_port() -> int:
+    print("Picking a port...")
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
     port = s.getsockname()[1]
     s.close()
+    print("Port selected", port)
     return port
 
 
@@ -36,20 +48,11 @@ def _load_pkey(path: str):
             return K.from_private_key_file(path)
         except Exception:
             continue
-    raise RuntimeError(f"No pude cargar la clave privada: {path}")
-
-
-@dataclass
-class VMProc:
-    workdir: str
-    overlay: str
-    seed_iso: str
-    port_ssh: int
-    proc: Optional[subprocess.Popen] = None
-    console_log: Optional[str] = None
+    raise RuntimeError(f"Could not load the private key: {path}")
 
 
 def _make_overlay(base_image: str, overlay: str, disk_gib: int = 10):
+    print("Creating the overlay with: ", base_image, overlay, disk_gib)
     if os.path.exists(overlay):
         return
     subprocess.run(
@@ -70,6 +73,7 @@ def _make_overlay(base_image: str, overlay: str, disk_gib: int = 10):
 
 
 def _make_seed_iso(seed_iso: str, user: str, pubkey_path: str, instance_id: str):
+    print("Creating the seed iso: ", seed_iso, user, pubkey_path, instance_id)
     spec_path = seed_iso + ".spec"
     want = _spec_hash(user, pubkey_path)
 
@@ -126,8 +130,10 @@ local-hostname: {instance_id}
     cloud_localds = shutil.which("cloud-localds")
     geniso = shutil.which("genisoimage") or shutil.which("mkisofs")
     if cloud_localds:
+        print("Using cloud localds")
         subprocess.run([cloud_localds, seed_iso, ud, md], check=True)
     else:
+        print("Using geniso image")
         input_data: list = [
             geniso,
             "-output",
@@ -151,7 +157,6 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str):
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=2):
                 pass
-            # prueba SSH real
             k = _load_pkey(settings.VM_SSH_PRIVKEY)
             cli = paramiko.SSHClient()
             cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -169,7 +174,7 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str):
             return
         except Exception:
             time.sleep(2)
-    raise TimeoutError("SSH no respondió a tiempo")
+    raise TimeoutError("SSH timeout")
 
 
 def _vm_qemu_arm64_args(
@@ -195,8 +200,10 @@ def _vm_qemu_arm64_args(
 
     args: list = [settings.VM_QEMU_BIN]
     if os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64"):
+        print("Using KVM")
         args += ["-accel", "kvm"]
     else:
+        print("Not using KVM")
         args += ["-accel", "tcg,thread=multi"]
 
     args += [
@@ -239,8 +246,10 @@ def _vm_qemu_x86_args(
 ):
     args: list = [settings.VM_QEMU_BIN]
     if os.path.exists("/dev/kvm"):
+        print("Using KVM")
         args += ["-enable-kvm", "-machine", "accel=kvm,type=q35", "-cpu", "host"]
     else:
+        print("Not using KVM")
         args += ["-machine", "type=q35", "-accel", "tcg,thread=multi", "-cpu", "max"]
 
     args += [
@@ -267,6 +276,7 @@ def _vm_qemu_x86_args(
 
 
 def _start_vm(workdir: str, vcpus=2, mem_mib=2048, disk_gib=10) -> VMProc:
+    print("Starting vm...")
     os.makedirs(workdir, exist_ok=True)
     overlay = os.path.join(workdir, "disk.qcow2")
     seed_iso = os.path.join(workdir, "seed.iso")
@@ -289,6 +299,7 @@ def _start_vm(workdir: str, vcpus=2, mem_mib=2048, disk_gib=10) -> VMProc:
 
     args: list[str] = []
     if platform.machine() in ("aarch64", "arm64"):
+        print("Using arm64...")
         args = _vm_qemu_arm64_args(
             vcpus,
             mem_mib,
@@ -298,6 +309,7 @@ def _start_vm(workdir: str, vcpus=2, mem_mib=2048, disk_gib=10) -> VMProc:
             seed_iso,
         )
     else:
+        print("Using x86...")
         args = _vm_qemu_x86_args(
             vcpus,
             mem_mib,
