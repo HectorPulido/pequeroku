@@ -7,15 +7,17 @@ services:
       - ./vm_data:/app/vm_data
       - /home/hector/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro # CHANGE ME
       - /home/hector/.ssh/id_ed25519.pub:/root/.ssh/id_vm_pequeroku.pub:ro # CHANGE ME
-    # devices:
-    #   - /dev/kvm:/dev/kvm
-    # security_opt:
-    #   - seccomp=unconfined
+    devices:
+      - /dev/kvm:/dev/kvm
+    security_opt:
+      - seccomp=unconfined
     #   - apparmor:unconfined
     environment:
       VM_SSH_PRIVKEY: /root/.ssh/id_vm_pequeroku
       VM_SSH_USER: root
       VM_BASE_IMAGE: /app/vm_data/base/debian12-golden.qcow2
+    cap_add:
+      - NET_ADMIN
     networks:
       - pequeroku-net
     depends_on:
