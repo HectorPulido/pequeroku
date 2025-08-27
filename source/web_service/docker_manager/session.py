@@ -197,12 +197,16 @@ def _vm_qemu_arm64_args(
     if uefi is None:
         raise FileNotFoundError("Not valid UEFI installed")
 
-    args: list = [settings.VM_QEMU_BIN]
+    args: list = []
 
     use_kvm = os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64")
     if use_kvm:
         print("Using KVM")
         args += [
+            "taskset",
+            "-c",
+            "0-3",
+            settings.VM_QEMU_BIN,
             "-accel",
             "kvm",
             "-cpu",
@@ -241,6 +245,7 @@ def _vm_qemu_arm64_args(
     else:
         print("Not using KVM")
         args += [
+            settings.VM_QEMU_BIN,
             "-accel",
             "tcg,thread=multi",
             "-cpu",
