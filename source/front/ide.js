@@ -24,6 +24,49 @@ const btnOpenTemplates = document.getElementById("btn-open-templates-modal");
 const templatesModal = document.getElementById("templates-modal");
 const btnTemplatesClose = document.getElementById("btn-templates-close");
 let tplListEl, tplDestEl, tplCleanEl;
+let runCommand = null;
+
+async function fileExists(path) {
+    try {
+        await api(`/read_file/?path=${encodeURIComponent(path)}`);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+async function openIfExists(path) {
+    try {
+        if (await fileExists(path)) {
+            await openFile(path);
+            return true;
+        }
+    } catch { /* ignora */ }
+    return false;
+}
+
+async function loadRunConfig() {
+    runCommand = null;
+    runCode.disabled = true;
+
+    const path = "/app/config.json";
+    try {
+        const { content } = await api(`/read_file/?path=${encodeURIComponent(path)}`);
+        try {
+            const cfg = JSON.parse(content);
+            if (cfg && typeof cfg.run === "string" && cfg.run.trim().length > 0) {
+                runCommand = cfg.run.trim();
+                runCode.disabled = false;
+                return true;
+            }
+        } catch (e) {
+            parent.addAlert("config.json no es JSON válido", "warning");
+        }
+    } catch {
+        // no existe: ok
+    }
+    return false;
+}
 
 (() => {
     const overlay = document.getElementById('global-loader');
@@ -54,15 +97,20 @@ for (const btn of document.getElementsByClassName("btn-send")) {
 
 
 (async () => {
-    await sleep(1 * 1000);
-    await openFile("/app/readme.txt");
+    await sleep(1000);
+    await waitForMonacoReady();
+    await loadRunConfig();
+    await openIfExists("/app/readme.txt")
 })();
 
 let currentFilePath = null;
-function changePath(newPath) {
-    currentFilePath = newPath;
-    pathLabel.innerText = currentFilePath;
+function changePath(p) {
+    currentFilePath = p;
+    pathLabel.innerText = p;
+    localStorage.setItem(`last:${containerId}`, p);
 }
+
+
 
 function getCSRF() {
     const match = document.cookie.match(/csrftoken=([^;]+)/);
@@ -74,11 +122,20 @@ async function api(path, opts = {}, headersOverride = true) {
         opts.headers = { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF(), ...(opts.headers || {}) };
     const res = await fetch(apiBase + path, opts);
     const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+        parent.addAlert("Sesión expirada", "warning");
+        location.href = "/";
+        return;
+    }
     if (!res.ok) {
         parent.addAlert(text || res.statusText, "error");
         throw new Error(text || res.statusText);
     }
-    return text ? JSON.parse(text) : {};
+    try {
+        return text ? JSON.parse(text) : {};
+    } catch {
+        return { raw: text };
+    }
 }
 
 // ====== UPLOADS
@@ -116,6 +173,7 @@ async function uploadFile() {
     parent.addAlert(`Uploaded to: ${j.dest}`, "success");
     btnUploadClose.click();
     refreshTree.click();
+    await loadRunConfig();
 }
 
 // ====== FILE TREE ======
@@ -164,8 +222,15 @@ async function loadDir(path, ul) {
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-refreshTree.addEventListener('click', () => {
+refreshTree.addEventListener('click', async () => {
     loadDir('/app', fileTree);
+    await loadRunConfig();
+});
+
+let dirty = false;
+editor.addEventListener("change", () => {
+    dirty = true;
+    saveFile.disabled = false;
 });
 
 saveFile.addEventListener('click', async () => {
@@ -177,6 +242,13 @@ saveFile.addEventListener('click', async () => {
         body: JSON.stringify({ path: currentFilePath, content })
     });
     parent.addAlert('File ' + currentFilePath + ' saved', "success");
+
+    dirty = false;
+    saveFile.disabled = true;
+
+    if (currentFilePath === "/app/config.json") {
+        await loadRunConfig();
+    }
 });
 
 // ====== CREATE FOLDER & FILE ======
@@ -204,6 +276,7 @@ async function waitForMonacoReady() {
 }
 
 async function openFile(path) {
+    await waitForMonacoReady();
     const ext = path.split('.').pop().toLowerCase();
     const lang = langMap[ext] || 'plaintext';
     monaco.editor.setModelLanguage(editor.editor.getModel(), lang)
@@ -214,6 +287,13 @@ async function openFile(path) {
 }
 
 // ====== CONSOLE ======
+
+let ping;
+function startPing() {
+    clearInterval(ping);
+    ping = setInterval(() => sendCommandWS({ action: "ping", ts: Date.now() }), 15000);
+}
+
 async function sendCommand(cmd) {
     await api('/send_command/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: cmd }) });
 }
@@ -222,6 +302,13 @@ restartContainer.addEventListener('click', async () => {
     await api('/restart_container/', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
 });
 
+window.addEventListener("beforeunload", () => {
+    try {
+        ws.close(1000, "bye");
+    } catch {
+
+    }
+});
 
 // INITIAL
 refreshTree.click();
@@ -244,7 +331,9 @@ function connectWS() {
         wsAttempts = 0;
         addToConsoleAnsi("[connected]");
         // drena cola
-        while (wsQueue.length) ws.send(wsQueue.shift());
+        startPing();
+        while (wsQueue.length)
+            ws.send(wsQueue.shift());
     };
     ws.onmessage = handleWSMessage;
     ws.onclose = () => {
@@ -390,13 +479,44 @@ for (const btn of document.getElementsByClassName("btn-send")) {
 // "Run (Docker)" sigue como antes o puedes disparar comando:
 runCode.addEventListener('click', async () => {
     saveFile.click();
-    sendCommandWS("docker compose down ; docker compose up -d --build");
+
+    if (runCommand) {
+        sendCommandWS(runCommand);
+    } else {
+        parent.addAlert("There is no 'run' command in config.json. The button is disabled.", "warning");
+    }
 });
 
+const history = []; 
+let hIdx = -1;
 consoleCMD.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
+        history.push(consoleCMD.value);
+        hIdx = history.length;
+    }
+    if (e.key === "ArrowUp") {
         e.preventDefault();
-        sendCMD.click();
+        if (hIdx > 0)
+            consoleCMD.value = history[--hIdx] || "";
+    }
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (hIdx < history.length - 1)
+            consoleCMD.value = history[++hIdx] || "";
+        else {
+            hIdx = history.length; consoleCMD.value = "";
+        }
+    }
+});
+
+window.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveFile.click();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        runCode.click();
     }
 });
 
@@ -516,8 +636,29 @@ async function applyTemplateFromModal(templateId) {
         // refresca árbol del IDE si el destino es /app
         if (dest === "/app") {
             refreshTree.click();
+            await loadRunConfig();
         }
     } catch (e) {
         parent.addAlert(e.message || String(e), "error");
     }
 }
+
+
+fileTree.addEventListener("dragover", e => { e.preventDefault(); });
+fileTree.addEventListener("drop", async e => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (!f)
+        return;
+    const form = new FormData();
+    form.append("file", f);
+    form.append("dest_path", "/app");
+    await api('/upload_file/', {
+        headers: { 'X-CSRFToken': getCSRF() },
+        method: 'POST',
+        body: form
+    }, false);
+    refreshTree.click();
+});
+
+
