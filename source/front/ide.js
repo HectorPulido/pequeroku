@@ -288,11 +288,6 @@ async function openFile(path) {
 
 // ====== CONSOLE ======
 
-let ping;
-function startPing() {
-    clearInterval(ping);
-    ping = setInterval(() => sendCommandWS({ action: "ping", ts: Date.now() }), 15000);
-}
 
 async function sendCommand(cmd) {
     await api('/send_command/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: cmd }) });
@@ -331,7 +326,6 @@ function connectWS() {
         wsAttempts = 0;
         addToConsoleAnsi("[connected]");
         // drena cola
-        startPing();
         while (wsQueue.length)
             ws.send(wsQueue.shift());
     };
