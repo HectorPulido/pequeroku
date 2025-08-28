@@ -126,7 +126,7 @@ class ContainersViewSet(viewsets.ModelViewSet):
         cmd = request.data.get("command", "")
         if not cmd:
             return Response({"error": "command required"}, status=400)
-        create_vm_first_time.delay(container_id=container.pk, command=cmd)
+        send_command.delay(container_id=container.pk, command=cmd)
         return Response({"status": "sent"})
 
     @action(detail=True, methods=["post"])
