@@ -363,3 +363,7 @@ button:hover {
         transform: rotate(360deg);
     }
 }
+
+#templates-modal {
+    color: black;
+}
