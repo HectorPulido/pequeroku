@@ -52,7 +52,6 @@ def _ssh_login_ok(port: int | None, timeout=6.0) -> bool:
 
 
 def _extract_port(container_id: str) -> Optional[int]:
-
     try:
         if container_id and container_id.startswith("qemu:"):
             return int(container_id.split(":")[1])
@@ -62,7 +61,6 @@ def _extract_port(container_id: str) -> Optional[int]:
 
 
 def _find_qemu_pid_by_port(port: int) -> Optional[int]:
-
     pat = f"hostfwd=tcp:127.0.0.1:{port}-:22"
     try:
         out = subprocess.check_output(["ps", "-eo", "pid,args"], text=True)
@@ -93,7 +91,6 @@ def _graceful_shutdown(port: int, wait_s: int = 45) -> bool:
         cli.exec_command("sudo shutdown -h now || poweroff || halt || init 0")
         cli.close()
     except Exception:
-
         pass
 
     start = time.time()
@@ -128,8 +125,7 @@ def _vm_workdir(container_pk: int) -> str:
 
 
 def _start_vm(container_obj: "Container"):
-
-    from docker_manager.session import QemuSession
+    from usecases.vm_management import QemuSession
 
     sess = QemuSession(container_obj, on_line=None, on_close=None)
 
@@ -147,7 +143,6 @@ def _sync_one(c: "Container") -> str:
     new = old
 
     if port is None:
-
         new = STOPPED
     else:
         if _ssh_login_ok(port):
@@ -155,7 +150,6 @@ def _sync_one(c: "Container") -> str:
         elif _ssh_ping(port):
             new = "booting"
         else:
-
             pid = _find_qemu_pid_by_port(port)
             new = RUNNING if pid else STOPPED
 
@@ -282,7 +276,6 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Estado final: {new}"))
 
     def _cmd_prune(self):
-
         out = subprocess.check_output(["ps", "-eo", "pid,args"], text=True)
         lines = [
             ln

@@ -7,3 +7,6 @@ python-dotenv
 daphne
 channels
 paramiko
+
+celery>=5.4
+redis>=5.0

@@ -227,12 +227,6 @@ refreshTree.addEventListener('click', async () => {
     await loadRunConfig();
 });
 
-let dirty = false;
-editor.addEventListener("change", () => {
-    dirty = true;
-    saveFile.disabled = false;
-});
-
 saveFile.addEventListener('click', async () => {
     if (!currentFilePath) parent.addAlert('Open a file first', "error");
     const content = editor.value;
@@ -242,9 +236,6 @@ saveFile.addEventListener('click', async () => {
         body: JSON.stringify({ path: currentFilePath, content })
     });
     parent.addAlert('File ' + currentFilePath + ' saved', "success");
-
-    dirty = false;
-    saveFile.disabled = true;
 
     if (currentFilePath === "/app/config.json") {
         await loadRunConfig();

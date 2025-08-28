@@ -9,14 +9,21 @@ import json
 import hashlib
 import platform
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable, Optional, Iterable, List
 
 import paramiko
 from django.conf import settings
 
 
+# ============================
+# Data structures
+# ============================
+
+
 @dataclass
 class VMProc:
+    """Lightweight handle to a running (or reattached) QEMU VM."""
+
     workdir: str
     overlay: str
     seed_iso: str
@@ -25,8 +32,13 @@ class VMProc:
     console_log: Optional[str] = None
 
 
-# ========== QEMU helpers ==========
+# ============================
+# Low-level helpers
+# ============================
+
+
 def _pick_free_port() -> int:
+    """Pick an ephemeral localhost TCP port (bound then released)."""
     print("Picking a port...")
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -37,25 +49,41 @@ def _pick_free_port() -> int:
 
 
 def _spec_hash(user: str, pubkey_path: str) -> str:
-    pub = open(pubkey_path).read().strip()
+    """Stable hash that captures the cloud-init spec identity."""
+    with open(pubkey_path, encoding="utf-8") as fh:
+        pub = fh.read().strip()
     blob = json.dumps({"user": user, "pub": pub}, sort_keys=True).encode()
     return hashlib.sha256(blob).hexdigest()
 
 
 def _load_pkey(path: str):
-    for K in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
+    """Try common private key formats, raising if none match."""
+    for key_cls in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
         try:
-            return K.from_private_key_file(path)
+            return key_cls.from_private_key_file(path)
         except Exception:
             continue
     raise RuntimeError(f"Could not load the private key: {path}")
 
 
-def _make_overlay(base_image: str, overlay: str, disk_gib: int):
+def _run_checked(cmd: Iterable[str]) -> None:
+    """Wrapper over subprocess.run with check=True for brevity."""
+    subprocess.run(list(cmd), check=True)
+
+
+# ============================
+# Disk + seed ISO preparation
+# ============================
+
+
+def _make_overlay(base_image: str, overlay: str, disk_gib: int) -> None:
+    """
+    Create a qcow2 overlay disk if it doesn't already exist.
+    """
     print("Creating the overlay with: ", base_image, overlay, disk_gib)
     if os.path.exists(overlay):
         return
-    subprocess.run(
+    _run_checked(
         [
             "qemu-img",
             "create",
@@ -67,12 +95,27 @@ def _make_overlay(base_image: str, overlay: str, disk_gib: int):
             base_image,
             overlay,
             f"{disk_gib}G",
-        ],
-        check=True,
+        ]
     )
 
 
-def _make_seed_iso(seed_iso: str, user: str, pubkey_path: str, instance_id: str):
+def _write_file(path: str, contents: str) -> None:
+    """Write text to a file with UTF-8 encoding."""
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(contents)
+
+
+def _make_seed_iso(
+    seed_iso: str, user: str, pubkey_path: str, instance_id: str
+) -> None:
+    """
+    Create (or reuse) a cloud-init seed ISO with user+root SSH access and Docker setup.
+
+    NOTE: For compatibility, this function keeps the original behavior, including:
+      - Spec hash based on (user, pubkey contents)
+      - Inline use of settings.VM_SSH_USER inside cloud-config
+      - Same packages and runcmd steps
+    """
     print("Creating the seed iso: ", seed_iso, user, pubkey_path, instance_id)
     spec_path = seed_iso + ".spec"
     want = _spec_hash(user, pubkey_path)
@@ -151,24 +194,36 @@ local-hostname: {instance_id}
         )
 
 
-def _wait_ssh(port: int, timeout: int, user: str, key_path: str):
+# ============================
+# SSH readiness
+# ============================
+
+
+def _wait_ssh(port: int, timeout: int, user: str, key_path: str) -> None:
+    """
+    Wait until an SSH connection is possible to 127.0.0.1:<port>.
+    Reuses _load_pkey and adheres to the same client settings.
+    """
     print("Start the _wait_ssh process...")
     start = time.time()
-    try_number = 0
+    attempt = 0
+
     while time.time() - start < timeout:
         try:
-            try_number += 1
-            print("Trying to connect to: ", port, "machine, try number:", try_number)
+            attempt += 1
+            print("Trying to connect to: ", port, "machine, try number:", attempt)
+            # First: is TCP port open?
             with socket.create_connection(("127.0.0.1", port), timeout=2):
                 pass
-            k = _load_pkey(settings.VM_SSH_PRIVKEY)
+            # Second: can we auth via SSH?
+            pkey = _load_pkey(settings.VM_SSH_PRIVKEY)
             cli = paramiko.SSHClient()
             cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             cli.connect(
                 "127.0.0.1",
                 port=port,
                 username=user,
-                pkey=k,
+                pkey=pkey,
                 banner_timeout=120,
                 auth_timeout=120,
                 timeout=30,
@@ -178,17 +233,26 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str):
             return
         except Exception:
             time.sleep(2)
+
     raise TimeoutError("SSH timeout")
 
 
+# ============================
+# QEMU argument builders
+# ============================
+
+
 def _vm_qemu_arm64_args(
-    vcpus,
-    mem_mib,
-    console_log,
-    port,
-    overlay,
-    seed_iso,
-):
+    vcpus: int,
+    mem_mib: int,
+    console_log: Optional[str],
+    port: int,
+    overlay: str,
+    seed_iso: str,
+) -> List[str]:
+    """
+    Build QEMU args for ARM64 hosts, preserving original accel branches and device layout.
+    """
     uefi_candidates = [
         "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
         "/usr/share/AAVMF/AAVMF_CODE.fd",
@@ -282,14 +346,17 @@ def _vm_qemu_arm64_args(
 
 
 def _vm_qemu_x86_args(
-    vcpus,
-    mem_mib,
-    console_log,
-    port,
-    overlay,
-    seed_iso,
-):
-    args: list = [settings.VM_QEMU_BIN]
+    vcpus: int,
+    mem_mib: int,
+    console_log: str,
+    port: int,
+    overlay: str,
+    seed_iso: str,
+) -> List[str]:
+    """
+    Build QEMU args for x86 hosts; writes serial output to console_log.
+    """
+    args: List[str] = [settings.VM_QEMU_BIN]
     if os.path.exists("/dev/kvm"):
         print("Using KVM")
         args += ["-enable-kvm", "-machine", "accel=kvm,type=q35", "-cpu", "host"]
@@ -320,7 +387,15 @@ def _vm_qemu_x86_args(
     return args
 
 
+# ============================
+# VM lifecycle (start/attach)
+# ============================
+
+
 def _start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
+    """
+    Start a QEMU VM, wait for SSH to be ready, and return a VMProc handle.
+    """
     print("Starting vm...")
     os.makedirs(workdir, exist_ok=True)
     overlay = os.path.join(workdir, "disk.qcow2")
@@ -342,38 +417,39 @@ def _start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
 
     port = _pick_free_port()
 
-    args: list[str] = []
     if platform.machine() in ("aarch64", "arm64"):
         print("Using arm64...")
         args = _vm_qemu_arm64_args(
-            vcpus,
-            mem_mib,
-            console_log,
-            port,
-            overlay,
-            seed_iso,
+            vcpus=vcpus,
+            mem_mib=mem_mib,
+            console_log=console_log,
+            port=port,
+            overlay=overlay,
+            seed_iso=seed_iso,
         )
     else:
         print("Using x86...")
         args = _vm_qemu_x86_args(
-            vcpus,
-            mem_mib,
-            console_log,
-            port,
-            overlay,
-            seed_iso,
+            vcpus=vcpus,
+            mem_mib=mem_mib,
+            console_log=console_log,
+            port=port,
+            overlay=overlay,
+            seed_iso=seed_iso,
         )
 
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     print("Process executed", proc)
+
     try:
         _wait_ssh(
-            port,
-            vm_timeout_boot_s,
-            vm_ssh_user,
-            vm_ssh_privkey,
+            port=port,
+            timeout=vm_timeout_boot_s,
+            user=vm_ssh_user,
+            key_path=vm_ssh_privkey,
         )
     except Exception:
+        # Try to provide helpful diagnostics, preserving original behavior.
         try:
             tail = subprocess.run(
                 ["tail", "-n", "120", console_log],
@@ -384,10 +460,12 @@ def _start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
             print("=== console.log (tail) ===\n", tail.stdout)
         except Exception:
             pass
+
         if proc.poll() is not None and proc.stdout is not None:
             out = proc.stdout.read().decode(errors="ignore")
             print("QEMU terminó durante el arranque. STDERR/STDOUT:\n", out)
         raise
+
     return VMProc(
         workdir=workdir,
         overlay=overlay,
@@ -398,15 +476,20 @@ def _start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
     )
 
 
-# ========== Sesión interactiva (SSH + pty) ==========
-class QemuSession:  # mantenemos el nombre para no tocar imports
+# ============================
+# Interactive session (SSH + PTY)
+# ============================
+
+
+class QemuSession:  # keep the name to avoid breaking imports
     """
-    Reimplementada para hablar con una VM QEMU vía SSH (Paramiko).
-    Proporciona:
-      - stream interactivo (PTY) con callbacks on_line / on_close
-      - send(text) para escribir al shell
-      - reopen() para reabrir el canal si muere
-      - is_alive()
+    SSH-backed interactive session to a QEMU VM using Paramiko.
+
+    Provides:
+      - Interactive PTY stream with on_line / on_close callbacks
+      - send(text) to write to the shell (auto-append newline if missing)
+      - reopen() to re-open the channel if it dies
+      - is_alive() to check channel health
     """
 
     def __init__(
@@ -419,7 +502,7 @@ class QemuSession:  # mantenemos el nombre para no tocar imports
         self._on_line = on_line
         self._on_close = on_close
 
-        # Paths por-usuario/PK del modelo
+        # Per-user/PK workspace
         vm_base_dir = settings.VM_BASE_DIR or ""
         base = os.path.join(vm_base_dir, "vms")
         self.workdir = os.path.join(base, f"vm-{container_obj.pk}")
@@ -429,19 +512,23 @@ class QemuSession:  # mantenemos el nombre para no tocar imports
         self.cli: Optional[paramiko.SSHClient] = None
         self.chan: Optional[paramiko.Channel] = None
         self.reader_thread: Optional[threading.Thread] = None
-        self.alive = False
+        self.alive: bool = False
 
         self._ensure_vm()
         self._open_exec()
 
-    # ---- control de VM ----
-    def _ensure_vm(self):
-        if (
+    # ---- VM control ----
+    def _ensure_vm(self) -> None:
+        """
+        Reuse an existing qemu:<port> if alive; otherwise boot a new VM and update
+        container state accordingly.
+        """
+        old_port: Optional[int]
+        if getattr(self.container_obj, "container_id", None) and str(
             self.container_obj.container_id
-            and self.container_obj.container_id.startswith("qemu:")
-        ):
+        ).startswith("qemu:"):
             try:
-                old_port = int(self.container_obj.container_id.split(":")[1])
+                old_port = int(str(self.container_obj.container_id).split(":")[1])
             except Exception:
                 old_port = None
         else:
@@ -468,19 +555,24 @@ class QemuSession:  # mantenemos el nombre para no tocar imports
         self.container_obj.save(update_fields=["container_id", "status"])
 
     def _ping_ssh_port(self, port: int) -> bool:
+        """Quick TCP check to see if a previous VM is still reachable."""
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=1.5):
                 return True
         except Exception:
             return False
 
-    # ---- control de canal/pty ----
-    def _open_exec(self):
+    # ---- Channel / PTY control ----
+    def _open_exec(self) -> None:
+        """
+        Open a new interactive shell channel (PTY) and start the reader thread.
+        """
         if not self.vm:
             return
 
         self._close_channel()
 
+        # Keep Ed25519 for parity with original behavior here
         k = paramiko.Ed25519Key.from_private_key_file(settings.VM_SSH_PRIVKEY)
         cli = paramiko.SSHClient()
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -494,7 +586,7 @@ class QemuSession:  # mantenemos el nombre para no tocar imports
             auth_timeout=120,
             timeout=30,
         )
-        chan = cli.invoke_shell(width=120, height=32)  # PTY interactivo
+        chan = cli.invoke_shell(width=120, height=32)  # interactive PTY
         chan.settimeout(0.0)  # non-blocking
 
         self.cli = cli
@@ -505,7 +597,8 @@ class QemuSession:  # mantenemos el nombre para no tocar imports
         t.start()
         self.reader_thread = t
 
-    def _reader(self):
+    def _reader(self) -> None:
+        """Continuously read from the channel and fan out lines to on_line callback."""
         try:
             while self.alive and self.chan and not self.chan.closed:
                 try:
@@ -514,7 +607,8 @@ class QemuSession:  # mantenemos el nombre para no tocar imports
                         break
                     text = data.decode(errors="ignore")
                     if self._on_line and text:
-                        for line in text.splitlines(True):  # conserva \n
+                        # Preserve newline characters when splitting
+                        for line in text.splitlines(True):
                             self._on_line(line)
                 except Exception:
                     time.sleep(0.02)
@@ -523,27 +617,31 @@ class QemuSession:  # mantenemos el nombre para no tocar imports
             if self._on_close:
                 self._on_close()
 
-    def set_on_line(self, cb):
+    # ---- Public API ----
+    def set_on_line(self, cb: Optional[Callable[[str], None]]) -> None:
         self._on_line = cb
 
-    def set_on_close(self, cb):
+    def set_on_close(self, cb: Optional[Callable[[], None]]) -> None:
         self._on_close = cb
 
     def is_alive(self) -> bool:
         return bool(self.alive and self.chan and not self.chan.closed)
 
-    def reopen(self):
+    def reopen(self) -> None:
         self._open_exec()
 
-    def send(self, text: str):
+    def send(self, text: str) -> None:
+        """
+        Send text to the PTY. Ensures a trailing newline to execute commands.
+        """
         if not self.chan or self.chan.closed:
             raise RuntimeError("Shell no activo")
-        # asegúrate de agregar \n cuando sea un comando
         if not text.endswith("\n"):
             text = text + "\n"
         self.chan.send(text)
 
-    def _close_channel(self):
+    def _close_channel(self) -> None:
+        """Close channel and client, mirroring original exception swallowing."""
         try:
             if self.chan and not self.chan.closed:
                 self.chan.close()

@@ -5,33 +5,78 @@ services:
     volumes:
       - ./web_service:/app
       - ./vm_data:/app/vm_data
-      - /home/hector/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro # CHANGE ME
-      - /home/hector/.ssh/id_ed25519.pub:/root/.ssh/id_vm_pequeroku.pub:ro # CHANGE ME
-    devices:
-      - /dev/kvm:/dev/kvm
-    security_opt:
-      - seccomp=unconfined
-    #   - apparmor:unconfined
+      - /home/hector/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro
+      - /home/hector/.ssh/id_ed25519.pub:/root/.ssh/id_vm_pequeroku.pub:ro
+    # devices:
+    #   - /dev/kvm:/dev/kvm
+    # security_opt:
+    #   - seccomp=unconfined
     environment:
       VM_SSH_PRIVKEY: /root/.ssh/id_vm_pequeroku
       VM_SSH_USER: root
       VM_BASE_IMAGE: /app/vm_data/base/debian12-golden.qcow2
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
     cap_add:
       - NET_ADMIN
     networks:
       - pequeroku-net
     depends_on:
       - db
-  db:
-    image: "postgres:16"
-    environment:
-      POSTGRES_DB: mydb
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
+      - redis
+  celery:
+    build: ./web_service/.
+    command: >
+      bash -lc "
+      ./entrypoint.sh echo 'Network sec applied';
+      celery -A pequeroku worker --loglevel=INFO -Ofair
+      "
     volumes:
-      - .db_data:/var/lib/postgresql/data
+      - ./web_service:/app
+      - ./vm_data:/app/vm_data
+      - /home/hector/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro
+      - /home/hector/.ssh/id_ed25519.pub:/root/.ssh/id_vm_pequeroku.pub:ro
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    cap_add:
+      - NET_ADMIN
+    # devices:
+    #   - /dev/kvm:/dev/kvm
+    # security_opt:
+    #   - seccomp=unconfined
     networks:
       - pequeroku-net
+    depends_on:
+      - redis
+      - db
+
+  beat:
+    build: ./web_service/.
+    command: >
+      bash -lc "
+      ./entrypoint.sh echo 'Network sec applied';
+      celery -A pequeroku beat --loglevel=INFO
+      "
+    volumes:
+      - ./web_service:/app
+      - ./vm_data:/app/vm_data
+      - /home/hector/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro
+      - /home/hector/.ssh/id_ed25519.pub:/root/.ssh/id_vm_pequeroku.pub:ro
+    # devices:
+    #   - /dev/kvm:/dev/kvm
+    # security_opt:
+    #   - seccomp=unconfined
+    cap_add:
+      - NET_ADMIN
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    networks:
+      - pequeroku-net
+    depends_on:
+      - redis
+      - db
 
   nginx:
     image: nginx:latest
@@ -46,6 +91,28 @@ services:
     networks:
       - pequeroku-net
     restart: unless-stopped
+
+
+  db:
+    image: "postgres:16"
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+    volumes:
+      - .db_data:/var/lib/postgresql/data
+    networks:
+      - pequeroku-net
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - pequeroku-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 networks:
   pequeroku-net:
