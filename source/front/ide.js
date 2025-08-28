@@ -485,6 +485,8 @@ const history = [];
 let hIdx = -1;
 consoleCMD.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
+        e.preventDefault();
+        sendCMD.click();
         history.push(consoleCMD.value);
         hIdx = history.length;
     }
