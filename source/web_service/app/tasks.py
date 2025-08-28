@@ -22,6 +22,35 @@ from docker_manager.usecases.vm_management import QemuSession
 from docker_manager.usecases.apply_template import _apply_template_to_vm
 
 
+@shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=2)
+def power_on(self, container_id):
+    from io import StringIO
+    from django.core.management import call_command
+
+    buf = StringIO()
+    try:
+        call_command("vmctl", "start", str(container_id), stdout=buf)
+        print(buf)
+    except Exception as e:
+        print(e)
+        print(buf)
+        pass
+
+@shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=2)
+def power_off(self, container_id, force):
+    from io import StringIO
+    from django.core.management import call_command
+    
+    buf = StringIO()
+    args = ["stop", str(container_id)] + (["--force"] if force else [])
+    try:
+        call_command("vmctl", *args, stdout=buf)
+        print(buf)
+    except Exception as e:
+        print(e)
+        print(buf)
+        pass
+
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
 def sync_status(self):
     from io import StringIO
@@ -30,7 +59,10 @@ def sync_status(self):
     buf = StringIO()
     try:
         call_command("vmctl", "sync", stdout=buf)
-    except Exception:
+        print(buf)
+    except Exception as e:
+        print(e)
+        print(buf)
         pass
 
 

@@ -28,6 +28,8 @@ from app.tasks import (
     sftp_write_file_task,
     create_vm_first_time,
     send_command,
+    power_off,
+    power_on,
 )
 
 
@@ -290,32 +292,29 @@ class ContainersViewSet(viewsets.ModelViewSet):
         Start VM via management command. Kept synchronous to preserve the
         original response (status + log).
         """
-        from django.core.management import call_command
 
-        buf = StringIO()
-        try:
-            call_command("vmctl", "start", str(pk), stdout=buf)
-            return Response({"status": "running", "log": buf.getvalue()})
-        except Exception as e:
-            return Response({"error": str(e), "log": buf.getvalue()}, status=500)
+        container = self.get_object()
+        power_on.delay(container_id=container.pk)
+        return Response(
+            {
+                "status": container.status,
+            }
+        )
 
     @action(detail=True, methods=["post"])
     def power_off(self, request, pk=None):
         """
         Stop VM via management command. Kept synchronous to preserve contract.
         """
-        from django.core.management import call_command
 
         force = bool(request.data.get("force", False))
-        buf = StringIO()
-        try:
-            args = ["stop", str(pk)] + (["--force"] if force else [])
-            call_command("vmctl", *args, stdout=buf)
-            # Read updated state from DB
-            container = self.get_object()
-            return Response({"status": container.status, "log": buf.getvalue()})
-        except Exception as e:
-            return Response({"error": str(e), "log": buf.getvalue()}, status=500)
+        container = self.get_object()
+        power_off.delay(container_id=container.pk, force=force)
+        return Response(
+            {
+                "status": container.status,
+            }
+        )
 
     @action(detail=True, methods=["get"])
     def real_status(self, request, pk=None):

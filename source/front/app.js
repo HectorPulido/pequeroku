@@ -65,6 +65,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Lógica SPA
 let containersCache = [];
+let lastContainersSig = null;
+let containersPollId = null;
 function initApp() {
 	let current_id = "";
 
@@ -77,6 +79,9 @@ function initApp() {
 	const modalBody = document.getElementById("console-modal-body");
 	const userData = document.getElementById("user_data");
 	const quotaInfo = document.getElementById("quota_info");
+	const btnRefresh = document.getElementById("btn-refresh");
+
+	if (btnRefresh) btnRefresh.addEventListener("click", () => fetchContainers({ lazy: false }));
 
 	btnFullscreen.addEventListener("click", () => {
 		if (current_id) {
@@ -114,7 +119,7 @@ function initApp() {
 		}
 	}
 
-	async function fetchContainers() {
+	async function fetchContainers(opts = { lazy: false }) {
 		try {
 			const res = await fetch("/api/containers/", {
 				credentials: "same-origin",
@@ -124,39 +129,65 @@ function initApp() {
 				throw new Error(`Error al obtener contenedores: ${err}`);
 			}
 			const data = await res.json();
+
+			// Calcula firma y, si estamos en modo "lazy" y no cambió, salimos sin repintar
+			const sig = signatureFrom(data);
+			if (opts.lazy && sig === lastContainersSig) {
+				// Nada cambió → opcionalmente refrescamos botones de "quota" cada cierto tiempo,
+				// pero no re-renderizamos tarjetas
+				return;
+			}
+			lastContainersSig = sig;
+
+			// ------- Render (idéntico a tu versión original) -------
 			listEl.innerHTML = "";
 
-			// biome-ignore lint/complexity/noForEach: <explanation>
 			data.forEach((c) => {
 				const card = document.createElement("div");
 				card.className = "container-card";
 				const isRunning = c.status === "running";
 				card.innerHTML = `
-				<h2>${c.id} — ${c.container_id.slice(0, 12)}</h2>
-				<small>${new Date(c.created_at).toLocaleString()}</small>
-				<p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
-				<div>
-					<button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Let's Play</button>
-					<button class="btn-start" ${isRunning ? "hidden" : ""}>▶️ Start</button>
-					<button class="btn-stop" ${!isRunning ? "hidden" : ""}>⏹️ Stop</button>
-					<button class="btn-delete">🗑️ Delete</button>
-				</div>`
+          <h2>${c.id} — ${c.container_id.slice(0, 12)}</h2>
+          <small>${new Date(c.created_at).toLocaleString()}</small>
+          <p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
+          <div>
+            <button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Let's Play</button>
+            <button class="btn-start" ${isRunning ? "hidden" : ""}>▶️ Start</button>
+            <button class="btn-stop" ${!isRunning ? "hidden" : ""}>⏹️ Stop</button>
+            <button class="btn-delete">🗑️ Delete</button>
+          </div>`;
 
-				card.querySelector(".btn-edit").onclick = () =>
-					openConsole(c.id);
+				card.querySelector(".btn-edit").onclick = () => openConsole(c.id);
 				card.querySelector(".btn-delete").onclick = () => deleteContainer(c.id);
+
 				card.querySelector(".btn-start").onclick = async () => {
-					await fetch(`/api/containers/${c.id}/power_on/`, { method: "POST", credentials: "same-origin", headers: { "X-CSRFToken": getCSRF() } });
-					await fetchContainers();
+					await fetch(`/api/containers/${c.id}/power_on/`, {
+						method: "POST",
+						credentials: "same-origin",
+						headers: { "X-CSRFToken": getCSRF() }
+					});
+					// tras acción, pedimos refresh inmediato y repintamos
+					await fetchContainers({ lazy: false });
 				};
+
 				card.querySelector(".btn-stop").onclick = async () => {
-					await fetch(`/api/containers/${c.id}/power_off/`, { method: "POST", credentials: "same-origin", headers: { "X-CSRFToken": getCSRF(), "Content-Type": "application/json" }, body: JSON.stringify({ force: false }) });
-					await fetchContainers();
+					await fetch(`/api/containers/${c.id}/power_off/`, {
+						method: "POST",
+						credentials: "same-origin",
+						headers: { "X-CSRFToken": getCSRF(), "Content-Type": "application/json" },
+						body: JSON.stringify({ force: false })
+					});
+					await fetchContainers({ lazy: false });
 				};
+
 				listEl.appendChild(card);
 			});
 
+			// Actualiza panel de usuario/quota cada vez que re-renderizamos
 			fetchUserData();
+
+			// Asegura que el polling esté activo tras primer render
+			startContainersPolling();
 		} catch (error) {
 			addAlert(error.message, "error");
 		}
@@ -273,3 +304,36 @@ function escapeHtml(s) {
 		}
 	};
 })();
+
+
+// Genera una "firma" estable del array para detectar cambios
+function signatureFrom(data) {
+	// Normaliza y ordena por id para evitar falsos positivos si cambia el orden
+	const norm = (data || []).map(c => ({
+		id: c.id,
+		status: c.status,
+		created_at: c.created_at,     // si esto cambia, queremos refrescar
+		container_id: c.container_id, // por si se recrea
+	})).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+	return JSON.stringify(norm);
+}
+
+// Arranca/parar polling cada 60s
+function startContainersPolling() {
+	if (containersPollId) return;
+	containersPollId = setInterval(() => {
+		// refresco "perezoso": solo repinta si hay cambios
+		fetchContainers({ lazy: true });
+	}, 60_000);
+}
+function stopContainersPolling() {
+	if (containersPollId) {
+		clearInterval(containersPollId);
+		containersPollId = null;
+	}
+}
+
+// Pausa el polling cuando la pestaña no está visible (ahorra recursos)
+document.addEventListener('visibilitychange', () => {
+	if (document.hidden) stopContainersPolling(); else startContainersPolling();
+});
