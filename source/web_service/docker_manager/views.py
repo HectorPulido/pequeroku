@@ -25,6 +25,8 @@ from .usecases.apply_template import _apply_template_to_vm
 from app.tasks import (
     apply_template_to_vm_task,
     sftp_write_file_task,
+    create_vm_first_time,
+    send_command,
 )
 
 # SSH helpers
@@ -88,32 +90,7 @@ class ContainersViewSet(viewsets.ModelViewSet):
             status="creating",
         )
 
-        # If QemuSession internally boots / attaches, we let it handle its own lifecycle.
-        try:
-            QemuSession(c, on_line=None, on_close=None)
-        except Exception:
-            # Don't fail creation if session boot attach fails; controller can handle retries.
-            pass
-
-        # Optionally apply default template (move heavy I/O to Celery)
-        slug = getattr(settings, "DEFAULT_TEMPLATE_SLUG", None)
-        dest = getattr(settings, "DEFAULT_TEMPLATE_DEST", "/app")
-        clean = getattr(settings, "DEFAULT_TEMPLATE_CLEAN", True)
-
-        if slug:
-            # Try to find the specific template; fallback to the latest one if missing.
-            tpl = FileTemplate.objects.filter(slug=slug).first()
-            if not tpl:
-                tpl = FileTemplate.objects.order_by("-updated_at").first()
-
-            if tpl:
-                # Fire-and-forget: do not block creation; contract stays the same.
-                apply_template_to_vm_task.delay(
-                    container_id=c.pk,
-                    template_id=tpl.pk,
-                    dest_path=dest,
-                    clean=bool(clean),
-                )
+        create_vm_first_time.delay(container_id=c.pk)
 
         ser = self.get_serializer(c)
         return Response(ser.data, status=status.HTTP_201_CREATED)
@@ -149,13 +126,8 @@ class ContainersViewSet(viewsets.ModelViewSet):
         cmd = request.data.get("command", "")
         if not cmd:
             return Response({"error": "command required"}, status=400)
-
-        try:
-            sess = QemuSession(container, on_line=None, on_close=None)
-            sess.send(cmd)
-            return Response({"status": "sent"})
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
+        create_vm_first_time.delay(container_id=container.pk, command=cmd)
+        return Response({"status": "sent"})
 
     @action(detail=True, methods=["post"])
     def restart_container(self, request, pk=None):
@@ -165,7 +137,6 @@ class ContainersViewSet(viewsets.ModelViewSet):
         container = self.get_object()
         try:
             sess = QemuSession(container, on_line=None, on_close=None)
-            # If QemuSession implements reopen, call it; else, constructing it is enough.
             if hasattr(sess, "reopen"):
                 sess.reopen()
             return Response({"status": "restarted"})
