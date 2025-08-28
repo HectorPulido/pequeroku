@@ -20,6 +20,7 @@ from .models import Container, FileTemplate
 from .serializers import ContainerSerializer, FileTemplateSerializer
 from .usecases.vm_management import QemuSession
 from .usecases.apply_template import _apply_template_to_vm
+from .usecases.ssh import open_ssh_and_sftp, ensure_remote_dir
 
 # Celery tasks
 from app.tasks import (
@@ -28,9 +29,6 @@ from app.tasks import (
     create_vm_first_time,
     send_command,
 )
-
-# SSH helpers
-from .usecases.ssh import open_ssh_and_sftp, ensure_remote_dir
 
 
 class ContainersViewSet(viewsets.ModelViewSet):

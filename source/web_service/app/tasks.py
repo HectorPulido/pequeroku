@@ -17,8 +17,8 @@ import paramiko
 import os
 import shlex
 
-from docker_manager.usecases.vm_management import QemuSession
 from docker_manager.models import Container, FileTemplate
+from docker_manager.usecases.vm_management import QemuSession
 from docker_manager.usecases.apply_template import _apply_template_to_vm
 
 

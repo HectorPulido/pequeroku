@@ -125,7 +125,7 @@ def _vm_workdir(container_pk: int) -> str:
 
 
 def _start_vm(container_obj: "Container"):
-    from usecases.vm_management import QemuSession
+    from docker_manager.usecases.vm_management import QemuSession
 
     sess = QemuSession(container_obj, on_line=None, on_close=None)
 
