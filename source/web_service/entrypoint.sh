@@ -34,16 +34,41 @@ if command -v ip6tables >/dev/null 2>&1; then
   ip6tables -A VM_EGRESS6 -j ACCEPT
 fi
 
-if [ "$#" -gt 0 ]; then
-  exec "$@"
-else
-  python manage.py migrate
-  python manage.py collectstatic --no-input
+python manage.py migrate
+python manage.py collectstatic --no-input
 
-  if [ $# -ge 1 ] && [ -n "$DJANGO_SUPERUSER_USERNAME" ]; then
-    python manage.py createsuperuser --noinput \
-      --username "$DJANGO_SUPERUSER_USERNAME" \
-      --email "$DJANGO_SUPERUSER_EMAIL" || true
-  fi
-  exec daphne -b 0.0.0.0 -p 8000 pequeroku.asgi:application
+if [ $# -ge 1 ] && [ -n "${DJANGO_SUPERUSER_USERNAME:-}" ]; then
+  python manage.py createsuperuser --noinput \
+    --username "$DJANGO_SUPERUSER_USERNAME" \
+    --email "$DJANGO_SUPERUSER_EMAIL" || true
 fi
+
+# === Lanzar Celery worker y beat en background ===
+# Opcional: espera a Redis si quieres ser más defensivo (recomendado)
+REDIS_HOST="${REDIS_HOST:-redis}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+( for i in {1..60}; do nc -z "$REDIS_HOST" "$REDIS_PORT" && exit 0; sleep 1; done; echo "Redis no responde en $REDIS_HOST:$REDIS_PORT"; exit 1 ) &
+
+# Variables por si usas otro módulo Django
+DJANGO_MODULE="${DJANGO_MODULE:-pequeroku}"
+
+# Lanza worker
+echo "Starting Celery..."
+celery -A "$DJANGO_MODULE" worker --loglevel=INFO -Ofair &
+PID_CELERY=$!
+
+# Lanza beat
+echo "Starting Beat..."
+celery -A "$DJANGO_MODULE" beat --loglevel=INFO &
+PID_BEAT=$!
+
+# Manejo de señales: si muere uno, apagamos todo ordenadamente
+terminate() {
+  echo "Recibida señal, deteniendo procesos..."
+  kill -TERM "$PID_CELERY" "$PID_BEAT" 2>/dev/null || true
+  wait "$PID_CELERY" "$PID_BEAT" 2>/dev/null || true
+}
+trap terminate TERM INT
+
+echo "Starting Daphne..."
+exec daphne -b 0.0.0.0 -p 8000 "${DJANGO_MODULE}.asgi:application" 

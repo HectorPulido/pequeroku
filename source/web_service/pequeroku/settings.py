@@ -185,7 +185,7 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 min
 CELERY_IMPORTS = ("app.tasks",)
 
 CELERY_BEAT_SCHEDULE = {
-    "sumar_cada_minuto": {
+    "sync_vm_status": {
         "task": "app.tasks.sync_status",
         "schedule": timedelta(seconds=60 * 3),
     },

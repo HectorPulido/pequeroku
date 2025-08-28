@@ -24,7 +24,6 @@ from .usecases.ssh import open_ssh_and_sftp, ensure_remote_dir
 
 # Celery tasks
 from app.tasks import (
-    apply_template_to_vm_task,
     sftp_write_file_task,
     create_vm_first_time,
     send_command,

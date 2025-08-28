@@ -36,11 +36,12 @@ def power_on(self, container_id):
         print(buf)
         pass
 
+
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=2)
 def power_off(self, container_id, force):
     from io import StringIO
     from django.core.management import call_command
-    
+
     buf = StringIO()
     args = ["stop", str(container_id)] + (["--force"] if force else [])
     try:
@@ -50,6 +51,7 @@ def power_off(self, container_id, force):
         print(e)
         print(buf)
         pass
+
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
 def sync_status(self):

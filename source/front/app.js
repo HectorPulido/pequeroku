@@ -81,8 +81,7 @@ function initApp() {
 	const quotaInfo = document.getElementById("quota_info");
 	const btnRefresh = document.getElementById("btn-refresh");
 
-	if (btnRefresh) btnRefresh.addEventListener("click", () => fetchContainers({ lazy: false }));
-
+	btnRefresh.addEventListener("click", () => fetchContainers({ lazy: false }));
 	btnFullscreen.addEventListener("click", () => {
 		if (current_id) {
 			open("/ide/?containerId=" + current_id);

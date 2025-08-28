@@ -142,3 +142,4 @@ GitHub.sublime-settings
 .history
 
 celerybeat-schedule
+celerybeat-schedule*
