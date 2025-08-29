@@ -66,8 +66,7 @@ export function setupContainers() {
 				const isRunning = c.status === "running";
 				card.innerHTML = `
 <h2>${c.id} — ${c.container_id.slice(0, 12)}</h2>
-<small>${new Date(c.created_at).toLocaleString()}</small>
-<small>${c.username}</small>
+<small>${c.username}</small> - <small>${new Date(c.created_at).toLocaleString()}</small>
 <p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
 <div>
 <button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Let's Play</button>
