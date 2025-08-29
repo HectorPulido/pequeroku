@@ -235,6 +235,28 @@ function initApp() {
 		modal.classList.add("hidden");
 		modalBody.innerHTML = "";
 	}
+
+
+
+	// Arranca/parar polling cada 60s
+	function startContainersPolling() {
+		if (containersPollId) return;
+		containersPollId = setInterval(() => {
+			// refresco "perezoso": solo repinta si hay cambios
+			fetchContainers({ lazy: true });
+		}, 60_000);
+	}
+	function stopContainersPolling() {
+		if (containersPollId) {
+			clearInterval(containersPollId);
+			containersPollId = null;
+		}
+	}
+
+	// Pausa el polling cuando la pestaña no está visible (ahorra recursos)
+	document.addEventListener('visibilitychange', () => {
+		if (document.hidden) stopContainersPolling(); else startContainersPolling();
+	});
 }
 
 function addAlert(message, type) {
@@ -316,23 +338,3 @@ function signatureFrom(data) {
 	})).sort((a, b) => String(a.id).localeCompare(String(b.id)));
 	return JSON.stringify(norm);
 }
-
-// Arranca/parar polling cada 60s
-function startContainersPolling() {
-	if (containersPollId) return;
-	containersPollId = setInterval(() => {
-		// refresco "perezoso": solo repinta si hay cambios
-		fetchContainers({ lazy: true });
-	}, 60_000);
-}
-function stopContainersPolling() {
-	if (containersPollId) {
-		clearInterval(containersPollId);
-		containersPollId = null;
-	}
-}
-
-// Pausa el polling cuando la pestaña no está visible (ahorra recursos)
-document.addEventListener('visibilitychange', () => {
-	if (document.hidden) stopContainersPolling(); else startContainersPolling();
-});

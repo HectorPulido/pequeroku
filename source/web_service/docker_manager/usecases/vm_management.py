@@ -212,6 +212,10 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str) -> None:
         try:
             attempt += 1
             print("Trying to connect to: ", port, "machine, try number:", attempt)
+
+            if attempt > 100:
+                TimeoutError("SSH timeout")
+
             # First: is TCP port open?
             with socket.create_connection(("127.0.0.1", port), timeout=2):
                 pass
