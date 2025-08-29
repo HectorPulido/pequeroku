@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.db import models
 from django.forms import Textarea
-from .models import Container, ResourceQuota, FileTemplate, FileTemplateItem
+from .models import Container, ResourceQuota, FileTemplate, FileTemplateItem, AuditLog
 
 
 @admin.register(Container)
@@ -30,3 +30,17 @@ class FileTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "items_count", "updated_at", "created_at")
     search_fields = ("name", "slug", "description", "items__path")
     inlines = [FileTemplateItemInline]
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "created_at",
+        "action",
+        "user",
+        "target_type",
+        "target_id",
+        "success",
+    )
+    list_filter = ("action", "success", "created_at")
+    search_fields = ("message", "target_id", "user__username", "metadata")

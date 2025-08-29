@@ -165,7 +165,7 @@ export function setupContainers() {
 	addAlert(`
 		<div>
 			<div>
-				<div><strong>Aviso Importante (Pequeroku) – Español</strong></div>
+				<div>📜 <strong>Aviso Importante (Pequeroku) – Español</strong></div>
 				<div>1. Pequeroku no ofrece ningún tipo de garantía ni soporte oficial. Puedes pedir ayuda en el servidor de Discord, pero no se asegura respuesta ni solución.</div>
 				<div>2. Está prohibido cualquier acto ilícito o que afecte la seguridad o estabilidad de la plataforma.</div>
 				<div>3. Nada de lo que hagas en Pequeroku es privado. Todas las máquinas virtuales son accesibles y están monitoreadas por motivos de seguridad.</div>
@@ -176,7 +176,7 @@ export function setupContainers() {
 			</div>
 			<br/>
 			<div>
-				<div><strong>Important Notice (Pequeroku) – English</strong></div>
+				<div>📜 <strong>Important Notice (Pequeroku) – English</strong></div>
 				<div>1. Pequeroku provides no warranty or official support. You may ask for help on the Discord server, but no response or solution is guaranteed.</div>
 				<div>2. Any illegal activity or actions that compromise the security or stability of the platform are strictly prohibited.</div>
 				<div>3. Nothing you do on Pequeroku is private. All virtual machines are accessible and monitored for security purposes.</div>

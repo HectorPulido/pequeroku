@@ -5,7 +5,15 @@ from .models import Container, FileTemplate, FileTemplateItem
 class ContainerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Container
-        fields = ["id", "container_id", "image", "created_at", "status", "user", "username"]
+        fields = [
+            "id",
+            "container_id",
+            "image",
+            "created_at",
+            "status",
+            "user",
+            "username",
+        ]
 
     username = serializers.SerializerMethodField("get_username")
 

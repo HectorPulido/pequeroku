@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from asyncio.events import AbstractEventLoop
-from typing import Optional, Callable
+from typing import Optional
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
@@ -11,6 +11,7 @@ from django.apps import apps
 from django.db import DatabaseError
 
 from .usecases.vm_management import QemuSession
+from .usecases.audit import audit_log_ws
 
 CTRL_C = "\x03"
 CTRL_D = "\x04"
@@ -36,7 +37,7 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         # Authentication gate
         if self.scope["user"].is_anonymous:
-            await self.close(code=4401)  # Unauthorized
+            await self.close(code=4401)
             return
 
         # Route params
@@ -47,10 +48,20 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         try:
             allowed = await self._user_owns_container(self.pk, self.scope["user"].pk)
             if not allowed:
-                await self.close(code=4403)  # Forbidden
+                await audit_log_ws(
+                    action="ws.connect",
+                    user=self.scope["user"],
+                    ip=self.ws_client_ip(self.scope),
+                    user_agent=self.ws_user_agent(self.scope),
+                    target_type="container",
+                    target_id=self.pk,
+                    message="Unauthorized WebSocket connect attempt",
+                    success=False,
+                )
+                await self.close(code=4403)
                 return
         except DatabaseError:
-            await self.close(code=1011)  # Internal DB error
+            await self.close(code=1011)
             return
 
         await self.accept()
@@ -59,7 +70,17 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         # Create a fresh QemuSession bound to this socket (no global cache)
         container_obj = await self._get_container(self.pk)
         if not container_obj:
-            await self.close(code=4404)  # Not found
+            await audit_log_ws(
+                action="ws.connect",
+                user=self.scope["user"],
+                ip=self.ws_client_ip(self.scope),
+                user_agent=self.ws_user_agent(self.scope),
+                target_type="container",
+                target_id=self.pk,
+                message="WebSocket connect failed: container not found",
+                success=False,
+            )
+            await self.close(code=4404)
             return
 
         # Build the session in a thread; pass async-safe callbacks
@@ -71,10 +92,20 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
                     on_close=self._on_close,
                 )
             )()
-        except Exception:
-            # If session creation fails, close gracefully
+        except Exception as e:
             await self._send_json(
                 {"type": "error", "message": "Unable to open shell session"}
+            )
+            await audit_log_ws(
+                action="ws.connect",
+                user=self.scope["user"],
+                ip=self.ws_client_ip(self.scope),
+                user_agent=self.ws_user_agent(self.scope),
+                target_type="container",
+                target_id=self.pk,
+                message="Failed to open shell session",
+                metadata={"error": str(e)},
+                success=False,
             )
             await self.close(code=1011)
             return
@@ -83,6 +114,17 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         await self._ensure_alive()
         await self._send_to_session("cd /app")
         await self._send_to_session("ls -la")
+
+        await audit_log_ws(
+            action="ws.connect",
+            user=self.scope["user"],
+            ip=self.ws_client_ip(self.scope),
+            user_agent=self.ws_user_agent(self.scope),
+            target_type="container",
+            target_id=self.pk,
+            message="WebSocket session established",
+            success=True,
+        )
 
     async def disconnect(self, code):
         """
@@ -98,8 +140,19 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         self.session = None
         self.loop = None
 
+        await audit_log_ws(
+            action="ws.disconnect",
+            user=self.scope.get("user"),
+            ip=self.ws_client_ip(self.scope),
+            user_agent=self.ws_user_agent(self.scope),
+            target_type="container",
+            target_id=self.pk,
+            message=f"WebSocket disconnected (code={code})",
+            success=True,
+        )
+
     # -------------------------
-    # Event handlers (callbacks from QemuSession)
+    # Event handlers
     # -------------------------
     def _on_line(self, line: str):
         """
@@ -111,7 +164,6 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         loop = self.loop
         if not loop or not getattr(loop, "is_running", lambda: False)():
             return
-
         # Schedule the send on the loop thread-safely
         loop.call_soon_threadsafe(
             asyncio.create_task, self._send_json({"type": "log", "line": line})
@@ -124,7 +176,6 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         loop = self.loop
         if not loop or not getattr(loop, "is_running", lambda: False)():
             return
-
         loop.call_soon_threadsafe(
             asyncio.create_task,
             self._send_json(
@@ -149,22 +200,84 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         if action == "restart":
             await self._restart_session()
             await self._send_to_session("ls -la")
+            await audit_log_ws(
+                action="ws.restart",
+                user=self.scope.get("user"),
+                ip=self.ws_client_ip(self.scope),
+                user_agent=self.ws_user_agent(self.scope),
+                target_type="container",
+                target_id=self.pk,
+                message="Shell restarted via WebSocket",
+                success=True,
+            )
             return
 
-        # Ensure there is a live channel for any other command
         await self._ensure_alive()
 
+        # Ensure there is a live channel for any other command
         if action == "cmd":
             await self._send_to_session(data)
+            await audit_log_ws(
+                action="ws.cmd",
+                user=self.scope.get("user"),
+                ip=self.ws_client_ip(self.scope),
+                user_agent=self.ws_user_agent(self.scope),
+                target_type="container",
+                target_id=self.pk,
+                message="Command sent via WebSocket",
+                metadata={"command": data[:200]},
+                success=True,
+            )
         elif action == "ctrlc":
             await self._send_to_session(CTRL_C)
+            await audit_log_ws(
+                action="ws.ctrlc",
+                user=self.scope.get("user"),
+                ip=self.ws_client_ip(self.scope),
+                user_agent=self.ws_user_agent(self.scope),
+                target_type="container",
+                target_id=self.pk,
+                message="Ctrl+C sent via WebSocket",
+                success=True,
+            )
         elif action == "ctrld":
             await self._send_to_session(CTRL_D)
+            await audit_log_ws(
+                action="ws.ctrld",
+                user=self.scope.get("user"),
+                ip=self.ws_client_ip(self.scope),
+                user_agent=self.ws_user_agent(self.scope),
+                target_type="container",
+                target_id=self.pk,
+                message="Ctrl+D sent via WebSocket",
+                success=True,
+            )
         elif action == "clear":
             await self._send_json({"type": "clear"})
+            await audit_log_ws(
+                action="ws.clear",
+                user=self.scope.get("user"),
+                ip=self.ws_client_ip(self.scope),
+                user_agent=self.ws_user_agent(self.scope),
+                target_type="container",
+                target_id=self.pk,
+                message="Clear requested via WebSocket",
+                success=True,
+            )
         else:
             await self._send_json(
                 {"type": "error", "message": f"Unknown action: {action}"}
+            )
+            await audit_log_ws(
+                action="ws.unknown",
+                user=self.scope.get("user"),
+                ip=self.ws_client_ip(self.scope),
+                user_agent=self.ws_user_agent(self.scope),
+                target_type="container",
+                target_id=self.pk,
+                message="Unknown WebSocket action",
+                metadata={"action": action},
+                success=False,
             )
 
     # -------------------------
@@ -186,9 +299,20 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         try:
             await sync_to_async(self.session.reopen)()
             await self._send_json({"type": "info", "message": "Shell restarted"})
-        except Exception:
+        except Exception as e:
             await self._send_json(
                 {"type": "error", "message": "Failed to restart shell"}
+            )
+            await audit_log_ws(
+                action="ws.restart",
+                user=self.scope.get("user"),
+                ip=self.ws_client_ip(self.scope),
+                user_agent=self.ws_user_agent(self.scope),
+                target_type="container",
+                target_id=self.pk,
+                message="Shell restart failed",
+                metadata={"error": str(e)},
+                success=False,
             )
 
     async def _send_json(self, obj: dict):
@@ -205,9 +329,20 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
             return
         try:
             await sync_to_async(self.session.send)(text)
-        except Exception:
+        except Exception as e:
             await self._send_json(
                 {"type": "error", "message": "Failed to send command"}
+            )
+            await audit_log_ws(
+                action="ws.cmd",
+                user=self.scope.get("user"),
+                ip=self.ws_client_ip(self.scope),
+                user_agent=self.ws_user_agent(self.scope),
+                target_type="container",
+                target_id=self.pk,
+                message="Command send failed",
+                metadata={"error": str(e), "text": text},
+                success=False,
             )
 
     # -------------------------
@@ -227,3 +362,18 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
     def _user_owns_container(pk: int, user_pk: int) -> bool:
         container = apps.get_model("docker_manager", "Container")
         return container.objects.filter(pk=pk, user_id=user_pk).exists()
+
+    def ws_client_ip(self, scope) -> str:
+        try:
+            return scope.get("client", [None])[0] or ""
+        except Exception:
+            return ""
+
+    def ws_user_agent(self, scope) -> str:
+        try:
+            for k, v in scope.get("headers", []):
+                if k == b"user-agent":
+                    return v.decode("utf-8", "ignore")
+        except Exception:
+            pass
+        return ""
