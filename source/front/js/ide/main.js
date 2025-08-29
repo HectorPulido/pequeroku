@@ -7,7 +7,7 @@ import { openFile as openFileIntoEditor } from "./editor.js";
 import { setupFileTree } from "./files.js";
 import { loadRunConfig } from "./runConfig.js";
 import { setupUploads } from "./uploads.js";
-import { createWS } from "./websocket.js";
+import { createWS } from "./websockets.js";
 
 installGlobalLoader();
 
