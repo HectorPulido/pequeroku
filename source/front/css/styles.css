@@ -1,4 +1,4 @@
-/* File: front/styles.css */
+/** biome-ignore-all lint/complexity/noImportantStyles: Important shit is important */
 * {
 	box-sizing: border-box;
 	margin: 0;
@@ -27,7 +27,7 @@ header h1 {
 button {
 	background: #28a745;
 	border: none;
-	padding: .5rem 1rem;
+	padding: 0.5rem 1rem;
 	color: white;
 	cursor: pointer;
 	border-radius: 4px;
@@ -64,7 +64,7 @@ main {
 }
 
 .container-card button {
-	margin-right: .5rem;
+	margin-right: 0.5rem;
 }
 
 .container-card div {
@@ -99,15 +99,15 @@ main {
 
 .login-box input {
 	width: 100%;
-	padding: .75rem;
-	margin-bottom: .5rem;
+	padding: 0.75rem;
+	margin-bottom: 0.5rem;
 	border: 1px solid #ccc;
 	border-radius: 4px;
 }
 
 .login-box button {
 	width: 100%;
-	padding: .75rem;
+	padding: 0.75rem;
 	background: #28a745;
 	color: #fff;
 	border: none;
@@ -121,7 +121,7 @@ main {
 
 .error-message {
 	color: #c0392b;
-	margin-top: .5rem;
+	margin-top: 0.5rem;
 }
 
 /* Console Styles */
@@ -157,7 +157,6 @@ main {
 	font-family: monospace;
 	height: 300px;
 	overflow-y: auto;
-	height: 80%;
 	border-bottom-left-radius: 6px;
 	border-bottom-right-radius: 6px;
 }
@@ -173,13 +172,13 @@ main {
 
 .console-input input {
 	flex: 1;
-	padding: .5rem;
+	padding: 0.5rem;
 	border: 1px solid #ccc;
 	border-bottom-left-radius: 6px;
 }
 
 .console-input button {
-	padding: .5rem 1rem;
+	padding: 0.5rem 1rem;
 	border: none;
 	background: #007bff;
 	color: white;
@@ -394,34 +393,38 @@ main {
 
 /* ===== Global Loader ===== */
 .loader-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 999999; /* por encima de modales */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none; /* se activa al mostrar */
+	position: fixed;
+	inset: 0;
+	z-index: 999999; /* por encima de modales */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none; /* se activa al mostrar */
 }
 
 .loader-overlay:not(.hidden) {
-  pointer-events: all;
+	pointer-events: all;
 }
 
 .loader-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35); /* oscuro y transparente */
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.35); /* oscuro y transparente */
 }
 
 .loader-spinner {
-  position: relative;
-  width: 64px;
-  height: 64px;
-  border: 6px solid rgba(255,255,255,0.35);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.9s linear infinite;
-  z-index: 1;
+	position: relative;
+	width: 64px;
+	height: 64px;
+	border: 6px solid rgba(255, 255, 255, 0.35);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: spin 0.9s linear infinite;
+	z-index: 1;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
