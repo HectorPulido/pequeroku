@@ -57,7 +57,7 @@ function setPath(p) {
 	// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
 	$$(".btn-send").forEach((btn) =>
 		btn.addEventListener("click", () => {
-			sendCommand(btn.getAttribute("param"));
+			ws.send(btn.getAttribute("param"));
 		}),
 	);
 
