@@ -14,8 +14,8 @@ export function setupContainers() {
 	const quotaInfo = document.getElementById("quota_info");
 	const btnRefresh = document.getElementById("btn-refresh");
 
-	let lastContainersSig = null;
-	let containersPollId = null;
+	let lastSig = null;
+	let pollId = null;
 
 	btnRefresh.addEventListener("click", () => fetchContainers({ lazy: false }));
 	btnFullscreen.addEventListener("click", () => {
@@ -53,39 +53,30 @@ export function setupContainers() {
 			const res = await fetch("/api/containers/", {
 				credentials: "same-origin",
 			});
-			if (!res.ok) {
-				const err = await res.text();
-				throw new Error(`Error getting containers: ${err}`);
-			}
+			if (!res.ok) throw new Error(await res.text());
 			const data = await res.json();
-
 			const sig = signatureFrom(data);
-			if (opts.lazy && sig === lastContainersSig) {
-				return;
-			}
-			lastContainersSig = sig;
+			if (opts.lazy && sig === lastSig) return; // no repintar
+			lastSig = sig;
 
-			// ------- Render -------
 			listEl.innerHTML = "";
-
 			data.forEach((c) => {
 				const card = document.createElement("div");
 				card.className = "container-card";
 				const isRunning = c.status === "running";
 				card.innerHTML = `
-          <h2>${c.id} — ${c.container_id.slice(0, 12)}</h2>
-          <small>${new Date(c.created_at).toLocaleString()}</small>
-          <p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
-          <div>
-            <button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Let's Play</button>
-            <button class="btn-start" ${isRunning ? "hidden" : ""}>▶️ Start</button>
-            <button class="btn-stop" ${!isRunning ? "hidden" : ""}>⏹️ Stop</button>
-            <button class="btn-delete">🗑️ Delete</button>
-          </div>`;
+<h2>${c.id} — ${c.container_id.slice(0, 12)}</h2>
+<small>${new Date(c.created_at).toLocaleString()}</small>
+<p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
+<div>
+<button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Let's Play</button>
+<button class="btn-start" ${isRunning ? "hidden" : ""}>▶️ Start</button>
+<button class="btn-stop" ${!isRunning ? "hidden" : ""}>⏹️ Stop</button>
+<button class="btn-delete">🗑️ Delete</button>
+</div>`;
 
 				card.querySelector(".btn-edit").onclick = () => openConsole(c.id);
 				card.querySelector(".btn-delete").onclick = () => deleteContainer(c.id);
-
 				card.querySelector(".btn-start").onclick = async () => {
 					await fetch(`/api/containers/${c.id}/power_on/`, {
 						method: "POST",
@@ -94,7 +85,6 @@ export function setupContainers() {
 					});
 					await fetchContainers({ lazy: false });
 				};
-
 				card.querySelector(".btn-stop").onclick = async () => {
 					await fetch(`/api/containers/${c.id}/power_off/`, {
 						method: "POST",
@@ -112,42 +102,62 @@ export function setupContainers() {
 			});
 
 			fetchUserData();
-
-			startContainersPolling();
-		} catch (error) {
-			addAlert(error.message, "error");
+			startPolling();
+		} catch (e) {
+			addAlert(e.message, "error");
 		}
 	}
 
-	async function openConsole(id) {
+	async function createContainer() {
+		try {
+			const res = await fetch("/api/containers/", {
+				method: "POST",
+				credentials: "same-origin",
+				headers: { "X-CSRFToken": getCSRF() },
+			});
+			if (!res.ok) throw new Error(await res.text());
+			await fetchContainers();
+		} catch (e) {
+			addAlert(e.message, "error");
+		}
+	}
+
+	async function deleteContainer(id) {
+		try {
+			const res = await fetch(`/api/containers/${id}/`, {
+				method: "DELETE",
+				credentials: "same-origin",
+				headers: { "X-CSRFToken": getCSRF() },
+			});
+			if (!res.ok) throw new Error(await res.text());
+			await fetchContainers();
+		} catch (e) {
+			addAlert(e.message, "error");
+		}
+	}
+
+	function openConsole(id) {
 		current_id = id;
 		modal.classList.remove("hidden");
 		modalBody.innerHTML = `<iframe src="/ide/?containerId=${id}" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
 	}
-
 	function closeConsole() {
 		modal.classList.add("hidden");
 		modalBody.innerHTML = "";
 	}
 
-	function startContainersPolling() {
-		console.log("startContainersPolling");
-		if (containersPollId) return;
-		containersPollId = setInterval(() => {
-			fetchContainers({ lazy: true });
-		}, 60_000);
+	function startPolling() {
+		if (!pollId)
+			pollId = setInterval(() => fetchContainers({ lazy: true }), 60_000);
 	}
-	function stopContainersPolling() {
-		console.log("stopContainersPolling");
-		if (!containersPollId) {
-			return;
+	function stopPolling() {
+		if (pollId) {
+			clearInterval(pollId);
+			pollId = null;
 		}
-		clearInterval(containersPollId);
-		containersPollId = null;
 	}
 
 	document.addEventListener("visibilitychange", () => {
-		if (document.hidden) stopContainersPolling();
-		else startContainersPolling();
+		document.hidden ? stopPolling() : startPolling();
 	});
 }
