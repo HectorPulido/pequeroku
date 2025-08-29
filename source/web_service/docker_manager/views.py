@@ -98,16 +98,20 @@ class ContainersViewSet(viewsets.ModelViewSet):
         """
         Soft shutdown VM (best-effort) and remove DB record.
         """
+        import threading
+
         obj = self.get_object()
-        try:
-            sess = QemuSession(obj, on_line=None, on_close=None)
+
+        def shutdown_vm():
             try:
-                # Send a graceful shutdown; ignore failures to keep idempotency.
+                sess = QemuSession(obj, on_line=None, on_close=None)
                 sess.send("sudo shutdown -h now")
             except Exception:
                 pass
-        except Exception:
-            pass
+
+        t = threading.Thread(target=shutdown_vm)
+        t.start()
+        t.join(timeout=5)
 
         self.perform_destroy(obj)
         return Response({"status": "stopped"})
