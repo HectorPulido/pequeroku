@@ -240,6 +240,8 @@ main {
 	opacity: 1;
 	transition: opacity 0.6s;
 	pointer-events: all;
+
+	display: flex;
 }
 
 .alert.success {
@@ -251,7 +253,8 @@ main {
 }
 
 .alert.warning {
-	background-color: #ff9800;
+	background-color: #ffd9a1;
+	color: black;
 }
 
 /* Modal overlay */
@@ -395,11 +398,13 @@ main {
 .loader-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 999999; /* por encima de modales */
+	z-index: 999999;
+	/* por encima de modales */
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	pointer-events: none; /* se activa al mostrar */
+	pointer-events: none;
+	/* se activa al mostrar */
 }
 
 .loader-overlay:not(.hidden) {
@@ -409,7 +414,8 @@ main {
 .loader-backdrop {
 	position: absolute;
 	inset: 0;
-	background: rgba(0, 0, 0, 0.35); /* oscuro y transparente */
+	background: rgba(0, 0, 0, 0.35);
+	/* oscuro y transparente */
 }
 
 .loader-spinner {
