@@ -93,6 +93,15 @@ class AuditLog(models.Model):
         ("container.create_dir", "Container create_dir"),
         ("container.real_status", "Container real_status"),
         ("template.apply", "Template apply"),
+        ("user.info", "User Info"),
+        ("ws.connect", "WS Connect"),
+        ("ws.disconnect", "WS Disconnect"),
+        ("ws.restart", "WS Restart"),
+        ("ws.cmd", "WS Cmd"),
+        ("ws.ctrlc", "WS Ctrlc"),
+        ("ws.ctrld", "WS Ctrld"),
+        ("ws.clear", "WS Clear"),
+        ("ws.unknown", "WS Unknown"),
     ]
 
     user = models.ForeignKey(
