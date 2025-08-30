@@ -1,7 +1,14 @@
 from django.contrib import admin
 from django.db import models
 from django.forms import Textarea
-from .models import Container, ResourceQuota, FileTemplate, FileTemplateItem, AuditLog
+from .models import (
+    Container,
+    ResourceQuota,
+    FileTemplate,
+    FileTemplateItem,
+    AuditLog,
+    AIUsageLog,
+)
 
 
 @admin.register(Container)
@@ -12,6 +19,11 @@ class ContainerAdmin(admin.ModelAdmin):
 @admin.register(ResourceQuota)
 class ResourceQuotaAdmin(admin.ModelAdmin):
     list_display = ("user", "max_containers", "max_memory_mb", "max_cpu_percent")
+
+
+@admin.register(AIUsageLog)
+class AIUsageLogAdmin(admin.ModelAdmin):
+    list_display = ("user", "query", "created_at")
 
 
 class FileTemplateItemInline(admin.TabularInline):

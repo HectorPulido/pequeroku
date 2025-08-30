@@ -1,10 +1,5 @@
 import os
 import shlex
-from io import StringIO
-
-import paramiko
-
-from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -14,14 +9,7 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
-from rest_framework.views import APIView
-
-from .models import Container, FileTemplate
-from .serializers import ContainerSerializer, FileTemplateSerializer
-from .usecases.vm_management import QemuSession
-from .usecases.apply_template import _apply_template_to_vm
-from .usecases.ssh import open_ssh_and_sftp, ensure_remote_dir
-from .usecases.audit import audit_log_http
+from rest_framework.generics import GenericAPIView
 
 # Celery tasks
 from app.tasks import (
@@ -31,6 +19,20 @@ from app.tasks import (
     power_off,
     power_on,
 )
+
+from .models import Container, FileTemplate
+from .serializers import (
+    ContainerSerializer,
+    FileTemplateSerializer,
+    ApplyTemplateRequestSerializer,
+    ApplyTemplateResponseSerializer,
+    ApplyAICodeResponseSerializer,
+    ApplyAICodeRequestSerializer,
+)
+from .usecases.vm_management import QemuSession
+from .usecases.apply_template import _apply_template_to_vm, apply_ai_generated_project
+from .usecases.ssh import open_ssh_and_sftp, ensure_remote_dir
+from .usecases.audit import audit_log_http
 
 
 class ContainersViewSet(viewsets.ModelViewSet):
@@ -590,7 +592,7 @@ class ContainersViewSet(viewsets.ModelViewSet):
         )
 
 
-class UserViewSet(APIView):
+class UserViewSet(GenericAPIView):
     """
     Read-only user info: username, quota and active containers count.
     """
@@ -635,7 +637,7 @@ class UserViewSet(APIView):
 
 
 @method_decorator(csrf_exempt, name="dispatch")
-class LoginView(APIView):
+class LoginView(GenericAPIView):
     """
     Simple username/password login.
     """
@@ -669,7 +671,7 @@ class LoginView(APIView):
         )
 
 
-class LogoutView(APIView):
+class LogoutView(GenericAPIView):
     """
     Simple logout for authenticated users.
     """
@@ -700,17 +702,14 @@ class FileTemplateViewSet(viewsets.ModelViewSet):
     def apply(self, request, pk=None):
         """
         Apply a template to a container.
-        Body JSON:
-        {
-          "container_id": 123,
-          "dest_path": "/app",  # optional
-          "clean": true         # whether to remove previous content
-        }
-
-        Kept synchronous to preserve the original response (status + files_count).
         """
         tpl = self.get_object()
-        container_model_id = request.data.get("container_id")
+        ser = ApplyTemplateRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        container_model_id = data["container_id"]
+        dest_path = data["dest_path"]
+        clean = data["clean"]
 
         if request.user.is_superuser:
             container_obj = get_object_or_404(Container, pk=container_model_id)
@@ -719,10 +718,7 @@ class FileTemplateViewSet(viewsets.ModelViewSet):
                 Container, pk=container_model_id, user=request.user
             )
 
-        dest_path = str(request.data.get("dest_path") or "/app").rstrip("/")
-        clean = bool(request.data.get("clean", True))
-
-        # Keep behavior: synchronous application (so response mirrors original).
+        # TODO: synchronous application.
         _apply_template_to_vm(container_obj, tpl, dest_path=dest_path, clean=clean)
 
         audit_log_http(
@@ -740,12 +736,59 @@ class FileTemplateViewSet(viewsets.ModelViewSet):
             success=True,
         )
 
-        return Response(
-            {
-                "status": "applied",
-                "template_id": tpl.pk,
-                "container": container_obj.pk,
-                "dest_path": dest_path,
-                "files_count": tpl.items.count(),
-            }
+        payload = {
+            "status": "applied",
+            "template_id": tpl.pk,
+            "container": container_obj.pk,
+            "dest_path": dest_path,
+            "files_count": tpl.items.count(),
+        }
+
+        return Response(ApplyTemplateResponseSerializer(payload).data)
+
+    @action(detail=False, methods=["post"], parser_classes=[JSONParser])
+    def apply_ai_generated_code(self, request):
+        """
+        Apply ai generated code to a container.
+        """
+        ser = ApplyAICodeRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+
+        container_model_id = data["container_id"]
+        dest_path = data["dest_path"]
+        clean = data["clean"]
+        content = data["content"]
+
+        if request.user.is_superuser:
+            container_obj = get_object_or_404(Container, pk=container_model_id)
+        else:
+            container_obj = get_object_or_404(
+                Container, pk=container_model_id, user=request.user
+            )
+
+        # TODO: synchronous application.
+        apply_ai_generated_project(
+            container_obj, content, dest_path=dest_path, clean=clean
         )
+
+        audit_log_http(
+            request,
+            action="template.apply",
+            target_type="container",
+            target_id=container_obj.pk,
+            message="AI code applied to container",
+            metadata={
+                "dest_path": dest_path,
+                "clean": clean,
+            },
+            success=True,
+        )
+
+        payload = {
+            "status": "applied",
+            "container": container_obj.pk,
+            "dest_path": dest_path,
+        }
+
+        return Response(ApplyAICodeResponseSerializer(payload).data)

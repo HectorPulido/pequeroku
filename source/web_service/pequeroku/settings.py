@@ -65,7 +65,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "docker_manager",
+    "ai_services",
+    "internal_config",
     "channels",
+    "drf_spectacular",
 ]
 
 ASGI_APPLICATION = "pequeroku.asgi.application"
@@ -126,6 +129,15 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Pequeroku",
+    "DESCRIPTION": "Easy way to share a piece of your machine...",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    # OTHER SETTINGS
 }
 
 

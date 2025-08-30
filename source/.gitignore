@@ -146,3 +146,4 @@ vm_data/vms/*
 
 ignore-*
 out.txt
+.vscode

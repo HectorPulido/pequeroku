@@ -10,3 +10,6 @@ paramiko
 
 celery>=5.4
 redis>=5.0
+openai
+
+drf-spectacular

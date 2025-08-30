@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils.text import slugify
+from django.utils import timezone
 
 
 class Container(models.Model):
@@ -16,26 +17,49 @@ class Container(models.Model):
         return f"{self.user.username} - {self.container_id[:12]}"
 
 
+class AIUsageLog(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ai_usage_logs"
+    )
+    query = models.TextField(blank=True, default="")
+    response = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "created_at"]),
+        ]
+
+
 class ResourceQuota(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="quota",
-        help_text="Cuota de recursos para este usuario",
+        help_text="Resource quota user",
     )
     max_containers = models.PositiveIntegerField(
-        default=1, help_text="Número máximo de contenedores simultáneos"
+        default=1, help_text="Max number of alive containers"
     )
     max_memory_mb = models.PositiveIntegerField(
-        default=256, help_text="Memoria máxima por contenedor en MB"
+        default=256, help_text="Max memory per container MB"
     )
     max_cpu_percent = models.PositiveIntegerField(
-        default=20, help_text="CPU máxima por contenedor (como porcentaje)"
+        default=20, help_text="Max CPU per container VCPU"
     )
+    ai_use_per_day = models.PositiveIntegerField(
+        default=5, help_text="Daily request for the AI"
+    )
+
+    def ai_uses_left_today(self) -> int:
+        today = timezone.now().date()
+        used_today = self.user.ai_usage_logs.filter(created_at__date=today).count()
+        return max(self.ai_use_per_day - used_today, 0)
 
     def __str__(self):
         return f"Quota {self.user.username}: {self.max_containers} \
-            cont., {self.max_memory_mb}MB, {self.max_cpu_percent}% CPU"
+            cont., {self.max_memory_mb}MB, {self.max_cpu_percent} VCPUs \
+            AI: {self.ai_uses_left_today()}/{self.ai_use_per_day}"
 
 
 class FileTemplate(models.Model):
