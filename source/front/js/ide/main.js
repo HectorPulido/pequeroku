@@ -43,6 +43,13 @@ const tplListEl = $("#tpl-list");
 const tplDestEl = $("#tpl-dest");
 const tplCleanEl = $("#tpl-clean");
 
+const btnOpenAi = $("#btn-open-ai-modal");
+const aiModal = $("#ai-modal");
+const btnAiClose = $("#btn-ai-close");
+const aiInput = $("#ai-input");
+const btnAiGenerate = $("#btn-ai-generate");
+const aiCredits = $("#ai-credits");
+
 // ====== State ======
 let currentFilePath = null;
 let runCommand = null;
@@ -113,6 +120,22 @@ function setPath(p) {
 		inputEl: input,
 		uploadBtn: btnUpload,
 		onDone: async () => {
+			await ft.refresh();
+			await hydrateRun();
+		},
+	});
+
+	// Setup AI
+	const { setupAi } = await import("./ai.js");
+	setupAi({
+		openBtn: btnOpenAi,
+		modalEl: aiModal,
+		closeBtn: btnAiClose,
+		inputEl: aiInput,
+		generateBtn: btnAiGenerate,
+		creditsEl: aiCredits,
+		containerId,
+		onApplied: async () => {
 			await ft.refresh();
 			await hydrateRun();
 		},

@@ -161,8 +161,8 @@ export function setupContainers() {
 		document.hidden ? stopPolling() : startPolling();
 	});
 
-
-	addAlert(`
+	addAlert(
+		`
 		<div>
 			<div>
 				<div>📜 <strong>Aviso Importante (Pequeroku) – Español</strong></div>
@@ -186,5 +186,7 @@ export function setupContainers() {
 				<div>7. Use of Pequeroku implies acceptance of these conditions. Any violation may result in immediate suspension of access.</div>
 			</div>
 		</div>
-	`, "warning");
+	`,
+		"warning",
+	);
 }
