@@ -27,7 +27,7 @@
                 </div>
                 <div>
                     <button id="btn-open-templates-modal">Templates</button>
-                    <button id="btn-open-ai-modal">✨ AI</button>
+                    <button id="btn-open-ai-modal">✨</button>
                     <button id="save-file">💾</button>
                     <button id="run-code">Run ▶️</button>
                 </div>
@@ -91,10 +91,14 @@
                         <button id="btn-ai-close" class="top-btn">❌</button>
                     </div>
                     <div class="upload-body" style="display:block; max-height:70vh; overflow:auto;">
+                        <div>
+                            <h3>Describe the app you want to generate...</h3>
+                            <p>Be detailed; do not omit information; share the goal, main flow, key screens, data model, integrations, rules, tech stack. The more specific, the better the code 🚀</p>
+                        </div>
                         <textarea id="ai-input" style="width:100%; min-height:220px;"
                             placeholder="Describe the app you want to generate..."></textarea>
-                        <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-                            <button id="btn-ai-generate">Generate</button>
+                        <div style="display:flex; gap:8px; align-items:center; margin-top:8px; justify-self: self-end;">
+                            <button id="btn-ai-generate">✨ Generate</button>
                             <small id="ai-credits" style="opacity:.8;"></small>
                         </div>
                     </div>

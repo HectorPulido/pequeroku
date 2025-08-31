@@ -8,6 +8,7 @@ body {
 	color: #ddd;
 	display: flex;
 	max-width: 100%;
+	height: 100%;
 }
 
 .sidebar {
@@ -139,6 +140,7 @@ button:hover {
 	align-items: center;
 	justify-content: center;
 	z-index: 1000;
+	color: black;
 }
 
 .upload-container {
