@@ -136,5 +136,5 @@ def apply_ai_generated_project(
 
     # Exec
     cli.exec_command(
-        f"cd {dest_path} && python3 build_from_gencode.py && rm build_from_gencode.py"
+        f"cd {dest_path} && python3 build_from_gencode.py && rm -rf {dest_path}build_from_gencode.py"
     )
