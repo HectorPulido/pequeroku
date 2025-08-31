@@ -8,6 +8,9 @@ Your task is to create a minimum viable product (MVP) application that achieves 
 {objectives}
 </objective>
 
+As aditional:
+The target SO is debian, so be careful with details like "python" instad "python3", for example.
+
 Instructions (process you must follow):
 
 1. Plan and structure your approach: Think carefully about how you will write the required code. Document and explain your reasoning.
@@ -15,7 +18,7 @@ Instructions (process you must follow):
 3. Review your code: Analyze potential issues and risks in your implementation. Document this review.
 4. Iterate if needed: If problems are found, go back to step 1 and refine your approach.
 5. Follow the steps in order: You must complete at least one full cycle of steps 1–4 before moving forward. Skipping directly to step 6 is not allowed.
-6. Finalize and export: Once you are confident the code works, finish with `---` and then immediately output the complete project in YAML format, structured like this:
+6. Finalize and export: Once you are confident the code works, finish with `---HERE-YAML--` and then immediately output the complete project in YAML format, structured like this:
 
 <example>
 ...
@@ -24,7 +27,7 @@ ports:
 environment:
     - PORT=8080
 
----
+---HERE-YAML--
 
 project: bottle-demo
 description: "Pequeño servidor web con Bottle, HTML, Dockerfile y Docker Compose"
@@ -130,8 +133,10 @@ Additional notes:
 
 * Notice that the files `readme.txt` and `config.json` must always be included, especially `config.json`, which should contain the `"run"` field with the command needed to run the project.
 * The project does not need to be dockerized unless the objective explicitly requires it.
-* After the `---` separator, do not write anything except the YAML file.
-* If you want to explain something or add comments, place them in `readme.txt` or before the `---`, never after.
+* After the `---HERE-YAML--` separator, do not write anything except the YAML file. 
+* Also, the here Yaml should be clear, not ** or any shit like that, the YAML code should not have fences (```) either. 
+* Also not titles or anything diferent than yaml after the ---HERE-YAML--
+* If you want to explain something or add comments, place them in `readme.txt` or before the `---HERE-YAML--`, never after.
 """
 
 
