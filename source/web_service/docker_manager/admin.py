@@ -39,7 +39,7 @@ class FileTemplateItemInline(admin.TabularInline):
 
 @admin.register(FileTemplate)
 class FileTemplateAdmin(admin.ModelAdmin):
-    list_display = ("name", "items_count", "updated_at", "created_at")
+    list_display = ("name", "items_count", "updated_at", "public", "created_at")
     search_fields = ("name", "slug", "description", "items__path")
     inlines = [FileTemplateItemInline]
 
