@@ -693,6 +693,13 @@ class FileTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = FileTemplateSerializer
     queryset = FileTemplate.objects.all().order_by("-updated_at")
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_superuser:
+            return qs
+        return qs.filter(public=True)
+
     @action(detail=True, methods=["post"], parser_classes=[JSONParser])
     def apply(self, request, pk=None):
         """
