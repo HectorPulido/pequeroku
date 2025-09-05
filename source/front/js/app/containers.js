@@ -20,6 +20,7 @@ export function setupContainers() {
 
 	let lastSig = null;
 	let pollId = null;
+	let currentUsername = null;
 
 	btnRefresh.addEventListener("click", () => fetchContainers({ lazy: false }));
 	btnFullscreen.addEventListener("click", () => {
@@ -38,6 +39,7 @@ export function setupContainers() {
 			});
 			if (!res.ok) throw new Error(await res.text());
 			const data = await res.json();
+			currentUsername = data.username || null;
 			userData.innerText = `Hello ${data.username?.[0]?.toUpperCase()}${data.username?.slice(1) || ""}!`;
 			quotaInfo.textContent = JSON.stringify(data, null, "\t");
 			if (data.has_quota) {
@@ -53,60 +55,85 @@ export function setupContainers() {
 		}
 	}
 
+	function createCard(c) {
+		const card = document.createElement("div");
+		card.className = "container-card";
+		const isRunning = c.status === "running";
+		card.innerHTML = `
+<h2>${c.id} — ${c.container_id.slice(0, 12)}</h2>
+<small>${c.username}</small> - <small>${new Date(c.created_at).toLocaleString()}</small>
+<p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
+<div>
+  <button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Let's Play</button>
+  <button class="btn-start" ${isRunning ? "hidden" : ""}>▶️ Start</button>
+  <button class="btn-stop" ${!isRunning ? "hidden" : ""}>⏹️ Stop</button>
+  <button class="btn-delete">🗑️ Delete</button>
+</div>`;
+
+		card.querySelector(".btn-edit").onclick = () => openConsole(c.id);
+		card.querySelector(".btn-delete").onclick = () => deleteContainer(c.id);
+		card.querySelector(".btn-start").onclick = async () => {
+			await fetch(`/api/containers/${c.id}/power_on/`, {
+				method: "POST",
+				credentials: "same-origin",
+				headers: { "X-CSRFToken": getCSRF() },
+			});
+			await fetchContainers({ lazy: false });
+		};
+		card.querySelector(".btn-stop").onclick = async () => {
+			await fetch(`/api/containers/${c.id}/power_off/`, {
+				method: "POST",
+				credentials: "same-origin",
+				headers: {
+					"X-CSRFToken": getCSRF(),
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ force: false }),
+			});
+			await fetchContainers({ lazy: false });
+		};
+		return card;
+	}
+
 	async function fetchContainers(opts = { lazy: false }) {
 		try {
+			if (!currentUsername) await fetchUserData();
+
 			const res = await fetch("/api/containers/", {
 				credentials: "same-origin",
 			});
 			if (!res.ok) throw new Error(await res.text());
 			const data = await res.json();
 			const sig = signatureFrom(data);
-			if (opts.lazy && sig === lastSig) return; // no repintar
+			if (opts.lazy && sig === lastSig) return;
 			lastSig = sig;
 
+			const mine = (data || []).filter((c) => c.username === currentUsername);
+			const others = (data || []).filter((c) => c.username !== currentUsername);
+
 			listEl.innerHTML = "";
-			data.forEach((c) => {
-				const card = document.createElement("div");
-				card.className = "container-card";
-				const isRunning = c.status === "running";
-				card.innerHTML = `
-<h2>${c.id} — ${c.container_id.slice(0, 12)}</h2>
-<small>${c.username}</small> - <small>${new Date(c.created_at).toLocaleString()}</small>
-<p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
-<div>
-<button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Let's Play</button>
-<button class="btn-start" ${isRunning ? "hidden" : ""}>▶️ Start</button>
-<button class="btn-stop" ${!isRunning ? "hidden" : ""}>⏹️ Stop</button>
-<button class="btn-delete">🗑️ Delete</button>
-</div>`;
 
-				card.querySelector(".btn-edit").onclick = () => openConsole(c.id);
-				card.querySelector(".btn-delete").onclick = () => deleteContainer(c.id);
-				card.querySelector(".btn-start").onclick = async () => {
-					await fetch(`/api/containers/${c.id}/power_on/`, {
-						method: "POST",
-						credentials: "same-origin",
-						headers: { "X-CSRFToken": getCSRF() },
-					});
-					await fetchContainers({ lazy: false });
-				};
-				card.querySelector(".btn-stop").onclick = async () => {
-					await fetch(`/api/containers/${c.id}/power_off/`, {
-						method: "POST",
-						credentials: "same-origin",
-						headers: {
-							"X-CSRFToken": getCSRF(),
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify({ force: false }),
-					});
-					await fetchContainers({ lazy: false });
-				};
+			if (mine.length) {
+				const h = document.createElement("h3");
+				h.textContent = "Tus contenedores";
+				listEl.appendChild(h);
+				// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
+				mine.forEach((c) => listEl.appendChild(createCard(c)));
+			}
 
-				listEl.appendChild(card);
-			});
+			if (others.length) {
+				const hr = document.createElement("hr");
+				hr.style.margin = "12px 0";
+				listEl.appendChild(hr);
 
-			fetchUserData();
+				const h2 = document.createElement("h3");
+				h2.textContent = "Otros contenedores";
+				listEl.appendChild(h2);
+
+				// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
+				others.forEach((c) => listEl.appendChild(createCard(c)));
+			}
+
 			startPolling();
 		} catch (e) {
 			addAlert(e.message, "error");
