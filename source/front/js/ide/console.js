@@ -31,7 +31,7 @@ export function setupConsole({
 			inputEl.value = "";
 			history.push(v);
 			hIdx = history.length;
-			onSend?.(v);
+			onSend?.(v + "\n");
 		});
 
 		inputEl.addEventListener("keydown", (e) => {
@@ -76,9 +76,10 @@ export function setupConsole({
 	);
 
 	function addLine(text) {
-		if (text !== null && text.trim() !== "") {
-			term.write(text ?? "");
-		}
+		if (text == null) return;
+		let t = String(text).replace(/\r(?!\n)/g, "\n");
+		if (!/\n$/.test(t)) t += "\n";
+		term.write(t);
 	}
 
 	function write(data) {

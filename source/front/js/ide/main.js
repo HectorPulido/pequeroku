@@ -89,17 +89,19 @@ function setPath(p) {
 				} else if (msg.type === "error") {
 					parent.addAlert(msg.message, "error");
 				} else if (msg.type === "log") {
-					if (msg.line instanceof ArrayBuffer) {
-						consoleApi.write(new Uint8Array(msg.line));
-					} else {
-						consoleApi.write(String(msg.line || ""));
-					}
+					let chunk = String(msg.line ?? "");
+					chunk = chunk.replace(/\r(?!\n)/g, "\n");
+					if (!/\n$/.test(chunk)) chunk += "\n";
+					consoleApi.write(chunk);
 				}
 			} catch {
 				if (ev.data instanceof ArrayBuffer) {
 					consoleApi.write(new Uint8Array(ev.data));
 				} else {
-					consoleApi.write(String(ev.data || ""));
+					let text = String(ev.data || "");
+					text = text.replace(/\r(?!\n)/g, "\n");
+					if (!/\n$/.test(text)) text += "\n";
+					consoleApi.write(text);
 				}
 			}
 		},
