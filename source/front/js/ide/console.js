@@ -7,7 +7,6 @@ export function setupConsole({
 	inputEl,
 	ctrlButtons = [],
 	onSend,
-	onResize,
 }) {
 	const history = [];
 	let hIdx = -1;
@@ -27,7 +26,6 @@ export function setupConsole({
 	fitAddon.fit();
 
 	term.onData((data) => onSend?.(data));
-	term.onResize((size) => onResize?.(size));
 
 	if (sendBtn && inputEl) {
 		sendBtn.addEventListener("click", () => {
@@ -75,21 +73,10 @@ export function setupConsole({
 		}),
 	);
 
-	let fitT;
-	window.addEventListener("resize", () => {
-		clearTimeout(fitT);
-		fitT = setTimeout(() => {
-			try {
-				fitAddon.fit();
-				const cols = term.cols,
-					rows = term.rows;
-				onResize?.({ cols, rows });
-			} catch {}
-		}, 100);
-	});
-
 	function addLine(text) {
-		term.writeln(text ?? "");
+		if (text !== null && text.trim() !== ""){
+			term.writeln(text ?? "");
+		}		
 	}
 
 	function write(data) {
@@ -98,10 +85,6 @@ export function setupConsole({
 
 	function fit() {
 		fitAddon.fit();
-	}
-
-	function resizeToServer() {
-		onResize?.({ cols: term.cols, rows: term.rows });
 	}
 
 	return {
