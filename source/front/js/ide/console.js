@@ -53,7 +53,21 @@ export function setupConsole({
 					inputEl.value = "";
 				}
 			}
+			if (e.ctrlKey) {
+				// Ctrl + C
+				if (e.key === "c" || e.key === "C") {
+					e.preventDefault();
+					onSend?.({ action: 'ctrlc' });
+				}
+				// Ctrl + D
+				if (e.key === "d" || e.key === "D") {
+					e.preventDefault();
+					onSend?.({ action: 'ctrld' });
+				}
+			}
 		});
+
+
 	}
 
 	// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
