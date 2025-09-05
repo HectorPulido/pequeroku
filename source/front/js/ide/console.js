@@ -30,7 +30,7 @@ export function setupConsole({
 		sendBtn.addEventListener("click", () => {
 			const v = inputEl.value;
 			inputEl.value = "";
-			if (v) onSend?.(`v\n`);
+			if (v) onSend?.(`${v}\n`);
 		});
 
 		inputEl.addEventListener("keydown", (e) => {
