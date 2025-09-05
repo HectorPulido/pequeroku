@@ -50,6 +50,61 @@ const aiInput = $("#ai-input");
 const btnAiGenerate = $("#btn-ai-generate");
 const aiCredits = $("#ai-credits");
 
+const toggleSidebarBtn = $("#toggle-sidebar");
+const toggleConsoleBtn = $("#toggle-console");
+const consoleArea = $("#console-area");
+const editorModal = $("#editor-modal");
+
+const IS_MOBILE = matchMedia("(max-width: 768px)").matches;
+const LS_SIDEBAR_KEY = `ide:${containerId}:sidebar`;
+const LS_CONSOLE_KEY = `ide:${containerId}:console`;
+
+function applySidebarState(state) {
+	editorModal.classList.toggle("sidebar-collapsed", state !== "open");
+	editorModal.classList.toggle("sidebar-open", state === "open");
+}
+function applyConsoleState(state) {
+	consoleArea.classList.toggle("collapsed", state !== "open");
+}
+
+function getInitialSidebarState() {
+	const saved = localStorage.getItem(LS_SIDEBAR_KEY);
+	if (saved) return saved;
+	return IS_MOBILE ? "collapsed" : "open";
+}
+function getInitialConsoleState() {
+	const saved = localStorage.getItem(LS_CONSOLE_KEY);
+	if (saved) return saved;
+	return IS_MOBILE ? "collapsed" : "open";
+}
+
+function toggleSidebar() {
+	const _collapsed =
+		editorModal.classList.contains("sidebar-open") &&
+		!editorModal.classList.contains("sidebar-collapsed");
+	const next = _collapsed ? "collapsed" : "open";
+	localStorage.setItem(LS_SIDEBAR_KEY, next);
+	applySidebarState(next);
+}
+
+function toggleConsole() {
+	const _collapsed = consoleArea.classList.contains("collapsed");
+	const next = _collapsed ? "open" : "collapsed";
+	localStorage.setItem(LS_CONSOLE_KEY, next);
+	applyConsoleState(next);
+	try {
+		consoleApi?.fit?.();
+	} catch {}
+}
+
+// ====== INIT ======
+applySidebarState(getInitialSidebarState());
+applyConsoleState(getInitialConsoleState());
+
+// ====== Listeners ======
+toggleSidebarBtn.addEventListener("click", toggleSidebar);
+toggleConsoleBtn.addEventListener("click", toggleConsole);
+
 // ====== State ======
 let currentFilePath = null;
 let runCommand = null;
@@ -104,12 +159,9 @@ function setPath(p) {
 		},
 		onClose: () => {
 			consoleApi.addLine("[disconnected]");
-			wsRef = null;
 		},
 		onError: () => parent.addAlert("WebSocket error", "error"),
 	});
-
-	consoleApi.onSend = Object.assign(() => {}, { ws });
 
 	// restart container
 	restartContainerBtn.addEventListener("click", async () => {

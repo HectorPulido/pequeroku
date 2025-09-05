@@ -1,3 +1,5 @@
+import { escapeHtml } from "./dom.js";
+
 export function addAlert(message, type = "info") {
 	const randomId = Math.floor(Math.random() * 1_000_000);
 	const alertBox = document.getElementById("alert-box") || document.body;
@@ -6,7 +8,7 @@ export function addAlert(message, type = "info") {
 	wrapper.id = `alert-${randomId}`;
 	wrapper.style.opacity = "0";
 	wrapper.innerHTML = `
-${message}
+${escapeHtml(message)}
 <span class="closebtn" id="alert-button-${randomId}">&times;</span>
 `;
 	alertBox.appendChild(wrapper);

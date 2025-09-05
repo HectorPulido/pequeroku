@@ -2,6 +2,10 @@ import { addAlert } from "../core/alerts.js";
 import { getCSRF } from "../core/csrf.js";
 import { signatureFrom } from "../core/utils.js";
 
+function isSmallScreen() {
+	return matchMedia("(max-width: 768px)").matches;
+}
+
 export function setupContainers() {
 	let current_id = "";
 	const listEl = document.getElementById("container-list");
@@ -19,7 +23,8 @@ export function setupContainers() {
 
 	btnRefresh.addEventListener("click", () => fetchContainers({ lazy: false }));
 	btnFullscreen.addEventListener("click", () => {
-		if (current_id) open(`/ide/?containerId=${current_id}`);
+		if (current_id)
+			open(`/ide/?containerId=${current_id}`, "_blank", "noopener,noreferrer");
 	});
 	btnClose.addEventListener("click", closeConsole);
 	btnCreate.addEventListener("click", createContainer);
@@ -138,6 +143,10 @@ export function setupContainers() {
 
 	function openConsole(id) {
 		current_id = id;
+		if (isSmallScreen()) {
+			open(`/ide/?containerId=${id}`, "_blank", "noopener,noreferrer");
+			return;
+		}
 		modal.classList.remove("hidden");
 		modalBody.innerHTML = `<iframe src="/ide/?containerId=${id}" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
 	}

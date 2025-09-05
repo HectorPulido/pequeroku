@@ -25,6 +25,7 @@
         <div class="main">
             <div class="toolbar">
                 <div>
+                    <button id="toggle-sidebar" title="Toggle sidebar">☰</button>
                     <span id="current_path_label"></span>
                 </div>
                 <div>
@@ -32,21 +33,24 @@
                     <button id="btn-open-ai-modal">✨</button>
                     <button id="save-file">💾</button>
                     <button id="run-code">Run ▶️</button>
+                    <button id="toggle-console" title="Toggle console">🖥️</button>
                 </div>
             </div>
             <wc-monaco-editor id="editor" language="python" theme="vs-dark" word-wrap="true"></wc-monaco-editor>
-            <div class="console" id="console-log"></div>
-            <div class="toolbar">
-                <input type="text" id="console-cmd" class="console-input" placeholder="bash command..." />
-                <button id="send-cmd">Send</button>
 
-                <div class="dropdown">
-                    <button class="last-button">🔽</button>
-                    <div class="dropdown-content">
-                        <button class="btn-send" param="ctrld">Ctrl+D</button>
-                        <button class="btn-send" param="ctrlc">Ctrl+C</button>
-                        <button class="btn-send" param="clear">Clear</button>
-                        <button id="restart-container">Reload console</button>
+            <div class="console-area" id="console-area">
+                <div class="console" id="console-log"></div>
+                <div class="toolbar console-toolbar">
+                    <input type="text" id="console-cmd" class="console-input" placeholder="bash command..." />
+                    <button id="send-cmd">Send</button>
+                    <div class="dropdown">
+                        <button class="last-button">🔽</button>
+                        <div class="dropdown-content">
+                            <button class="btn-send" param="ctrld">Ctrl+D</button>
+                            <button class="btn-send" param="ctrlc">Ctrl+C</button>
+                            <button class="btn-send" param="clear">Clear</button>
+                            <button id="restart-container">Reload console</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -95,7 +99,8 @@
                     <div class="upload-body" style="display:block; max-height:70vh; overflow:auto;">
                         <div>
                             <h3>Describe the app you want to generate...</h3>
-                            <p>Be detailed; do not omit information; share the goal, main flow, key screens, data model, integrations, rules, tech stack. The more specific, the better the code 🚀</p>
+                            <p>Be detailed; do not omit information; share the goal, main flow, key screens, data model,
+                                integrations, rules, tech stack. The more specific, the better the code 🚀</p>
                         </div>
                         <textarea id="ai-input" style="width:100%; min-height:220px;"
                             placeholder="Describe the app you want to generate..."></textarea>
