@@ -2,7 +2,7 @@ import { makeApi } from "../core/api.js";
 import { getCSRF } from "../core/csrf.js";
 import { $, $$ } from "../core/dom.js";
 import { installGlobalLoader } from "../core/loader.js";
-import { attachViewportListeners, setVhVar } from "../shared/viewport.js";
+// import { attachViewportListeners, setVhVar } from "../shared/viewport.js";
 import { setupConsole } from "./console.js";
 import { openFile as openFileIntoEditor } from "./editor.js";
 import { setupFileTree } from "./files.js";
@@ -11,8 +11,6 @@ import { setupUploads } from "./uploads.js";
 import { createWS } from "./websockets.js";
 
 installGlobalLoader();
-setVhVar();
-attachViewportListeners();
 
 // ====== CONFIG ======
 const urlParams = new URLSearchParams(window.location.search);
@@ -60,8 +58,56 @@ const consoleArea = $("#console-area");
 const editorModal = $("#editor-modal");
 
 const IS_MOBILE = matchMedia("(max-width: 768px)").matches;
-const LS_SIDEBAR_KEY = `ide:${containerId}:sidebar`;
-const LS_CONSOLE_KEY = `ide:${containerId}:console`;
+const topToolbar = document.querySelector(".main .toolbar");
+const bottomToolbar = document.querySelector(".console-toolbar");
+const editorHost = document.getElementById("editor");
+let _relayoutTimer = null;
+
+function relayoutEditorAndConsole() {
+	if (_relayoutTimer) cancelAnimationFrame(_relayoutTimer);
+	_relayoutTimer = requestAnimationFrame(() => {
+		try {
+			const me = editorHost?.editor;
+			if (me) {
+				const r = editorHost.getBoundingClientRect();
+				me.layout({ width: (r.width | 0), height: (r.height | 0) });
+			}
+		} catch { }
+		try { consoleApi?.fit?.(); } catch { }
+	});
+}
+
+// mide alturas visibles (con safe areas aplicadas) y guarda en CSS vars
+function measureBars() {
+	const root = document.documentElement.style;
+	// Si la consola está colapsada, su barra no debe reservar espacio
+	const consoleCollapsed = document.getElementById("console-area")?.classList.contains("collapsed");
+	const topH = topToolbar ? Math.ceil(topToolbar.getBoundingClientRect().height) : 0;
+	const bottomH = (bottomToolbar && !consoleCollapsed)
+		? Math.ceil(bottomToolbar.getBoundingClientRect().height)
+		: 0;
+	root.setProperty("--topbar-h", `${topH}px`);
+	root.setProperty("--bottombar-h", `${bottomH}px`);
+	relayoutEditorAndConsole();
+}
+
+// Ajuste de vh var (fallback) + listeners de viewport real (iOS/Android)
+function setVhVar() {
+	const vh = (window.visualViewport?.height ?? window.innerHeight) * 0.01;
+	document.documentElement.style.setProperty("--vh", `${vh}px`);
+}
+function attachViewportListeners() {
+	const onVV = () => { setVhVar(); measureBars(); };
+	window.addEventListener("resize", onVV);
+	window.addEventListener("orientationchange", onVV);
+	if (window.visualViewport) {
+		window.visualViewport.addEventListener("resize", onVV);
+		window.visualViewport.addEventListener("scroll", onVV); // iOS mueve viewport al abrir teclado
+	}
+}
+
+setVhVar();
+attachViewportListeners();
 
 function applySidebarState(state) {
 	editorModal.classList.toggle("sidebar-collapsed", state !== "open");
@@ -98,7 +144,7 @@ function toggleConsole() {
 	applyConsoleState(next);
 	try {
 		consoleApi?.fit?.();
-	} catch {}
+	} catch { }
 }
 
 // ====== INIT ======
@@ -330,6 +376,6 @@ function setPath(p) {
 	window.addEventListener("beforeunload", () => {
 		try {
 			ws.close(1000, "bye");
-		} catch {}
+		} catch { }
 	});
 })();
