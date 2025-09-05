@@ -75,6 +75,7 @@ export function setupConsole({
 		btn.addEventListener("click", () => {
 			const p = btn.getAttribute("param");
 			onSend?.({ action: p });
+			console.log("executing:", { action: p })
 		}),
 	);
 
