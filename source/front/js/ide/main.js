@@ -89,7 +89,11 @@ function setPath(p) {
 				} else if (msg.type === "error") {
 					parent.addAlert(msg.message, "error");
 				} else if (msg.type === "log") {
-					consoleApi.addLine(msg.line);
+					if (msg.line instanceof ArrayBuffer) {
+						consoleApi.write(new Uint8Array(msg.line));
+					} else {
+						consoleApi.write(String(msg.line || ""));
+					}
 				}
 			} catch {
 				if (ev.data instanceof ArrayBuffer) {
@@ -106,7 +110,7 @@ function setPath(p) {
 		onError: () => parent.addAlert("WebSocket error", "error"),
 	});
 
-	consoleApi.onSend = Object.assign(() => {}, { ws });
+	consoleApi.onSend = Object.assign(() => { }, { ws });
 
 	// restart container
 	restartContainerBtn.addEventListener("click", async () => {
@@ -270,6 +274,6 @@ function setPath(p) {
 	window.addEventListener("beforeunload", () => {
 		try {
 			ws.close(1000, "bye");
-		} catch {}
+		} catch { }
 	});
 })();
