@@ -15,10 +15,10 @@
     <div id="editor-modal">
         <div class="sidebar">
             <div>
-                <button id="refresh-tree">🔄</button>
-                <button id="new-folder">📂</button>
-                <button id="new-file">📄</button>
-                <button id="btn-open-upload-modal">Upload file</button>
+                <button id="refresh-tree" title="Reload">🔄</button>
+                <button id="new-folder" title="Create Folder">📂</button>
+                <button id="new-file" title="Create file">📄</button>
+                <button id="btn-open-upload-modal" title="Upload file">⬆</button>
                 <button id="toggle-sidebar-2" class="hidden-big" title="Toggle sidebar">☰</button>
             </div>
             <ul id="file-tree"></ul>
@@ -30,11 +30,11 @@
                     <span id="current_path_label"></span>
                 </div>
                 <div>
-                    <button id="btn-open-templates-modal">Templates</button>
-                    <button id="btn-open-ai-modal">✨</button>
-                    <button id="save-file">💾</button>
-                    <button id="run-code">Run ▶️</button>
+                    <button id="btn-open-templates-modal" title="Templates">Templates</button>
+                    <button id="btn-open-ai-modal" title="AI Features">✨</button>
+                    <button id="save-file" title="Save file">💾</button>
                     <button id="toggle-console" title="Toggle console">🖥️</button>
+                    <button id="run-code" title="Run">Run ▶️</button>
                 </div>
             </div>
             <wc-monaco-editor id="editor" language="python" theme="vs-dark" word-wrap="true"></wc-monaco-editor>
