@@ -68,33 +68,62 @@ function setPath(p) {
 		}),
 	);
 
+	let wsRef = null;
+
 	const consoleApi = setupConsole({
 		consoleEl,
 		sendBtn: sendCMDBtn,
 		inputEl: consoleCMD,
 		ctrlButtons: $$(".btn-send"),
-		onSend: (payload) => ws.send(payload),
+		onSend: (payload) => {
+			wsRef?.send(JSON.stringify(payload));
+		},
+		onResize: ({ cols, rows }) => {
+			wsRef?.send(JSON.stringify({ type: "resize", cols, rows }));
+		},
 	});
 
 	const ws = createWS(containerId, {
 		onOpen: () => {
+			wsRef = ws;
 			consoleApi.addLine("[connected]");
+			setTimeout(() => {
+				try {
+					consoleApi.fit();
+					consoleApi.resizeToServer();
+				} catch {}
+			}, 0);
 		},
 		onMessage: (ev) => {
 			try {
 				const msg = JSON.parse(ev.data);
-				if (msg.type === "log") consoleApi.addLine(msg.line);
-				else if (msg.type === "clear") consoleEl.innerHTML = "";
-				else if (msg.type === "info")
+				if (msg.type === "output") {
+					consoleApi.write(msg.data);
+				} else if (msg.type === "clear") {
+					consoleApi.clear();
+				} else if (msg.type === "info") {
 					consoleApi.addLine(`[info] ${msg.message}`);
-				else if (msg.type === "error") parent.addAlert(msg.message, "error");
+				} else if (msg.type === "error") {
+					parent.addAlert(msg.message, "error");
+				} else if (msg.type === "log") {
+					consoleApi.addLine(msg.line);
+				}
 			} catch {
-				consoleApi.addLine(String(ev.data || ""));
+				if (ev.data instanceof ArrayBuffer) {
+					consoleApi.write(new Uint8Array(ev.data));
+				} else {
+					consoleApi.write(String(ev.data || ""));
+				}
 			}
 		},
-		onClose: () => consoleApi.addLine("[disconnected]"),
+		onClose: () => {
+			consoleApi.addLine("[disconnected]");
+			wsRef = null;
+		},
 		onError: () => parent.addAlert("WebSocket error", "error"),
 	});
+
+	consoleApi.onSend = Object.assign(() => {}, { ws });
 
 	// restart container
 	restartContainerBtn.addEventListener("click", async () => {

@@ -1,4 +1,6 @@
-import { ansiToHtml } from "../shared/ansi.js";
+import "https://esm.sh/xterm@5.5.0/css/xterm.css";
+import { Terminal } from "https://esm.sh/xterm@5.5.0";
+import { FitAddon } from "https://esm.sh/xterm-addon-fit@0.9.0";
 
 export function setupConsole({
 	consoleEl,
@@ -6,55 +8,112 @@ export function setupConsole({
 	inputEl,
 	ctrlButtons = [],
 	onSend,
+	onResize,
 }) {
-	const history = [];
-	let hIdx = -1;
+	const term = new Terminal({
+		cursorBlink: true,
+		scrollback: 5000,
+		convertEol: false,
+		fontFamily:
+			'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+		fontSize: 13,
+		theme: { background: "#111111" },
+	});
+	const fitAddon = new FitAddon();
+	term.loadAddon(fitAddon);
+	term.open(consoleEl);
+	fitAddon.fit();
 
-	function addLine(raw) {
-		const html = ansiToHtml(raw);
-		const lines = html.split(/\n/);
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (line === "" && i === lines.length - 1) break;
-			consoleEl.insertAdjacentHTML("beforeend", `<div>${line}</div>`);
+	const pending = [];
+	let sending = false;
+	const CHUNK = 64 * 1024; // 64KB
+
+	async function sendBuffered(data) {
+		if (!data) return;
+		for (let i = 0; i < data.length; i += CHUNK) {
+			pending.push(data.slice(i, i + CHUNK));
 		}
-		consoleEl.scrollTop = consoleEl.scrollHeight;
+		if (!sending) {
+			sending = true;
+			while (pending.length) {
+				const chunk = pending.shift();
+				onSend?.({ type: "input", data: chunk });
+				const UMBRAL = 512 * 1024;
+				while (
+					typeof onSend.ws?.bufferedAmount === "number" &&
+					onSend.ws.bufferedAmount > UMBRAL
+				) {
+					await new Promise((r) => setTimeout(r, 10));
+				}
+			}
+			sending = false;
+		}
 	}
 
-	sendBtn.addEventListener("click", () => {
-		const v = inputEl.value;
-		inputEl.value = "";
-		history.push(v);
-		hIdx = history.length;
-		onSend?.(v);
-	});
-	inputEl.addEventListener("keydown", (e) => {
-		if (e.key === "Enter") {
-			e.preventDefault();
-			sendBtn.click();
-		}
-		if (e.key === "ArrowUp") {
-			e.preventDefault();
-			if (hIdx > 0) inputEl.value = history[--hIdx] || "";
-		}
-		if (e.key === "ArrowDown") {
-			e.preventDefault();
-			if (hIdx < history.length - 1) inputEl.value = history[++hIdx] || "";
-			else {
-				hIdx = history.length;
-				inputEl.value = "";
-			}
-		}
-	});
+	term.onData((data) => sendBuffered(data));
+	term.onResize((size) => onResize?.(size));
 
-	// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
-	ctrlButtons.forEach((btn) =>
+	if (sendBtn && inputEl) {
+		sendBtn.addEventListener("click", () => {
+			const v = inputEl.value;
+			inputEl.value = "";
+			if (v) sendBuffered(`v\n`);
+		});
+		inputEl.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				sendBtn.click();
+			}
+		});
+	}
+
+	// Ctrl-buttons
+	ctrlButtons.forEach((btn) => {
 		btn.addEventListener("click", () => {
 			const p = btn.getAttribute("param");
-			if (p === "ctrlc" || p === "ctrld" || p === "clear")
-				onSend?.({ action: p });
-		}),
-	);
+			if (p === "ctrlc")
+				sendBuffered("\x03"); // ETX
+			else if (p === "ctrld")
+				sendBuffered("\x04"); // EOT
+			else if (p === "clear") term.clear();
+		});
+	});
 
-	return { addLine };
+	let fitT;
+	window.addEventListener("resize", () => {
+		clearTimeout(fitT);
+		fitT = setTimeout(() => {
+			try {
+				fitAddon.fit();
+				const cols = term.cols,
+					rows = term.rows;
+				onResize?.({ cols, rows });
+			} catch {}
+		}, 100);
+	});
+
+	function addLine(text) {
+		term.writeln(text ?? "");
+	}
+
+	function write(data) {
+		term.write(typeof data === "string" ? data : new Uint8Array(data));
+	}
+
+	function fit() {
+		fitAddon.fit();
+	}
+
+	function resizeToServer() {
+		onResize?.({ cols: term.cols, rows: term.rows });
+	}
+
+	return {
+		term,
+		addLine,
+		write,
+		clear: () => term.clear(),
+		fit,
+		resizeToServer,
+	};
 }
