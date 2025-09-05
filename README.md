@@ -1,27 +1,12 @@
-# PequeRoku
+# Pequeroku
 
-Welcome to **PequeRoku**, your 🎯 go-to MicroVM management platform! Built with Django, QEMU, Docker, Redis, and Nginx, PequeRoku puts the power of containers at your fingertips with a fun and simple SPA frontend. 
-
-![brief animation on how the platform works](img/demo.gif)
-
-
-## 📚 Table of Contents
-
-1. [💡 Motivation](#-motivation)
-2. [💾 TODO](#-todo)
-3. [✨ Features](#-features)
-4. [🚀 Services](#-services)
-5. [🔧 Prerequisites](#-prerequisites)
-6. [⚡ Getting Started](#-getting-started)
-7. [🎮 Usage](#-usage)
-8. [📂 Project Structure](#-project-structure)
-9. [🤝 Contributing](#-contributing)
-10. [📜 License](#license)
-
+Welcome to **Pequeroku**, your 🎯 go-to MicroVM management platform! Built with Django, QEMU, Docker, Redis, and Nginx, Pequeroku puts the power of containers at your fingertips with a fun and simple SPA frontend. 
 
 
 ## 💡 Motivation
 This project was created to give community members a slice of my servers where they can experiment, learn, and innovate in an isolated environment.
+
+![brief animation on how the platform works](img/demo.gif)
 
 
 ## ✨ Features
@@ -35,13 +20,9 @@ This project was created to give community members a slice of my servers where t
 * 🔗 **RESTful API**: Automate everything programmatically! 
 * 🖥️ **SPA Frontend**: Fast, snappy single-page app written in vanilla JavaScript. 
 * 🌐 **Reverse Proxy**: Nginx for static assets + API proxying—rock-solid performance! 
-
-
-## 💾 Todo
-* Guides and Tips
-* Multiples instances
-* More container management
-
+* 🤖 **AI CAPABILITIES**: Agentic mode to generate projects
+* 📱 **Mobile compatible**: Responsive UI perfect for phones
+* 🥨 **Template system**: Pequeroku comes with a robuts system to generate templates, super useful for rapid iteration or for learning
 
 
 ## 🚀 Services
@@ -53,7 +34,6 @@ Configured in `docker-compose.yaml`:
 * **nginx**: Nginx latest 🌐 (serves SPA + proxies API)
 
 All on network: `pequeroku-net` 🔗
-
 
 
 ## 🔧 Prerequisites
@@ -226,68 +206,26 @@ docker-compose build
 docker-compose up -d
 ```
 
-* 🔍 Visit `http://localhost` to explore PequeRoku!
+* 🔍 Visit `http://localhost` to explore Pequeroku!
 * 🔐 Admin: `http://localhost/admin/`
 
-On the admin add Templates, and Quotas
-
+On the admin add Templates, User, Quotas and Configs
 
 ## 🎮 Usage
 
-### 🌐 Web Interface
+When you are ready now you can create new container, each container is a complete Debian setup where you can break things on a super secure manner, for example, here I created a discord server super easy:
 
-1. 🔑 **Login** with your Django account.
-2. 📊 **Dashboard** shows your container usage & quotas.
-3. ➕ **Create Container** to spin up a fresh Ubuntu shell.
-4. 🖥️ **Console** opens a live terminal—run commands & see logs.
-5. 📤 **File Upload** to push files into your container.
+![brief animation on how create a discord server on Pequeroku](img/DiscordExample.gif)
 
-### 📡 API Endpoints
+Also Pequeroku is ready to get request from phones by design
 
-| 🔧 Method | 📍 Path                                   | 📖 Description                        |
-| -------- | ------- | -------- |
-| POST      | `/api/login/`                             | User login                            |
-| POST      | `/api/logout/`                            | User logout                           |
-| GET       | `/api/user_data/`                         | Fetch user info & quotas              |
-| GET       | `/api/containers/`                        | List your containers                  |
-| POST      | `/api/containers/`                        | Launch a new container                |
-| DELETE    | `/api/containers/{id}/`                   | Stop & remove container               |
-| POST      | `/api/containers/{id}/send_command/`      | Send shell command                    |
-| GET       | `/api/containers/{id}/read_logs/`         | Get container logs                    |
-| POST      | `/api/containers/{id}/restart_container/` | Restart shell session (not container) |
-| POST      | `/api/containers/{id}/upload_file/`       | Upload file inside container          |
-
-> All API calls require CSRF & session auth—stay secure! 🔒
+![Pequeroku demo on a phone](img/Mobile.gif)
 
 
+## 🤖 AI Features
 
-## 📂 Project Structure
-
-```
-.
-├── docker-compose.yaml
-├── Dockerfile
-├── entrypoint.sh
-├── front/             # SPA assets (HTML, CSS, JS)
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js
-├── nginx/             # Nginx config
-│   └── default.conf
-├── pequeroku/         # Django project core
-│   ├── settings.py
-│   ├── urls.py
-│   ├── wsgi.py
-│   └── asgi.py
-└── docker_manager/    # Container management app
-    ├── models.py
-    ├── views.py
-    ├── serializers.py
-    ├── session.py
-    ├── urls.py
-    └── admin.py
-```
-
+Pequeroku is capable to generate complete projects from scratch using OpenAI compatible services. More ways to use the AI comming soon...
+![brief animation on how the AI part works](img/AI.gif)
 
 
 ## 🤝 Contributing
