@@ -129,7 +129,7 @@ wc-monaco-editor#editor {
 	padding: 4px;
 }
 
-.toolbar>div {
+.toolbar > div {
 	/* Both sides of the toolbar can wrap and not force width */
 	display: flex;
 	align-items: center;
@@ -251,158 +251,8 @@ wc-monaco-editor#editor {
 #editor-modal.sidebar-collapsed .sidebar {
 	display: none;
 }
-
 @media (max-width: 768px) {
 	#editor-modal.sidebar-collapsed .sidebar {
 		transform: translateX(-100%);
 	}
-}
-
-
-/* ===== Vars para alturas medidas en runtime ===== */
-:root {
-	--topbar-h: 44px;
-	/* fallback */
-	--bottombar-h: 40px;
-	/* fallback */
-	--safe-top: env(safe-area-inset-top, 0px);
-	--safe-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-/* Viewport real sin scroll horizontal */
-html,
-body {
-	height: 100%;
-	overflow: hidden;
-}
-
-/* Base: usa dynamic vh si existe; sino caemos a 100vh */
-#editor-modal {
-	width: 100vw;
-	height: 100vh;
-	display: flex;
-	overflow: hidden;
-	background: #1e1e1e;
-}
-
-@supports (height: 100dvh) {
-	#editor-modal {
-		height: 100dvh;
-	}
-}
-
-@supports (height: 100svh) {
-	#editor-modal {
-		height: 100svh;
-	}
-}
-
-.main {
-	flex: 1 1 auto;
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	max-width: 100%;
-	/* reservamos espacio para barras medida en JS */
-	padding-top: var(--topbar-h);
-	padding-bottom: var(--bottombar-h);
-}
-
-wc-monaco-editor#editor {
-	flex: 1 1 auto;
-	min-width: 0;
-	min-height: 0;
-}
-
-/* ===== Desktop (sin cambios visuales importantes) ===== */
-@media (min-width: 769px) {
-	.toolbar {
-		position: sticky;
-		top: 0;
-		z-index: 10;
-	}
-
-	.console-toolbar {
-		position: sticky;
-		bottom: 0;
-		z-index: 10;
-	}
-}
-
-/* ===== Mobile: barras FIXED (para que no queden debajo de la UI del SO) ===== */
-@media (max-width: 768px) {
-
-	/* Topbar fija, respeta notch */
-	.toolbar:first-of-type {
-		position: fixed;
-		top: var(--safe-top);
-		left: 0;
-		right: 0;
-		z-index: 30;
-	}
-
-	/* Bottombar de consola fija, por encima de la barra del SO */
-	.console-toolbar {
-		position: fixed;
-		bottom: calc(0px + var(--safe-bottom));
-		left: 0;
-		right: 0;
-		z-index: 30;
-	}
-
-	/* Sidebar tipo drawer como ya tenías */
-	.sidebar {
-		position: fixed;
-		top: 0;
-		left: 0;
-		bottom: 0;
-		transform: translateX(-100%);
-		transition: transform .25s ease;
-		width: 80vw;
-		max-width: 320px;
-		z-index: 40;
-		overflow-y: auto;
-	}
-
-	#editor-modal.sidebar-open .sidebar {
-		transform: translateX(0);
-	}
-
-	/* Consola visible ocupa ~1/3; el padding-bottom de .main evita que quede oculta */
-	.console {
-		height: 32svh;
-	}
-}
-
-/* Colapsos */
-#editor-modal.sidebar-collapsed .sidebar {
-	display: none;
-}
-
-.console-area.collapsed {
-	display: none;
-}
-
-/* Anti-overflow de toolbars */
-.toolbar {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 6px;
-	flex-wrap: wrap;
-}
-
-.toolbar>div {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex-wrap: wrap;
-	min-width: 0;
-}
-
-#current_path_label {
-	max-width: 60vw;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
