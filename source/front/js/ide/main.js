@@ -90,8 +90,7 @@ function setPath(p) {
 					parent.addAlert(msg.message, "error");
 				} else if (msg.type === "log") {
 					let chunk = String(msg.line ?? "");
-					chunk = chunk.replace(/\r(?!\n)/g, "\n");
-					if (!/\n$/.test(chunk)) chunk += "\n";
+					chunk = chunk.replace(/\r(?!\n)/g, "\r\n");
 					consoleApi.write(chunk);
 				}
 			} catch {
@@ -99,8 +98,7 @@ function setPath(p) {
 					consoleApi.write(new Uint8Array(ev.data));
 				} else {
 					let text = String(ev.data || "");
-					text = text.replace(/\r(?!\n)/g, "\n");
-					if (!/\n$/.test(text)) text += "\n";
+					text = text.replace(/\r(?!\n)/g, "\r\n");
 					consoleApi.write(text);
 				}
 			}
