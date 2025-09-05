@@ -75,18 +75,7 @@ function setPath(p) {
 		ctrlButtons: $$(".btn-send"),
 		onSend: (data) => {
 			if (!ws) return;
-			const UMBRAL = 512 * 1024;
-			const sendRaw = () => ws.send(data);
-			if (ws.bufferedAmount > UMBRAL) {
-				const t = setInterval(() => {
-					if (ws.bufferedAmount <= UMBRAL) {
-						clearInterval(t);
-						sendRaw();
-					}
-				}, 10);
-			} else {
-				sendRaw();
-			}
+			ws.send(data);
 		},
 	});
 
