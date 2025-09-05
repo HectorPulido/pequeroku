@@ -28,7 +28,7 @@ export function setupAi({
 	// Open/close modal
 	openBtn.addEventListener("click", () => {
 		modalEl.classList.remove("hidden");
-		if (!inputEl.placeholder?.trim()) inputEl.placeholder = DEFAULT_PROMPT;
+		inputEl.placeholder = DEFAULT_PROMPT;
 		inputEl.focus();
 	});
 	closeBtn.addEventListener("click", () => modalEl.classList.add("hidden"));
