@@ -246,6 +246,11 @@ wc-monaco-editor#editor {
 		height: 32vh;
 		/* when visible, ~1/3 of screen */
 	}
+
+	.console-area {
+		position: sticky;
+		bottom: 0;
+	}
 }
 
 #editor-modal.sidebar-collapsed .sidebar {
@@ -260,11 +265,11 @@ wc-monaco-editor#editor {
 
 
 .full-viewport-height {
-  height: 100vh !important;
+	height: 100vh !important;
 }
 
 @supports (height: 100dvh) {
-  .full-viewport-height {
-    height: 100dvh !important;
-  }
+	.full-viewport-height {
+		height: 100dvh !important;
+	}
 }
