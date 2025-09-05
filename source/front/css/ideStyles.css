@@ -101,6 +101,10 @@ wc-monaco-editor#editor {
 	display: none;
 }
 
+.console-input {
+	flex: 1;
+}
+
 /* ===== Sidebar (collapsible / off-canvas on mobile) ===== */
 .sidebar {
 	min-width: 200px;
