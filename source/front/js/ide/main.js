@@ -2,6 +2,7 @@ import { makeApi } from "../core/api.js";
 import { getCSRF } from "../core/csrf.js";
 import { $, $$ } from "../core/dom.js";
 import { installGlobalLoader } from "../core/loader.js";
+import { attachViewportListeners, setVhVar } from "../shared/viewport.js";
 import { setupConsole } from "./console.js";
 import { openFile as openFileIntoEditor } from "./editor.js";
 import { setupFileTree } from "./files.js";
@@ -10,6 +11,8 @@ import { setupUploads } from "./uploads.js";
 import { createWS } from "./websockets.js";
 
 installGlobalLoader();
+setVhVar();
+attachViewportListeners();
 
 // ====== CONFIG ======
 const urlParams = new URLSearchParams(window.location.search);

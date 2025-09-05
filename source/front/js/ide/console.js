@@ -64,6 +64,14 @@ export function setupConsole({
 				}
 			}
 		});
+
+		inputEl.addEventListener("focus", () => {
+			setTimeout(() => {
+				try {
+					consoleCMD.scrollIntoView({ block: "nearest", behavior: "smooth" });
+				} catch {}
+			}, 50);
+		});
 	}
 
 	// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct

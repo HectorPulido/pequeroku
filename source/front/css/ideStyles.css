@@ -256,3 +256,150 @@ wc-monaco-editor#editor {
 		transform: translateX(-100%);
 	}
 }
+
+/* ===== Safe areas + viewport units cross-browser ===== */
+:root {
+	/* iOS: env() es el estándar (constant() es legacy) */
+	--safe-top: env(safe-area-inset-top);
+	--safe-bottom: env(safe-area-inset-bottom);
+}
+
+/* base del documento del IDE: sin scroll lateral y respetando safe areas */
+html,
+body {
+	height: 100%;
+	overflow: hidden;
+	background: #1e1e1e;
+}
+
+/* Capa 1: fallback a 100vh (peor caso) */
+#editor-modal {
+	width: 100vw;
+	height: 100vh;
+	padding-top: var(--safe-top);
+	padding-bottom: var(--safe-bottom);
+	display: flex;
+	overflow: hidden;
+}
+
+/* Capa 2: si el navegador soporta 100svh (small viewport height) */
+@supports (height: 100svh) {
+	#editor-modal {
+		height: 100svh;
+	}
+}
+
+/* Capa 3: si soporta 100dvh (dynamic viewport height, ideal iOS/Android modernos) */
+@supports (height: 100dvh) {
+	#editor-modal {
+		height: 100dvh;
+	}
+}
+
+/* El panel principal debe poder encogerse para no empujar fuera de pantalla */
+.main {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	max-width: 100%;
+}
+
+/* Toolbars visibles: pegadas arriba, encima del contenido, respetando notch */
+.toolbar {
+	position: sticky;
+	top: 0; /* se respeta el padding-top del contenedor con safe-area */
+	z-index: 20;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+/* El label del path no empuja los botones */
+.toolbar > div {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+#current_path_label {
+	max-width: 60vw;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Editor ocupa el espacio restante real */
+wc-monaco-editor#editor {
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+
+/* Consola agrupada; la barra de la consola se queda pegada al fondo visible */
+.console-area {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.console-area.collapsed {
+	display: none;
+}
+
+/* consola en sí */
+.console {
+	background: #111;
+	color: #eee;
+	padding: 4px;
+	overflow-y: auto;
+	font-family: monospace;
+	white-space: pre-wrap;
+	height: 150px; /* desktop; en móvil ajusta con 32vh/svh si quieres */
+	min-width: 0;
+}
+
+/* barra inferior de consola SIEMPRE visible y por encima de la barra del navegador */
+.console-toolbar {
+	position: sticky;
+	bottom: 0;
+	z-index: 25;
+	padding-bottom: max(4px, var(--safe-bottom));
+	background: #2d2d2d;
+}
+
+/* Sidebar colapsada en desktop: la quitamos del flujo sin dejar hueco */
+#editor-modal.sidebar-collapsed .sidebar {
+	display: none;
+}
+
+/* ===== Mobile: drawer para sidebar y alturas realistas ===== */
+@media (max-width: 768px) {
+	#editor-modal {
+		flex-direction: column;
+	}
+
+	.sidebar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		bottom: 0; /* respeta safe bottom vía padding del contenedor */
+		transform: translateX(-100%);
+		transition: transform 0.25s ease;
+		width: 80vw;
+		max-width: 320px;
+		background: #2d2d2d;
+		z-index: 50;
+		overflow-y: auto;
+	}
+	#editor-modal.sidebar-open .sidebar {
+		transform: translateX(0);
+	}
+
+	/* cuando la consola esté visible en móvil, que ocupe ~1/3 del alto */
+	.console {
+		height: 32svh;
+	}
+}
