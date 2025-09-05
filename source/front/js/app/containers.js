@@ -9,6 +9,7 @@ function isSmallScreen() {
 export function setupContainers() {
 	let current_id = "";
 	const listEl = document.getElementById("container-list");
+	const listElOther = document.getElementById("other-container-list");
 	const btnCreate = document.getElementById("btn-create");
 	const btnClose = document.getElementById("btn-close");
 	const btnFullscreen = document.getElementById("btn-fullscreen");
@@ -103,36 +104,22 @@ export function setupContainers() {
 				credentials: "same-origin",
 			});
 			if (!res.ok) throw new Error(await res.text());
+
 			const data = await res.json();
 			const sig = signatureFrom(data);
+
 			if (opts.lazy && sig === lastSig) return;
 			lastSig = sig;
 
-			const mine = (data || []).filter((c) => c.username === currentUsername);
-			const others = (data || []).filter((c) => c.username !== currentUsername);
-
 			listEl.innerHTML = "";
+			const mine = (data || []).filter((c) => c.username === currentUsername);
+			// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
+			mine.forEach((c) => listEl.appendChild(createCard(c)));
 
-			if (mine.length) {
-				const h = document.createElement("h3");
-				h.textContent = "Tus contenedores";
-				listEl.appendChild(h);
-				// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
-				mine.forEach((c) => listEl.appendChild(createCard(c)));
-			}
-
-			if (others.length) {
-				const hr = document.createElement("hr");
-				hr.style.margin = "12px 0";
-				listEl.appendChild(hr);
-
-				const h2 = document.createElement("h3");
-				h2.textContent = "Otros contenedores";
-				listEl.appendChild(h2);
-
-				// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
-				others.forEach((c) => listEl.appendChild(createCard(c)));
-			}
+			listElOther.innerHTML = "";
+			const others = (data || []).filter((c) => c.username !== currentUsername);
+			// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
+			others.forEach((c) => listElOther.appendChild(createCard(c)));
 
 			startPolling();
 		} catch (e) {
