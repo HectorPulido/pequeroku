@@ -8,7 +8,7 @@ export function addAlert(message, type = "info") {
 	wrapper.id = `alert-${randomId}`;
 	wrapper.style.opacity = "0";
 	wrapper.innerHTML = `
-${escapeHtml(message)}
+${message}
 <span class="closebtn" id="alert-button-${randomId}">&times;</span>
 `;
 	alertBox.appendChild(wrapper);
