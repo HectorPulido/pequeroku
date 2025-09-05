@@ -1,4 +1,3 @@
-import "https://esm.sh/xterm@5.3.0/css/xterm.css";
 import { Terminal } from "https://esm.sh/xterm@5.3.0";
 import { FitAddon } from "https://esm.sh/xterm-addon-fit@0.8.0";
 
