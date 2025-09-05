@@ -93,6 +93,5 @@ export function setupConsole({
 		write,
 		clear: () => term.clear(),
 		fit,
-		resizeToServer,
 	};
 }

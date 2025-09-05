@@ -93,12 +93,6 @@ function setPath(p) {
 	const ws = createWS(containerId, {
 		onOpen: () => {
 			consoleApi.addLine("[connected]");
-			setTimeout(() => {
-				try {
-					consoleApi.fit();
-					consoleApi.resizeToServer();
-				} catch {}
-			}, 0);
 		},
 		onMessage: (ev) => {
 			try {
