@@ -68,8 +68,6 @@ function setPath(p) {
 		}),
 	);
 
-	let wsRef = null;
-
 	const consoleApi = setupConsole({
 		consoleEl,
 		sendBtn: sendCMDBtn,
@@ -90,14 +88,10 @@ function setPath(p) {
 				sendRaw();
 			}
 		},
-		onResize: ({ cols, rows }) => {
-			wsRef?.send(JSON.stringify({ type: "resize", cols, rows }));
-		},
 	});
 
 	const ws = createWS(containerId, {
 		onOpen: () => {
-			wsRef = ws;
 			consoleApi.addLine("[connected]");
 			setTimeout(() => {
 				try {

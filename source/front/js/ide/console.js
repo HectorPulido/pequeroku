@@ -41,6 +41,21 @@ export function setupConsole({
 		});
 	}
 
+	inputEl.addEventListener("keydown", (e) => {
+		if (e.key === "ArrowUp") {
+			e.preventDefault();
+			if (hIdx > 0) inputEl.value = history[--hIdx] || "";
+		}
+		if (e.key === "ArrowDown") {
+			e.preventDefault();
+			if (hIdx < history.length - 1) inputEl.value = history[++hIdx] || "";
+			else {
+				hIdx = history.length;
+				inputEl.value = "";
+			}
+		}
+	});
+
 	// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
 	ctrlButtons.forEach((btn) =>
 		btn.addEventListener("click", () => {
