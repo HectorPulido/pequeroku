@@ -62,12 +62,6 @@ function setPath(p) {
 // ====== Initial ======
 (async () => {
 	// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
-	$$(".btn-send").forEach((btn) =>
-		btn.addEventListener("click", () => {
-			ws.send(btn.getAttribute("param"));
-		}),
-	);
-
 	const consoleApi = setupConsole({
 		consoleEl,
 		sendBtn: sendCMDBtn,

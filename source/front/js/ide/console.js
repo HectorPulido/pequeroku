@@ -25,8 +25,6 @@ export function setupConsole({
 	term.open(consoleEl);
 	fitAddon.fit();
 
-	// term.onData((data) => onSend?.(data));
-
 	if (sendBtn && inputEl) {
 		sendBtn.addEventListener("click", () => {
 			const v = inputEl.value;
@@ -66,8 +64,6 @@ export function setupConsole({
 				}
 			}
 		});
-
-
 	}
 
 	// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
