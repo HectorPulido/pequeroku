@@ -31,7 +31,9 @@ export function setupConsole({
 		sendBtn.addEventListener("click", () => {
 			const v = inputEl.value;
 			inputEl.value = "";
-			if (v) onSend?.(`${v}\n`);
+			history.push(v);
+			hIdx = history.length;
+			onSend?.(v);
 		});
 
 		inputEl.addEventListener("keydown", (e) => {
@@ -39,31 +41,20 @@ export function setupConsole({
 				e.preventDefault();
 				sendBtn.click();
 			}
+			if (e.key === "ArrowUp") {
+				e.preventDefault();
+				if (hIdx > 0) inputEl.value = history[--hIdx] || "";
+			}
+			if (e.key === "ArrowDown") {
+				e.preventDefault();
+				if (hIdx < history.length - 1) inputEl.value = history[++hIdx] || "";
+				else {
+					hIdx = history.length;
+					inputEl.value = "";
+				}
+			}
 		});
 	}
-
-	sendBtn.addEventListener("click", () => {
-		const v = inputEl.value;
-		inputEl.value = "";
-		history.push(v);
-		hIdx = history.length;
-		onSend?.(v);
-	});
-
-	inputEl.addEventListener("keydown", (e) => {
-		if (e.key === "ArrowUp") {
-			e.preventDefault();
-			if (hIdx > 0) inputEl.value = history[--hIdx] || "";
-		}
-		if (e.key === "ArrowDown") {
-			e.preventDefault();
-			if (hIdx < history.length - 1) inputEl.value = history[++hIdx] || "";
-			else {
-				hIdx = history.length;
-				inputEl.value = "";
-			}
-		}
-	});
 
 	// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
 	ctrlButtons.forEach((btn) =>
@@ -74,9 +65,9 @@ export function setupConsole({
 	);
 
 	function addLine(text) {
-		if (text !== null && text.trim() !== ""){
-			term.writeln(text ?? "");
-		}		
+		if (text !== null && text.trim() !== "") {
+			term.write(text ?? "");
+		}
 	}
 
 	function write(data) {
