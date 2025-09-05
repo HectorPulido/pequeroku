@@ -196,7 +196,7 @@ wc-monaco-editor#editor {
 }
 
 /* ===== Modals ===== */
-#templates-modal {
+#templates-modal, #upload-body {
 	color: black;
 }
 
