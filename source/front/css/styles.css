@@ -50,6 +50,12 @@ main {
 	gap: 1rem;
 }
 
+.container-title {
+	padding-left: 1rem;
+	margin-top: 1rem;
+	margin-bottom: 0.5rem;
+}
+
 .container-card {
 	background: white;
 	padding: 1rem;
