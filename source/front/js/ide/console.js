@@ -25,7 +25,7 @@ export function setupConsole({
 	term.open(consoleEl);
 	fitAddon.fit();
 
-	term.onData((data) => onSend?.(data));
+	// term.onData((data) => onSend?.(data));
 
 	if (sendBtn && inputEl) {
 		sendBtn.addEventListener("click", () => {
