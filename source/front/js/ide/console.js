@@ -23,41 +23,16 @@ export function setupConsole({
 	term.open(consoleEl);
 	fitAddon.fit();
 
-	const pending = [];
-	let sending = false;
-	const CHUNK = 64 * 1024; // 64KB
-
-	async function sendBuffered(data) {
-		if (!data) return;
-		for (let i = 0; i < data.length; i += CHUNK) {
-			pending.push(data.slice(i, i + CHUNK));
-		}
-		if (!sending) {
-			sending = true;
-			while (pending.length) {
-				const chunk = pending.shift();
-				onSend?.({ type: "input", data: chunk });
-				const UMBRAL = 512 * 1024;
-				while (
-					typeof onSend.ws?.bufferedAmount === "number" &&
-					onSend.ws.bufferedAmount > UMBRAL
-				) {
-					await new Promise((r) => setTimeout(r, 10));
-				}
-			}
-			sending = false;
-		}
-	}
-
-	term.onData((data) => sendBuffered(data));
+	term.onData((data) => onSend?.(data));
 	term.onResize((size) => onResize?.(size));
 
 	if (sendBtn && inputEl) {
 		sendBtn.addEventListener("click", () => {
 			const v = inputEl.value;
 			inputEl.value = "";
-			if (v) sendBuffered(`v\n`);
+			if (v) onSend?.(`v\n`);
 		});
+
 		inputEl.addEventListener("keydown", (e) => {
 			if (e.key === "Enter") {
 				e.preventDefault();
@@ -66,17 +41,13 @@ export function setupConsole({
 		});
 	}
 
-	// Ctrl-buttons
-	ctrlButtons.forEach((btn) => {
+	// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
+	ctrlButtons.forEach((btn) =>
 		btn.addEventListener("click", () => {
 			const p = btn.getAttribute("param");
-			if (p === "ctrlc")
-				sendBuffered("\x03"); // ETX
-			else if (p === "ctrld")
-				sendBuffered("\x04"); // EOT
-			else if (p === "clear") term.clear();
-		});
-	});
+			onSend?.({ action: p });
+		}),
+	);
 
 	let fitT;
 	window.addEventListener("resize", () => {

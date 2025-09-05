@@ -75,8 +75,20 @@ function setPath(p) {
 		sendBtn: sendCMDBtn,
 		inputEl: consoleCMD,
 		ctrlButtons: $$(".btn-send"),
-		onSend: (payload) => {
-			wsRef?.send(JSON.stringify(payload));
+		onSend: (data) => {
+			if (!ws) return;
+			const UMBRAL = 512 * 1024;
+			const sendRaw = () => ws.send(data);
+			if (ws.bufferedAmount > UMBRAL) {
+				const t = setInterval(() => {
+					if (ws.bufferedAmount <= UMBRAL) {
+						clearInterval(t);
+						sendRaw();
+					}
+				}, 10);
+			} else {
+				sendRaw();
+			}
 		},
 		onResize: ({ cols, rows }) => {
 			wsRef?.send(JSON.stringify({ type: "resize", cols, rows }));
