@@ -51,6 +51,7 @@ const btnAiGenerate = $("#btn-ai-generate");
 const aiCredits = $("#ai-credits");
 
 const toggleSidebarBtn = $("#toggle-sidebar");
+const toggleSidebarBtn2 = $("#toggle-sidebar-2");
 const toggleConsoleBtn = $("#toggle-console");
 const consoleArea = $("#console-area");
 const editorModal = $("#editor-modal");
@@ -102,6 +103,7 @@ applySidebarState(getInitialSidebarState());
 applyConsoleState(getInitialConsoleState());
 
 // ====== Listeners ======
+toggleSidebarBtn2.addEventListener("click", toggleSidebar);
 toggleSidebarBtn.addEventListener("click", toggleSidebar);
 toggleConsoleBtn.addEventListener("click", toggleConsole);
 

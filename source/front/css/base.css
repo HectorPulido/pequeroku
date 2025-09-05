@@ -143,3 +143,13 @@
 .hidden {
 	display: none !important;
 }
+
+.hidden-big {
+	display: none !important;
+}
+
+@media (max-width: 768px) {
+	.hidden-big {
+		display: block;
+	}
+}
