@@ -1,7 +1,8 @@
 import { addAlert } from "../core/alerts.js";
 import { getCSRF } from "../core/csrf.js";
 
-const DEFAULT_PROMPT = `1) Your main goal is to create an adventure game for consoles.
+const DEFAULT_PROMPT = `Example:
+1) Your main goal is to create an adventure game for consoles.
 2) There must be a map and a character; the player can move the character on the map and, when facing something, can interact with that thing.
 3) Each object has a short dialog that can sometimes change other objects; for example, a key that later lets you open a door.`;
 
@@ -27,7 +28,7 @@ export function setupAi({
 	// Open/close modal
 	openBtn.addEventListener("click", () => {
 		modalEl.classList.remove("hidden");
-		if (!inputEl.value?.trim()) inputEl.value = DEFAULT_PROMPT;
+		if (!inputEl.placeholder?.trim()) inputEl.placeholder = DEFAULT_PROMPT;
 		inputEl.focus();
 	});
 	closeBtn.addEventListener("click", () => modalEl.classList.add("hidden"));
