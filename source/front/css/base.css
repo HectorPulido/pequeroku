@@ -145,11 +145,11 @@
 }
 
 .hidden-big {
-	display: none !important;
+	display: none;
 }
 
 @media (max-width: 768px) {
 	.hidden-big {
-		display: block;
+		display: block !important;
 	}
 }
