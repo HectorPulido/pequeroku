@@ -61,7 +61,6 @@ function setPath(p) {
 
 // ====== Initial ======
 (async () => {
-	// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
 	const consoleApi = setupConsole({
 		consoleEl,
 		sendBtn: sendCMDBtn,
@@ -110,7 +109,7 @@ function setPath(p) {
 		onError: () => parent.addAlert("WebSocket error", "error"),
 	});
 
-	consoleApi.onSend = Object.assign(() => { }, { ws });
+	consoleApi.onSend = Object.assign(() => {}, { ws });
 
 	// restart container
 	restartContainerBtn.addEventListener("click", async () => {
@@ -274,6 +273,6 @@ function setPath(p) {
 	window.addEventListener("beforeunload", () => {
 		try {
 			ws.close(1000, "bye");
-		} catch { }
+		} catch {}
 	});
 })();

@@ -31,7 +31,7 @@ export function setupConsole({
 			inputEl.value = "";
 			history.push(v);
 			hIdx = history.length;
-			onSend?.(v + "\n");
+			onSend?.(`${v}\n`);
 		});
 
 		inputEl.addEventListener("keydown", (e) => {
@@ -55,12 +55,12 @@ export function setupConsole({
 				// Ctrl + C
 				if (e.key === "c" || e.key === "C") {
 					e.preventDefault();
-					onSend?.({ action: 'ctrlc' });
+					onSend?.({ action: "ctrlc" });
 				}
 				// Ctrl + D
 				if (e.key === "d" || e.key === "D") {
 					e.preventDefault();
-					onSend?.({ action: 'ctrld' });
+					onSend?.({ action: "ctrld" });
 				}
 			}
 		});
@@ -71,7 +71,7 @@ export function setupConsole({
 		btn.addEventListener("click", () => {
 			const p = btn.getAttribute("param");
 			onSend?.({ action: p });
-			console.log("executing:", { action: p })
+			console.log("executing:", { action: p });
 		}),
 	);
 
