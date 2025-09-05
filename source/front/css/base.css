@@ -150,6 +150,6 @@
 
 @media (max-width: 768px) {
 	.hidden-big {
-		display: block !important;
+		display: inline-block !important;
 	}
 }
