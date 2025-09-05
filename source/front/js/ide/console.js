@@ -9,6 +9,9 @@ export function setupConsole({
 	onSend,
 	onResize,
 }) {
+	const history = [];
+	let hIdx = -1;
+
 	const term = new Terminal({
 		cursorBlink: true,
 		scrollback: 5000,
@@ -40,6 +43,14 @@ export function setupConsole({
 			}
 		});
 	}
+
+	sendBtn.addEventListener("click", () => {
+		const v = inputEl.value;
+		inputEl.value = "";
+		history.push(v);
+		hIdx = history.length;
+		onSend?.(v);
+	});
 
 	inputEl.addEventListener("keydown", (e) => {
 		if (e.key === "ArrowUp") {
