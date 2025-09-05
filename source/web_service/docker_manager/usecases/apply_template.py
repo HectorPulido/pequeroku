@@ -135,6 +135,4 @@ def apply_ai_generated_project(
     _save_file(sftp, cli, full_path, code, 0o644)
 
     # Exec
-    cli.exec_command(
-        f"cd {dest_path} && python3 build_from_gencode.py"
-    )
+    cli.exec_command(f"cd {dest_path} && python3 build_from_gencode.py")

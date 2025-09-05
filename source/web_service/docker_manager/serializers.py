@@ -1,9 +1,15 @@
 from rest_framework import serializers
-from .models import Container, FileTemplate, FileTemplateItem
+from .models import Container, FileTemplate, FileTemplateItem, ResourceQuota
 
 
 class ContainerSerializer(serializers.ModelSerializer):
+    """
+    Serializer for containers data
+    """
+
     class Meta:
+        """Serializer meta"""
+
         model = Container
         fields = [
             "id",
@@ -18,20 +24,33 @@ class ContainerSerializer(serializers.ModelSerializer):
     username = serializers.SerializerMethodField("get_username")
 
     def get_username(self, obj) -> str:
+        """Get the username for the container"""
         return obj.user.username
 
 
 class FileTemplateItemSerializer(serializers.ModelSerializer):
+    """
+    Serializer for file template
+    """
+
     class Meta:
+        """Serializer meta"""
+
         model = FileTemplateItem
         fields = ["id", "path", "content", "mode", "order"]
         read_only_fields = fields
 
 
 class FileTemplateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for file template
+    """
+
     items = FileTemplateItemSerializer(many=True, read_only=True)
 
     class Meta:
+        """Serializer meta"""
+
         model = FileTemplate
         fields = [
             "id",
@@ -115,3 +134,53 @@ class ApplyAICodeResponseSerializer(serializers.Serializer):
     status = serializers.CharField()
     container = serializers.IntegerField()
     dest_path = serializers.CharField()
+
+
+class ResourceQuotaSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ResourceQuota
+    """
+
+    ai_uses_left_today = serializers.SerializerMethodField()
+
+    class Meta:
+        """Serializer meta"""
+
+        model = ResourceQuota
+        fields = (
+            "max_containers",
+            "max_memory_mb",
+            "max_cpu_percent",
+            "ai_use_per_day",
+            "ai_uses_left_today",
+        )
+
+    def get_ai_uses_left_today(self, obj) -> int:
+        """
+        How much ai is left
+        """
+        return obj.ai_uses_left_today()
+
+
+class UserInfoSerializer(serializers.Serializer):
+    """
+    Serializer for the user info
+    """
+
+    username = serializers.CharField()
+    active_containers = serializers.IntegerField()
+    has_quota = serializers.BooleanField()
+    quota = serializers.SerializerMethodField()
+
+    def get_quota(self, obj):
+        """Get the current quota for an user"""
+        quota = obj.get("quota")
+        if quota:
+            return ResourceQuotaSerializer(quota).data
+        return {
+            "max_containers": 0,
+            "max_memory_mb": 0,
+            "max_cpu_percent": 0,
+            "ai_use_per_day": 0,
+            "ai_uses_left_today": 0,
+        }

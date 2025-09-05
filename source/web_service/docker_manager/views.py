@@ -28,6 +28,7 @@ from .serializers import (
     ApplyTemplateResponseSerializer,
     ApplyAICodeResponseSerializer,
     ApplyAICodeRequestSerializer,
+    UserInfoSerializer,
 )
 from .usecases.vm_management import QemuSession
 from .usecases.apply_template import _apply_template_to_vm, apply_ai_generated_project
@@ -598,42 +599,34 @@ class UserViewSet(GenericAPIView):
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = UserInfoSerializer
 
     def get(self, request):
+        """Get the user info"""
         user = request.user
+        active_containers = Container.objects.filter(user=user).count()
         quota = getattr(user, "quota", None)
-        active_containers = Container.objects.filter(user=request.user).count()
 
-        quota_data = (
-            {
-                "max_containers": 0,
-                "max_memory_mb": 0,
-                "max_cpu_percent": 0,
-            }
-            if not quota
-            else {
-                "max_containers": quota.max_containers,
-                "max_memory_mb": quota.max_memory_mb,
-                "max_cpu_percent": quota.max_cpu_percent,
-            }
-        )
+        payload = {
+            "username": user.get_username(),
+            "active_containers": active_containers,
+            "has_quota": bool(quota),
+            "quota": quota,
+        }
 
         audit_log_http(
             request,
             action="user.info",
             message="User info fetched",
-            metadata={"active_containers": active_containers, "has_quota": bool(quota)},
+            metadata={
+                "active_containers": active_containers,
+                "has_quota": bool(quota),
+            },
             success=True,
         )
 
-        return Response(
-            {
-                "username": user.username,
-                "active_containers": active_containers,
-                "has_quota": bool(quota),
-                "quota": quota_data,
-            }
-        )
+        serializer = self.get_serializer(instance=payload)
+        return Response(serializer.data)
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -646,6 +639,7 @@ class LoginView(GenericAPIView):
     permission_classes = []
 
     def post(self, request):
+        """Login post request"""
         username = request.data.get("username")
         password = request.data.get("password")
         user = authenticate(request, username=username, password=password)
@@ -679,6 +673,7 @@ class LogoutView(GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        """Logout post request"""
         audit_log_http(
             request,
             action="logout",
