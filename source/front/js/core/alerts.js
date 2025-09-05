@@ -1,5 +1,3 @@
-import { escapeHtml } from "./dom.js";
-
 export function addAlert(message, type = "info") {
 	const randomId = Math.floor(Math.random() * 1_000_000);
 	const alertBox = document.getElementById("alert-box") || document.body;

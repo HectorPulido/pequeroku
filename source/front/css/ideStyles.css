@@ -140,11 +140,6 @@ wc-monaco-editor#editor {
 	transition: transform 0.25s ease;
 }
 
-#editor-modal.sidebar-collapsed .sidebar {
-	display: none;
-	/* Desktop: desaparece del layout cuando está colapsada */
-}
-
 /* ===== Responsive: móviles ≤ 768px ===== */
 @media (max-width: 768px) {
 	#editor-modal {
@@ -217,4 +212,93 @@ wc-monaco-editor#editor {
 
 .console-toolbar .last-button {
 	height: 100%;
+}
+
+/* Asegura que el IDE usa todo el viewport y no genere scroll horizontal */
+html,
+body {
+	height: 100%;
+}
+#editor-modal {
+	width: 100vw;
+	height: 100vh;
+	overflow: hidden; /* evita scroll horizontal accidental */
+	display: flex;
+}
+
+/* El panel principal debe poder encogerse: min-width:0 es CLAVE en flexbox */
+.main {
+	flex: 1 1 auto;
+	min-width: 0; /* evita que empuje al contenedor */
+	display: flex;
+	flex-direction: column;
+	max-width: 100%;
+}
+
+/* El editor debe crecer y encajar sin overflow */
+wc-monaco-editor#editor {
+	flex: 1 1 auto;
+	min-height: 0; /* permite que flex calcule bien alturas */
+	min-width: 0;
+}
+
+/* Toolbars que no empujan contenido: permiten wrap y no desbordan */
+.toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	flex-wrap: wrap; /* en pantallas estrechas, que bajen a otra línea */
+}
+
+/* Ambos lados de la toolbar también pueden wrapear y no forzar ancho */
+.toolbar > div {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	min-width: 0; /* importantísimo para que el ellipsis funcione */
+}
+
+/* El path actual no debe empujar a los botones: … cuando no entra */
+#current_path_label {
+	display: inline-block;
+	max-width: 60vw; /* puedes ajustar */
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Evita que la consola y su barra inferior empujen el ancho */
+.console-area {
+	min-width: 0;
+}
+.console {
+	min-width: 0;
+}
+
+/* Sidebar colapsada en desktop: quítala del flujo sin dejar “hueco” */
+#editor-modal.sidebar-collapsed .sidebar {
+	display: none;
+}
+
+/* Si usas el “drawer” en mobile, mantenlo, pero asegúrate de no afectar layout */
+@media (max-width: 768px) {
+	#editor-modal {
+		flex-direction: column;
+	}
+	.sidebar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		bottom: 0;
+		transform: translateX(-100%);
+		transition: transform 0.25s ease;
+		width: 80vw;
+		max-width: 320px;
+		z-index: 50;
+	}
+	#editor-modal.sidebar-open .sidebar {
+		transform: translateX(0);
+	}
 }
