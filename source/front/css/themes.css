@@ -118,7 +118,7 @@ html[data-theme="dark"] .upload-body input[type="file"] {
 	border-color: #2d3748;
 }
 html[data-theme="dark"] .upload-body {
-	background: #e6e6e6;
+	color: #e6e6e6;
 }
 html[data-theme="dark"] .upload-body button {
 	background: #0e6b7a;
