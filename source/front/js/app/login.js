@@ -1,19 +1,20 @@
 import { addAlert } from "../core/alerts.js";
+import { $ } from "../core/dom.js";
 
 export function setupLogin({ onSuccess }) {
-	const loginContainer = document.getElementById("login-container");
-	const loginForm = document.getElementById("login-form");
-	const usernameEl = document.getElementById("username");
-	const passwordEl = document.getElementById("password");
-	const loginError = document.getElementById("login-error");
+	const loginContainer = $("#login-container");
+	const loginForm = $("#login-form");
+	const usernameEl = $("#username");
+	const passwordEl = $("#password");
+	const loginError = $("#login-error");
 
 	function showLogin() {
 		loginContainer.classList.remove("hidden");
-		document.getElementById("app").classList.add("hidden");
+		$("#app").classList.add("hidden");
 	}
 	function showApp() {
 		loginContainer.classList.add("hidden");
-		document.getElementById("app").classList.remove("hidden");
+		$("#app").classList.remove("hidden");
 		onSuccess?.();
 	}
 

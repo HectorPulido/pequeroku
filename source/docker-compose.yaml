@@ -5,8 +5,8 @@ services:
     volumes:
       - ./web_service:/app
       - ./vm_data:/app/vm_data
-      - /home/hector/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro
-      - /home/hector/.ssh/id_ed25519.pub:/root/.ssh/id_vm_pequeroku.pub:ro
+      - /Users/hectorpulido/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro
+      - /Users/hectorpulido/.ssh/id_ed25519.pub:/root/.ssh/id_vm_pequeroku.pub:ro
     # devices:
     #   - /dev/kvm:/dev/kvm
     # security_opt:

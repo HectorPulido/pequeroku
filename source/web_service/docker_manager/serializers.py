@@ -170,6 +170,7 @@ class UserInfoSerializer(serializers.Serializer):
     username = serializers.CharField()
     active_containers = serializers.IntegerField()
     has_quota = serializers.BooleanField()
+    is_superuser = serializers.BooleanField()
     quota = serializers.SerializerMethodField()
 
     def get_quota(self, obj):

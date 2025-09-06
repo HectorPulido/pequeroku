@@ -4,6 +4,8 @@ from django.utils import timezone
 from django.http import HttpRequest
 from asgiref.sync import sync_to_async
 
+from django.contrib.auth.models import AnonymousUser
+
 from docker_manager.models import AuditLog
 
 
@@ -35,8 +37,14 @@ def audit_log_http(
     """
     Register audit for HTTP/DRF
     """
+
+    user = getattr(request, "user", None) if request else None
+
+    if isinstance(user, AnonymousUser):
+        user = None
+
     AuditLog.objects.create(
-        user=(getattr(request, "user", None) if request else None),
+        user=user,
         action=action,
         target_type=target_type,
         target_id=str(target_id) if target_id else "",

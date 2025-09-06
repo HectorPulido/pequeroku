@@ -12,6 +12,11 @@ class Container(models.Model):
     image = models.CharField(max_length=128, default="ubuntu:latest")
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=32, default="created")
+    memory_mb = models.PositiveIntegerField(
+        default=256, help_text="memory for the container"
+    )
+    vcpu = models.PositiveIntegerField(default=2, help_text="CPU for the container")
+    disk_gib = models.PositiveIntegerField(default=10, help_text="disk in gb")
 
     def __str__(self):
         return f"{self.user.username} - {self.container_id[:12]}"
@@ -45,13 +50,17 @@ class ResourceQuota(models.Model):
         default=256, help_text="Max memory per container MB"
     )
     max_cpu_percent = models.PositiveIntegerField(
-        default=20, help_text="Max CPU per container VCPU"
+        default=2, help_text="Max CPU per container VCPU"
     )
     ai_use_per_day = models.PositiveIntegerField(
         default=5, help_text="Daily request for the AI"
     )
+    default_disk_gib = models.PositiveIntegerField(
+        default=10, help_text="Max disk in gb"
+    )
 
     def ai_uses_left_today(self) -> int:
+        """Get the ai uses left for today"""
         today = timezone.now().date()
         used_today = self.user.ai_usage_logs.filter(created_at__date=today).count()
         return max(self.ai_use_per_day - used_today, 0)

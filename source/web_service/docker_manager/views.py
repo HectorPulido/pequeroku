@@ -4,6 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
 
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -105,8 +106,11 @@ class ContainersViewSet(viewsets.ModelViewSet):
         c = Container.objects.create(
             user=request.user,
             container_id=self._rand_id(),
-            image="vm:ubuntu-jammy",
+            image=settings.VM_BASE_DIR,
             status="creating",
+            memory_mb=quota.max_memory_mb,
+            vcpu=quota.max_cpu_percent,
+            disk_gib=quota.default_disk_gib,
         )
 
         create_vm_first_time.delay(container_id=c.pk)
@@ -609,6 +613,7 @@ class UserViewSet(GenericAPIView):
 
         payload = {
             "username": user.get_username(),
+            "is_superuser": user.is_superuser,
             "active_containers": active_containers,
             "has_quota": bool(quota),
             "quota": quota,
@@ -661,7 +666,7 @@ class LoginView(GenericAPIView):
             success=False,
         )
         return Response(
-            {"error": "Credenciales inválidas"}, status=status.HTTP_400_BAD_REQUEST
+            {"error": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST
         )
 
 

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import json
 from asyncio.events import AbstractEventLoop
@@ -165,9 +163,7 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         if not loop or not getattr(loop, "is_running", lambda: False)():
             return
         # Schedule the send on the loop thread-safely
-        loop.call_soon_threadsafe(
-            asyncio.create_task, self._send_json({"type": "log", "line": line})
-        )
+        loop.call_soon_threadsafe(asyncio.create_task, self.send(text_data=line))
 
     def _on_close(self):
         """
@@ -360,6 +356,12 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
     @staticmethod
     @sync_to_async
     def _user_owns_container(pk: int, user_pk: int) -> bool:
+        user_mod = apps.get_model("auth", "User")
+
+        user = user_mod.objects.get(pk=user_pk)
+        if user.is_superuser:
+            return True
+
         container = apps.get_model("docker_manager", "Container")
         return container.objects.filter(pk=pk, user_id=user_pk).exists()
 

@@ -2,7 +2,6 @@ import os
 import shutil
 import socket
 import subprocess
-import tempfile
 import threading
 import time
 import json
@@ -122,6 +121,7 @@ def _make_seed_iso(
 
     if os.path.exists(seed_iso) and os.path.exists(spec_path):
         if open(spec_path).read().strip() == want:
+            print("Already exist the seed_iso")
             return
     assert os.path.exists(pubkey_path), f"No existe {pubkey_path}"
     pubkey = open(pubkey_path, encoding="utf-8").read().strip()
@@ -162,7 +162,7 @@ runcmd:
     meta_data = f"""instance-id: {instance_id}
 local-hostname: {instance_id}
 """
-    open(spec_path, "w").write(want)
+    open(spec_path, "w", encoding="utf-8").write(want)
 
     wd = os.path.dirname(seed_iso)
     ud = os.path.join(wd, "user-data")
@@ -199,7 +199,7 @@ local-hostname: {instance_id}
 # ============================
 
 
-def _wait_ssh(port: int, timeout: int, user: str, key_path: str) -> None:
+def _wait_ssh(port: int, timeout: int, user: str) -> bool:
     """
     Wait until an SSH connection is possible to 127.0.0.1:<port>.
     Reuses _load_pkey and adheres to the same client settings.
@@ -214,7 +214,7 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str) -> None:
             print("Trying to connect to: ", port, "machine, try number:", attempt)
 
             if attempt > 100:
-                return
+                return False
 
             # First: is TCP port open?
             with socket.create_connection(("127.0.0.1", port), timeout=2):
@@ -234,7 +234,7 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str) -> None:
                 look_for_keys=False,
             )
             cli.close()
-            return
+            return True
         except Exception:
             time.sleep(2)
 
@@ -249,7 +249,6 @@ def _wait_ssh(port: int, timeout: int, user: str, key_path: str) -> None:
 def _vm_qemu_arm64_args(
     vcpus: int,
     mem_mib: int,
-    console_log: Optional[str],
     port: int,
     overlay: str,
     seed_iso: str,
@@ -260,6 +259,8 @@ def _vm_qemu_arm64_args(
     uefi_candidates = [
         "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
         "/usr/share/AAVMF/AAVMF_CODE.fd",
+        # Add here your uefi_candidates
+        "/opt/homebrew/Cellar/qemu/9.2.2/share/qemu/edk2-aarch64-code.fd",
     ]
     uefi = next((p for p in uefi_candidates if os.path.exists(p)), None)
     if uefi is None:
@@ -268,6 +269,10 @@ def _vm_qemu_arm64_args(
     args: list = []
 
     use_kvm = os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64")
+    use_hvf = platform.system() == "Darwin" and os.path.exists(
+        "/opt/homebrew/bin/qemu-system-aarch64"
+    )
+
     if use_kvm:
         print("Using KVM")
         args += [
@@ -310,6 +315,41 @@ def _vm_qemu_arm64_args(
                 "-device",
                 "scsi-cd,drive=cidata,bus=scsi0.0",
             ]
+    elif use_hvf:
+        print("Using HVF")
+        args += [
+            settings.VM_QEMU_BIN,
+            "-accel",
+            "hvf",
+            "-cpu",
+            "max",
+            "-machine",
+            "virt",
+            "-smp",
+            str(vcpus),
+            "-m",
+            str(mem_mib),
+            "-bios",
+            uefi,
+            "-nographic",
+            "-serial",
+            "mon:stdio",
+            "-netdev",
+            f"user,id=n0,hostfwd=tcp:127.0.0.1:{port}-:22",
+            "-device",
+            "virtio-net-device,netdev=n0",
+            "-drive",
+            f"if=none,format=qcow2,file={overlay},id=vd0",
+            "-device",
+            "virtio-blk-device,drive=vd0",
+        ]
+        if seed_iso:
+            args += [
+                "-drive",
+                f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
+                "-device",
+                "virtio-blk-device,drive=cidata",
+            ]
     else:
         print("Not using KVM")
         args += [
@@ -345,7 +385,7 @@ def _vm_qemu_arm64_args(
                 "-device",
                 "virtio-blk-device,drive=cidata",
             ]
-
+    print(args)
     return args
 
 
@@ -426,7 +466,6 @@ def _start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
         args = _vm_qemu_arm64_args(
             vcpus=vcpus,
             mem_mib=mem_mib,
-            console_log=console_log,
             port=port,
             overlay=overlay,
             seed_iso=seed_iso,
@@ -450,7 +489,6 @@ def _start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
             port=port,
             timeout=vm_timeout_boot_s,
             user=vm_ssh_user,
-            key_path=vm_ssh_privkey,
         )
     except Exception:
         # Try to provide helpful diagnostics, preserving original behavior.
@@ -518,6 +556,10 @@ class QemuSession:  # keep the name to avoid breaking imports
         self.reader_thread: Optional[threading.Thread] = None
         self.alive: bool = False
 
+        self.mem_mib = container_obj.memory_mb
+        self.vcpus = container_obj.vcpu
+        self.disk_gib = container_obj.disk_gib
+
         self._ensure_vm()
         self._open_exec()
 
@@ -550,9 +592,9 @@ class QemuSession:  # keep the name to avoid breaking imports
 
         self.vm = _start_vm(
             self.workdir,
-            settings.DEFAULT_VCPUS,
-            settings.DEFAULT_MEM_MIB,
-            settings.DEFAULT_DISK_GIB,
+            self.vcpus,
+            self.mem_mib,
+            self.disk_gib,
         )
         self.container_obj.container_id = f"qemu:{self.vm.port_ssh}"
         self.container_obj.status = "running"

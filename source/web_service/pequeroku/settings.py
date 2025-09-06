@@ -34,10 +34,6 @@ VM_SSH_USER = os.environ.get("VM_SSH_USER", "root")
 VM_QEMU_BIN = os.environ.get("VM_QEMU_BIN", "/usr/bin/qemu-system-x86_64")
 VM_TIMEOUT_BOOT_S = int(os.environ.get("VM_TIMEOUT_BOOT_S", "600"))
 
-DEFAULT_VCPUS = int(os.environ.get("DEFAULT_VCPUS", "2"))
-DEFAULT_MEM_MIB = int(os.environ.get("DEFAULT_MEM_MIB", "1024"))
-DEFAULT_DISK_GIB = int(os.environ.get("DEFAULT_DISK_GIB", "10"))
-
 DEFAULT_TEMPLATE_SLUG = os.environ.get("DEFAULT_TEMPLATE_SLUG", "default")
 DEFAULT_TEMPLATE_DEST = os.environ.get("DEFAULT_TEMPLATE_DEST", "/app")
 DEFAULT_TEMPLATE_CLEAN = (

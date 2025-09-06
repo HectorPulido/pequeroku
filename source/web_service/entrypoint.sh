@@ -37,11 +37,9 @@ fi
 python manage.py migrate
 python manage.py collectstatic --no-input
 
-if [ $# -ge 1 ] && [ -n "${DJANGO_SUPERUSER_USERNAME:-}" ]; then
-  python manage.py createsuperuser --noinput \
-    --username "$DJANGO_SUPERUSER_USERNAME" \
-    --email "$DJANGO_SUPERUSER_EMAIL" || true
-fi
+source .env
+echo "Creating super user ${DJANGO_SUPERUSER_USERNAME}"
+python manage.py createsuperuser --noinput || true
 
 # === Lanzar Celery worker y beat en background ===
 # Opcional: espera a Redis si quieres ser más defensivo (recomendado)
