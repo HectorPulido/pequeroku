@@ -104,5 +104,12 @@ export function setupConsole({
 		write,
 		clear: () => term.clear(),
 		fit,
+		setTheme(isDark) {
+			term.setOption({
+				theme: isDark
+					? { background: "#0b0d10", foreground: "#e6e6e6", cursor: "#e6e6e6" }
+					: { background: "#111111", foreground: "#eeeeee", cursor: "#222222" },
+			});
+		},
 	};
 }

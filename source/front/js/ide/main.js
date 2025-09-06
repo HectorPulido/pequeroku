@@ -2,17 +2,20 @@ import { makeApi } from "../core/api.js";
 import { getCSRF } from "../core/csrf.js";
 import { $, $$ } from "../core/dom.js";
 import { installGlobalLoader } from "../core/loader.js";
+import {
+	applyTheme,
+	getCurrentTheme,
+	setupThemeToggle,
+} from "../core/themes.js";
 import { setupConsole } from "./console.js";
 import { openFile as openFileIntoEditor } from "./editor.js";
 import { setupFileTree } from "./files.js";
 import { loadRunConfig } from "./runConfig.js";
 import { setupUploads } from "./uploads.js";
 import { createWS } from "./websockets.js";
-import { setVhVar, attachViewportListeners } from "../shared/viewport.js";
 
 installGlobalLoader();
-setVhVar();
-attachViewportListeners();
+applyTheme();
 
 // ====== CONFIG ======
 const urlParams = new URLSearchParams(window.location.search);
@@ -20,6 +23,7 @@ const containerId = urlParams.get("containerId");
 const api = makeApi(`/api/containers/${containerId}`);
 
 // ====== DOM refs ======
+const themeToggleBtn = $("#theme-toggle");
 const pathLabel = $("#current_path_label");
 const editor = $("#editor");
 const refreshTreeBtn = $("#refresh-tree");
@@ -98,7 +102,7 @@ function toggleConsole() {
 	applyConsoleState(next);
 	try {
 		consoleApi?.fit?.();
-	} catch { }
+	} catch {}
 }
 
 // ====== INIT ======
@@ -109,8 +113,10 @@ applyConsoleState(getInitialConsoleState());
 toggleSidebarBtn2.addEventListener("click", toggleSidebar);
 toggleSidebarBtn.addEventListener("click", toggleSidebar);
 toggleConsoleBtn.addEventListener("click", toggleConsole);
+if (themeToggleBtn) setupThemeToggle(themeToggleBtn); // ⬅️
 
 // ====== State ======
+let consoleApi = null;
 let currentFilePath = null;
 let runCommand = null;
 function setPath(p) {
@@ -121,7 +127,7 @@ function setPath(p) {
 
 // ====== Initial ======
 (async () => {
-	const consoleApi = setupConsole({
+	consoleApi = setupConsole({
 		consoleEl,
 		sendBtn: sendCMDBtn,
 		inputEl: consoleCMD,
@@ -131,6 +137,7 @@ function setPath(p) {
 			ws.send(data);
 		},
 	});
+	consoleApi.setTheme(getCurrentTheme() === "dark");
 
 	const ws = createWS(containerId, {
 		onOpen: () => {
@@ -330,6 +337,14 @@ function setPath(p) {
 	window.addEventListener("beforeunload", () => {
 		try {
 			ws.close(1000, "bye");
-		} catch { }
+		} catch {}
+	});
+
+	window.addEventListener("themechange", (ev) => {
+		const isDark = ev.detail?.theme === "dark";
+		try {
+			editor.setAttribute("theme", isDark ? "vs-dark" : "vs");
+			consoleApi?.setTheme?.(isDark);
+		} catch {}
 	});
 })();

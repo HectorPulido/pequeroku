@@ -65,7 +65,7 @@ main {
 
 .container-card div {
 	display: flex;
-    flex-wrap: nowrap;
+	flex-wrap: nowrap;
 }
 
 .container-card h2 {

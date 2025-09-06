@@ -1,0 +1,135 @@
+:root {
+	--bg: #f4f4f4;
+	--fg: #333;
+	--card: #ffffff;
+	--muted: #666;
+	--brand: #28a745;
+	--brand-2: #17a2b8;
+	--header-bg: #222;
+	--header-fg: #fff;
+	--console-bg: #000;
+	--console-fg: #0f0;
+	--panel: #2d2d2d;
+	--button-bg: #3e3e3e;
+	--button-fg: #eee;
+	--button-border: #555;
+	--hover: #303030;
+}
+
+html[data-theme="dark"] body {
+	background: #0f1115;
+	color: #e6e6e6;
+}
+
+html[data-theme="dark"] header {
+	background: #0b0d10;
+	color: #e6e6e6;
+	border-bottom: 1px solid #1f242b;
+}
+html[data-theme="dark"] button {
+	background: #2e7d32;
+}
+html[data-theme="dark"] button:disabled {
+	background: #3d4440;
+}
+html[data-theme="dark"] .login-box {
+	background: #141820;
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+html[data-theme="dark"] .login-box input {
+	background: #0f131a;
+	color: #e6e6e6;
+	border-color: #2d3748;
+}
+html[data-theme="dark"] .container-card {
+	background: #141820;
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+html[data-theme="dark"] .container-card small {
+	color: #a0aec0;
+}
+html[data-theme="dark"] .dropdown-content div {
+	background: #0f131a;
+}
+html[data-theme="dark"] .console-header {
+	background: #11161c;
+	color: #e6e6e6;
+}
+html[data-theme="dark"] .console-body {
+	background: #0b0d10;
+	color: #9be28a;
+	border-color: #1f242b;
+}
+html[data-theme="dark"] .header-dropdown .dropdown-content div {
+	background: #0f131a;
+	color: #e6e6e6;
+}
+html[data-theme="dark"] .sidebar {
+	background: #11161c;
+	border-right: 1px solid #1f242b;
+}
+html[data-theme="dark"] .sidebar li:hover {
+	background: #0b0d10;
+}
+html[data-theme="dark"] .toolbar {
+	background: #0b0d10;
+	border-bottom: 1px solid #1f242b;
+}
+html[data-theme="dark"] button,
+html[data-theme="dark"] input[type="text"] {
+	color: #e6e6e6;
+	border: 1px solid #2d3748;
+}
+
+html[data-theme="dark"] .console {
+	background: #0b0d10;
+	color: #e6e6e6;
+}
+html[data-theme="dark"] .dropdown-content div {
+	background: #0f131a;
+}
+
+html[data-theme="dark"] .upload-container {
+	background: #141820;
+	color: #e6e6e6;
+}
+html[data-theme="dark"] .upload-header {
+	background: #11161c;
+	color: #e6e6e6;
+}
+html[data-theme="dark"] .upload-body input[type="file"] {
+	background: #0f131a;
+	color: #e6e6e6;
+	border-color: #2d3748;
+}
+html[data-theme="dark"] .upload-body button {
+	background: #0e6b7a;
+}
+html[data-theme="dark"] .upload-body button:hover {
+	background: #0b5661;
+}
+
+html[data-theme="dark"] .alert {
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+html[data-theme="dark"] .alert.info {
+	background-color: #0b6ba8;
+}
+html[data-theme="dark"] .alert.success {
+	background-color: #1e6f4f;
+}
+html[data-theme="dark"] .alert.warning {
+	background-color: #5a4a17;
+	color: #fff;
+}
+html[data-theme="dark"] .alert:not(.warning):not(.success):not(.info) {
+	background-color: #8b1d1d;
+}
+
+html[data-theme="dark"] .loader-backdrop {
+	background: rgba(0, 0, 0, 0.6);
+}
+html[data-theme="dark"] .loader-spinner {
+	border-color: rgba(255, 255, 255, 0.2);
+	border-top-color: #fff;
+}

@@ -129,7 +129,7 @@ wc-monaco-editor#editor {
 	padding: 4px;
 }
 
-.toolbar>div {
+.toolbar > div {
 	/* Both sides of the toolbar can wrap and not force width */
 	display: flex;
 	align-items: center;
@@ -262,7 +262,6 @@ wc-monaco-editor#editor {
 		transform: translateX(-100%);
 	}
 }
-
 
 .full-viewport-height {
 	height: 100vh !important;

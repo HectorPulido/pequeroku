@@ -41,7 +41,6 @@ export function setupTemplates({
 		templates.forEach((t) => {
 			const card = document.createElement("div");
 			card.className = "container-card";
-			const count = (t.items || []).length;
 			card.innerHTML = `
 <h2>${escapeHtml(t.name)}</h2>
 <p>${escapeHtml(t.description || "")}</p>

@@ -5,6 +5,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>PequeRoku – Micro-IDE</title>
+    <link rel="stylesheet" href="/css/themes.css" />
     <link rel="stylesheet" href="/css/base.css" />
     <link rel="stylesheet" href="/css/ideStyles.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
@@ -31,13 +32,14 @@
                 </div>
                 <div>
                     <button id="btn-open-templates-modal" title="Templates">Templates</button>
-                    <button id="btn-open-ai-modal" title="AI Features">✨</button>
-                    <button id="save-file" title="Save file">💾</button>
+                    <button id="btn-open-ai-modal" title="AI Features">✨IA</button>
                     <button id="toggle-console" title="Toggle console">🖥️</button>
+                    <button id="save-file" title="Save file">💾</button>
                     <button id="run-code" title="Run">Run ▶️</button>
+                    <button id="theme-toggle" title="Theme">🌙</button>
                 </div>
             </div>
-            <wc-monaco-editor id="editor" language="python" theme="vs-dark" word-wrap="true"></wc-monaco-editor>
+            <wc-monaco-editor id="editor" language="python" word-wrap="true"></wc-monaco-editor>
 
             <div class="console-area" id="console-area">
                 <div class="console" id="console-log"></div>

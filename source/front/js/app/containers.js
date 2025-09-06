@@ -1,7 +1,7 @@
 import { addAlert } from "../core/alerts.js";
 import { getCSRF } from "../core/csrf.js";
-import { signatureFrom } from "../core/utils.js";
 import { $ } from "../core/dom.js";
+import { signatureFrom } from "../core/utils.js";
 
 function isSmallScreen() {
 	return matchMedia("(max-width: 768px)").matches;
@@ -35,7 +35,7 @@ function show_alert() {
 		</div>
 	`,
 		"warning",
-		false
+		false,
 	);
 }
 
@@ -163,8 +163,8 @@ export function setupContainers() {
 			// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
 			others.forEach((c) => listElOther.appendChild(createCard(c)));
 
-			if (others.length == 0) {
-				$("#other-container-title").innerHTML = ""
+			if (others.length === 0) {
+				$("#other-container-title").innerHTML = "";
 			}
 
 			startPolling();
