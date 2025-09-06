@@ -38,13 +38,12 @@ html[data-theme="dark"] button:hover {
 }
 
 html[data-theme="dark"] .top-btn {
-	background: #1b2028;
-	color: #e6e6e6;
-	border: 1px solid #2d3748;
-}
-
-html[data-theme="dark"] .top-btn {
-	background: #171b22;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.5rem 0.25rem;
 }
 
 html[data-theme="dark"] .login-box {
@@ -93,7 +92,7 @@ html[data-theme="dark"] .toolbar {
 html[data-theme="dark"] button,
 html[data-theme="dark"] input[type="text"] {
 	color: #e6e6e6;
-	border: 1px solid #2d3748;
+	border: 0px solid #2d3748;
 }
 
 html[data-theme="dark"] .console {

@@ -21,6 +21,8 @@ from app.tasks import (
     power_on,
 )
 
+from qemu_manager import QemuSession
+
 from .models import Container, FileTemplate
 from .serializers import (
     ContainerSerializer,
@@ -31,7 +33,6 @@ from .serializers import (
     ApplyAICodeRequestSerializer,
     UserInfoSerializer,
 )
-from .usecases.vm_management import QemuSession
 from .usecases.apply_template import _apply_template_to_vm, apply_ai_generated_project
 from .usecases.ssh import open_ssh_and_sftp, ensure_remote_dir
 from .usecases.audit import audit_log_http

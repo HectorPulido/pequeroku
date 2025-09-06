@@ -1,32 +1,24 @@
 """
 Celery tasks for heavy or I/O-bound operations.
-
-Notes:
-- We keep endpoints/contracts unchanged. For create(), we enqueue template
-  application as a background task to avoid blocking the request.
-- For write_file, we provide a task that the view can execute synchronously
-  via .apply() to preserve the original contract; if you later choose to
-  return a task id instead, switch to .delay() and adapt the HTTP response.
 """
 
-from celery import shared_task
-from django.conf import settings
-from django.shortcuts import get_object_or_404
-
-import paramiko
 import os
 import shlex
+from io import StringIO
+
+import paramiko
+from celery import shared_task
+from django.conf import settings
+from django.core.management import call_command
+from django.shortcuts import get_object_or_404
 
 from docker_manager.models import Container, FileTemplate
-from docker_manager.usecases.vm_management import QemuSession
 from docker_manager.usecases.apply_template import _apply_template_to_vm
+from qemu_manager import QemuSession
 
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=2)
 def power_on(self, container_id):
-    from io import StringIO
-    from django.core.management import call_command
-
     buf = StringIO()
     try:
         call_command("vmctl", "start", str(container_id), stdout=buf)
@@ -39,9 +31,6 @@ def power_on(self, container_id):
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=2)
 def power_off(self, container_id, force):
-    from io import StringIO
-    from django.core.management import call_command
-
     buf = StringIO()
     args = ["stop", str(container_id)] + (["--force"] if force else [])
     try:
@@ -55,9 +44,6 @@ def power_off(self, container_id, force):
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
 def sync_status(self):
-    from io import StringIO
-    from django.core.management import call_command
-
     buf = StringIO()
     try:
         call_command("vmctl", "sync", stdout=buf)

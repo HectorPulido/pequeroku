@@ -8,7 +8,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.apps import apps
 from django.db import DatabaseError
 
-from .usecases.vm_management import QemuSession
+from qemu_manager import QemuSession
 from .usecases.audit import audit_log_ws
 
 CTRL_C = "\x03"

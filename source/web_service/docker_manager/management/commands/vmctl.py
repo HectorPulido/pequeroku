@@ -125,7 +125,7 @@ def _vm_workdir(container_pk: int) -> str:
 
 
 def _start_vm(container_obj: "Container"):
-    from docker_manager.usecases.vm_management import QemuSession
+    from qemu_manager import QemuSession
 
     sess = QemuSession(container_obj, on_line=None, on_close=None)
 
@@ -178,10 +178,6 @@ class Command(BaseCommand):
         )
         p_stop.add_argument("id", type=int)
         p_stop.add_argument("--force", action="store_true")
-
-        p_prune = sub.add_parser(
-            "prune-orphans", help="Mata procesos QEMU sin container/estado válido"
-        )
 
     def handle(self, *args, **opts):
         cmd = opts["cmd"]
