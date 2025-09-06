@@ -27,11 +27,26 @@ html[data-theme="dark"] header {
 	border-bottom: 1px solid #1f242b;
 }
 html[data-theme="dark"] button {
-	background: #2e7d32;
+	background: #0e6b7a;
 }
 html[data-theme="dark"] button:disabled {
 	background: #3d4440;
 }
+
+html[data-theme="dark"] button:hover {
+	background: #0b2866;
+}
+
+html[data-theme="dark"] .top-btn {
+	background: #1b2028;
+	color: #e6e6e6;
+	border: 1px solid #2d3748;
+}
+
+html[data-theme="dark"] .top-btn {
+	background: #171b22;
+}
+
 html[data-theme="dark"] .login-box {
 	background: #141820;
 	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
@@ -102,6 +117,9 @@ html[data-theme="dark"] .upload-body input[type="file"] {
 	color: #e6e6e6;
 	border-color: #2d3748;
 }
+html[data-theme="dark"] .upload-body {
+	background: #e6e6e6;
+}
 html[data-theme="dark"] .upload-body button {
 	background: #0e6b7a;
 }
@@ -132,4 +150,9 @@ html[data-theme="dark"] .loader-backdrop {
 html[data-theme="dark"] .loader-spinner {
 	border-color: rgba(255, 255, 255, 0.2);
 	border-top-color: #fff;
+}
+
+html[data-theme="dark"] textarea {
+	background: rgba(0, 0, 0, 0.6);
+	color: #fff;
 }

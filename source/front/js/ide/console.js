@@ -69,7 +69,7 @@ export function setupConsole({
 			setTimeout(() => {
 				try {
 					consoleCMD.scrollIntoView({ block: "nearest", behavior: "smooth" });
-				} catch { }
+				} catch {}
 			}, 50);
 		});
 	}
