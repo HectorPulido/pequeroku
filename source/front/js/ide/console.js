@@ -69,7 +69,7 @@ export function setupConsole({
 			setTimeout(() => {
 				try {
 					consoleCMD.scrollIntoView({ block: "nearest", behavior: "smooth" });
-				} catch {}
+				} catch { }
 			}, 50);
 		});
 	}
@@ -105,11 +105,9 @@ export function setupConsole({
 		clear: () => term.clear(),
 		fit,
 		setTheme(isDark) {
-			term.setOption({
-				theme: isDark
-					? { background: "#0b0d10", foreground: "#e6e6e6", cursor: "#e6e6e6" }
-					: { background: "#111111", foreground: "#eeeeee", cursor: "#222222" },
-			});
+			term.options.theme = isDark
+				? { background: "#0b0d10", foreground: "#e6e6e6", cursor: "#e6e6e6" }
+				: { background: "#111111", foreground: "#eeeeee", cursor: "#222222" };
 		},
 	};
 }
