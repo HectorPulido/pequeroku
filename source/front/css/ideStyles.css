@@ -107,8 +107,8 @@ wc-monaco-editor#editor {
 
 /* ===== Sidebar (collapsible / off-canvas on mobile) ===== */
 .sidebar {
-	min-width: 200px;
-	width: 200px;
+	min-width: 250px;
+	width: 250px;
 	background: #2d2d2d;
 	padding: 8px;
 	box-sizing: border-box;
@@ -157,10 +157,8 @@ wc-monaco-editor#editor {
 	overflow-y: auto;
 	font-family: monospace;
 	white-space: pre-wrap;
-	height: 150px;
-	/* desktop default */
+	height: 30rem;
 	min-width: 0;
-	/* don't force width */
 }
 
 .console-toolbar .last-button {

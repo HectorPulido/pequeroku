@@ -9,8 +9,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import exceptions
 from rest_framework import status
 
-from docker_manager.models import ResourceQuota, AIUsageLog
-from .usecases.generate_code import get_project_response
+from vm_manager.models import ResourceQuota
+from internal_config.models import AIUsageLog
+from .ai_usecases.generate_code import get_project_response
 from .serializers import PromptSerializer
 
 

@@ -1,249 +1,242 @@
 /** biome-ignore-all lint/complexity/noImportantStyles: Important shit is important */
 * {
-	box-sizing: border-box;
-	margin: 0;
-	padding: 0;
-	font-family: sans-serif;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
 }
 
 body {
-	background: #f4f4f4;
-	color: #333;
+    background: #f4f4f4;
+    color: #333;
 }
 
 header {
-	background: #222;
-	color: #fff;
-	padding: 1rem;
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	flex-wrap: wrap;
+    background: #222;
+    color: #fff;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 header h1 {
-	font-size: 1.5rem;
+    font-size: 1.5rem;
 }
 
 button {
-	background: #28a745;
-	border: none;
-	padding: 0.5rem 1rem;
-	color: white;
-	cursor: pointer;
-	border-radius: 4px;
+    background: #28a745;
+    border: none;
+    padding: 0.5rem 1rem;
+    color: white;
+    cursor: pointer;
+    border-radius: 4px;
 }
 
 button:disabled {
-	background: #4d554f;
-	cursor: auto;
+    background: #4d554f;
+    cursor: auto;
 }
 
 main {
-	padding: 1rem;
+    padding: 1rem;
 }
 
 #container-list,
 #other-container-list {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
-	gap: 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 1rem;
 }
 
 .container-title {
-	padding-left: 1rem;
-	margin-top: 1rem;
-	margin-bottom: 0.5rem;
-}
-
-.container-card {
-	background: white;
-	padding: 1rem;
-	border-radius: 6px;
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding-left: 1rem;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
 }
 
 .container-card div {
-	display: flex;
-	flex-wrap: nowrap;
+    display: flex;
+    flex-wrap: nowrap;
 }
 
 .container-card h2 {
-	font-size: 1.1rem;
+    font-size: 1.1rem;
 }
 
 .container-card small {
-	color: #666;
+    color: #666;
 }
 
 .container-card button {
-	margin-right: 0.5rem;
+    margin-right: 0.5rem;
 }
 
 .container-card div {
-	margin-top: 1rem;
+    margin-top: 1rem;
 }
 
 /* Login Styles */
 .login-container {
-	display: flex;
-	height: 100vh;
-	align-items: center;
-	justify-content: center;
+    display: flex;
+    height: 100vh;
+    align-items: center;
+    justify-content: center;
 }
 
 .login-box {
-	background: #fff;
-	padding: 2rem;
-	border-radius: 8px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-	width: 100%;
-	max-width: 320px;
-	text-align: center;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
 }
 
 .login-box h2 {
-	margin-bottom: 1rem;
+    margin-bottom: 1rem;
 }
 
 .login-box input {
-	width: 100%;
-	padding: 0.75rem;
-	margin-bottom: 0.5rem;
-	border: 1px solid #ccc;
-	border-radius: 4px;
+    width: 100%;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
 }
 
 .login-box button {
-	width: 100%;
-	padding: 0.75rem;
-	background: #28a745;
-	color: #fff;
-	border: none;
-	border-radius: 4px;
-	cursor: pointer;
+    width: 100%;
+    padding: 0.75rem;
+    background: #28a745;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
 }
 
 .login-box button:hover {
-	background: #218838;
+    background: #218838;
 }
 
 .error-message {
-	color: #c0392b;
-	margin-top: 0.5rem;
+    color: #c0392b;
+    margin-top: 0.5rem;
 }
 
 /* Console Styles */
 #console-modal {
-	position: fixed;
-	top: 0;
-	left: 0;
-	width: 100vw;
-	height: 100vh;
-	flex-direction: column;
-	background: rgba(0, 0, 0, 0.6);
-	display: flex;
-	align-items: center;
-	justify-content: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .console-header {
-	background: #333;
-	color: #fff;
-	padding: 0.5rem 1rem;
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	border-top-left-radius: 6px;
-	border-top-right-radius: 6px;
-	width: 600px;
-	height: 3rem;
+    background: #333;
+    color: #fff;
+    padding: 0.5rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    width: 600px;
+    height: 3rem;
 }
 
 .console-body {
-	background: #000;
-	color: #0f0;
-	font-family: monospace;
-	height: 90%;
-	overflow-y: auto;
-	border-bottom-left-radius: 6px;
-	border-bottom-right-radius: 6px;
+    background: #000;
+    color: #0f0;
+    font-family: monospace;
+    height: 90%;
+    overflow-y: auto;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
 }
 
 .console {
-	width: 95%;
+    width: 95%;
 }
 
 .console-input {
-	height: 3rem;
-	display: flex;
+    height: 3rem;
+    display: flex;
 }
 
 .console-input input {
-	flex: 1;
-	padding: 0.5rem;
-	border: 1px solid #ccc;
-	border-bottom-left-radius: 6px;
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-bottom-left-radius: 6px;
 }
 
 .console-input button {
-	padding: 0.5rem 1rem;
-	border: none;
-	background: #007bff;
-	color: white;
-	cursor: pointer;
-	border-radius: 0%;
+    padding: 0.5rem 1rem;
+    border: none;
+    background: #007bff;
+    color: white;
+    cursor: pointer;
+    border-radius: 0%;
 }
 
 .last-button {
-	border-bottom-right-radius: 6px !important;
-	height: 100%;
+    border-bottom-right-radius: 6px !important;
+    height: 100%;
 }
 
 .dropdown {
-	position: relative;
-	display: inline-block;
+    position: relative;
+    display: inline-block;
 }
 
 .dropdown-content {
-	display: none;
-	position: absolute;
-	z-index: 1;
-	right: 0px;
+    display: none;
+    position: absolute;
+    z-index: 1;
+    right: 0px;
 }
 
 .dropdown-content div {
-	background-color: #222;
-	width: 300px;
-	padding: 10px;
+    background-color: #222;
+    width: 300px;
+    padding: 10px;
 }
 
 .dropdown:hover .dropdown-content {
-	display: block;
+    display: block;
 }
 
 .dropdown-content .btn-send {
-	width: 100%;
+    width: 100%;
 }
 
 /* Utility */
 
 .header-dropdown {
-	position: relative;
-	display: inline-block;
+    position: relative;
+    display: inline-block;
 }
 
 .user-info {
-	display: flex;
-	align-items: center;
-	gap: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .top-btn {
-	background: none;
-	border: none;
-	color: #fff;
-	font-size: 1.2rem;
-	cursor: pointer;
-	padding: 0.5rem 0.25rem;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.5rem 0.25rem;
 }

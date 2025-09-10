@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "vm-services"
+version = "0.1.0"
+description = ""
+authors = ["Hector Pulido <hectorandrespp@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+uvicorn = {extras = ["standard"], version = "^0.35.0"}
+fastapi = "^0.116.1"
+paramiko = "^4.0.0"
+redis = "^6.4.0"
+dotenv = "^0.9.9"
+
+[tool.pyrefly]
+project-includes = ["**/*"]
+project-excludes = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/*venv/**/*",
+]
+
+
+[tool.poetry.group.dev.dependencies]
+pyrefly = "^0.32.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -69,7 +69,7 @@ export function setupContainers() {
 
 	async function fetchUserData() {
 		try {
-			const res = await fetch("/api/user_data/", {
+			const res = await fetch("/api/user/me/", {
 				credentials: "same-origin",
 				noLoader: true,
 			});
@@ -102,7 +102,7 @@ export function setupContainers() {
 		card.className = "container-card";
 		const isRunning = c.status === "running";
 		card.innerHTML = `
-<h2>${c.id} — ${c.container_id.slice(0, 12)}</h2>
+<h2>${c.id} — ${c.name}</h2>
 <small>${c.username}</small> - <small>${new Date(c.created_at).toLocaleString()}</small>
 <p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
 <div>

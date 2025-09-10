@@ -1,29 +1,36 @@
 services:
-  web:
-    build: ./web_service/.
+  vm_services:
+    build: ./vm_service/.
     command: ./entrypoint.sh
     volumes:
-      - ./web_service:/app
       - ./vm_data:/app/vm_data
       - /Users/hectorpulido/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro
       - /Users/hectorpulido/.ssh/id_ed25519.pub:/root/.ssh/id_vm_pequeroku.pub:ro
     # devices:
-    #   - /dev/kvm:/dev/kvm
+    #     - /dev/kvm:/dev/kvm
     # security_opt:
-    #   - seccomp=unconfined
+    #     - seccomp=unconfined
     environment:
       VM_SSH_PRIVKEY: /root/.ssh/id_vm_pequeroku
-      VM_SSH_USER: root
       VM_BASE_IMAGE: /app/vm_data/base/debian12-golden.qcow2
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
     cap_add:
       - NET_ADMIN
     networks:
       - pequeroku-net
     depends_on:
-      - db
       - redis
+    restart: unless-stopped
+
+  web:
+    build: ./web_service/.
+    command: ./entrypoint.sh
+    volumes:
+      - ./web_service:/app
+    networks:
+      - pequeroku-net
+    depends_on:
+      - db
+    restart: unless-stopped
 
   nginx:
     image: nginx:latest
@@ -40,7 +47,6 @@ services:
       - pequeroku-net
     restart: unless-stopped
 
-
   db:
     image: "postgres:16"
     environment:
@@ -51,6 +57,7 @@ services:
       - .db_data:/var/lib/postgresql/data
     networks:
       - pequeroku-net
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -61,6 +68,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    volumes:
+      - .redis_data:/data
+    restart: unless-stopped
 
 networks:
   pequeroku-net:

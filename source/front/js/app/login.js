@@ -36,7 +36,7 @@ export function setupLogin({ onSuccess }) {
 		const username = usernameEl.value.trim();
 		const password = passwordEl.value.trim();
 		try {
-			const res = await fetch("/api/login/", {
+			const res = await fetch("/api/user/login/", {
 				method: "POST",
 				credentials: "same-origin",
 				headers: { "Content-Type": "application/json" },

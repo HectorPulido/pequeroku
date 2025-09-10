@@ -31,10 +31,7 @@ export function createWS(
 	connect();
 
 	function send(payload) {
-		const msg =
-			typeof payload === "string"
-				? JSON.stringify({ action: "cmd", data: payload })
-				: JSON.stringify(payload);
+		const msg = payload;
 		if (ws && ws.readyState === 1) ws.send(msg);
 		else queue.push(msg);
 	}

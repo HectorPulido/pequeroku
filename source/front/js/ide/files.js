@@ -2,7 +2,7 @@ import { detectLangFromPath } from "../shared/langMap.js";
 
 export function setupFileTree({ api, fileTreeEl, onOpen }) {
 	async function listDir(path = "/app") {
-		return api(`/list_dir?path=${encodeURIComponent(path)}`);
+		return api(`/list_dir/?path=${encodeURIComponent(path)}`);
 	}
 
 	async function loadDir(path, ul) {
@@ -16,18 +16,18 @@ export function setupFileTree({ api, fileTreeEl, onOpen }) {
 				!item.path.slice(prefix.length).includes("/"),
 		);
 		direct.sort((a, b) =>
-			a.type === b.type
+			a.path_type === b.path_type
 				? a.name.localeCompare(b.name)
-				: a.type === "directory"
+				: a.path_type === "directory"
 					? -1
 					: 1,
 		);
 		direct.forEach((item) => {
 			const li = document.createElement("li");
-			li.classList.add(item.type);
+			li.classList.add(item.path_type);
 			li.textContent = item.name;
 			li.dataset.path = item.path;
-			if (item.type === "directory") {
+			if (item.path_type === "directory") {
 				li.addEventListener("click", async (e) => {
 					e.stopPropagation();
 					const isExp = li.classList.toggle("expanded");

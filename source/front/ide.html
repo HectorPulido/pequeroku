@@ -1,129 +1,223 @@
 <html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+        />
+        <title>PequeRoku – Micro-IDE</title>
+        <link rel="stylesheet" href="/css/themes.css" />
+        <link rel="stylesheet" href="/css/base.css" />
+        <link rel="stylesheet" href="/css/ideStyles.css" />
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"
+        />
+        <script
+            type="module"
+            src="https://cdn.jsdelivr.net/gh/vanillawc/wc-monaco-editor@1/index.js"
+        ></script>
+    </head>
 
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>PequeRoku – Micro-IDE</title>
-    <link rel="stylesheet" href="/css/themes.css" />
-    <link rel="stylesheet" href="/css/base.css" />
-    <link rel="stylesheet" href="/css/ideStyles.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
-    <script type="module" src="https://cdn.jsdelivr.net/gh/vanillawc/wc-monaco-editor@1/index.js"></script>
-</head>
-
-<body>
-    <div id="editor-modal" class="full-viewport-height">
-        <div class="sidebar">
-            <div>
-                <button id="refresh-tree" title="Reload">🔄</button>
-                <button id="new-folder" title="Create Folder">📂</button>
-                <button id="new-file" title="Create file">📄</button>
-                <button id="btn-open-upload-modal" title="Upload file">⬆</button>
-                <button id="toggle-sidebar-2" class="hidden-big" title="Toggle sidebar" style="height: 30px;">☰</button>
-            </div>
-            <ul id="file-tree"></ul>
-        </div>
-        <div class="main">
-            <div class="toolbar">
+    <body>
+        <div id="editor-modal" class="full-viewport-height">
+            <div class="sidebar">
                 <div>
-                    <button id="toggle-sidebar" title="Toggle sidebar">☰</button>
-                    <span id="current_path_label"></span>
+                    <button id="refresh-tree" title="Reload">🔄</button>
+                    <button id="new-folder" title="Create Folder">📂</button>
+                    <button id="new-file" title="Create file">📄</button>
+                    <button id="btn-open-upload-modal" title="Upload file">
+                        ⬆
+                    </button>
+                    <button
+                        id="toggle-sidebar-2"
+                        class="hidden-big"
+                        title="Toggle sidebar"
+                        style="height: 30px"
+                    >
+                        ☰
+                    </button>
                 </div>
-                <div>
-                    <button id="btn-open-templates-modal" title="Templates">Templates</button>
-                    <button id="btn-open-ai-modal" title="AI Features">✨AI</button>
-                    <button id="toggle-console" title="Toggle console">🖥️</button>
-                    <button id="save-file" title="Save file">💾</button>
-                    <button id="run-code" title="Run">Run ▶️</button>
-                    <button id="theme-toggle" title="Theme">🌙</button>
-                </div>
+                <ul id="file-tree"></ul>
             </div>
-            <wc-monaco-editor id="editor" language="python" word-wrap="true"></wc-monaco-editor>
+            <div class="main">
+                <div class="toolbar">
+                    <div>
+                        <button id="toggle-sidebar" title="Toggle sidebar">
+                            ☰
+                        </button>
+                        <span id="current_path_label"></span>
+                    </div>
+                    <div>
+                        <button id="btn-open-templates-modal" title="Templates">
+                            Templates
+                        </button>
+                        <button id="btn-open-ai-modal" title="AI Features">
+                            ✨AI
+                        </button>
+                        <button id="toggle-console" title="Toggle console">
+                            🖥️
+                        </button>
+                        <button id="save-file" title="Save file">💾</button>
+                        <button id="run-code" title="Run">Run ▶️</button>
+                    </div>
+                </div>
+                <wc-monaco-editor
+                    id="editor"
+                    language="python"
+                    word-wrap="true"
+                ></wc-monaco-editor>
 
-            <div class="console-area" id="console-area">
-                <div class="console" id="console-log"></div>
-                <div class="toolbar console-toolbar">
-                    <input type="text" id="console-cmd" class="console-input" placeholder="bash command..." />
-                    <button id="send-cmd">Send</button>
-                    <div class="dropdown">
-                        <button class="last-button">🔽</button>
-                        <div class="dropdown-content">
-                            <button class="btn-send" param="ctrld">Ctrl+D</button>
-                            <button class="btn-send" param="ctrlc">Ctrl+C</button>
-                            <button class="btn-send" param="clear">Clear</button>
-                            <button id="restart-container">Reload console</button>
+                <div class="console-area" id="console-area">
+                    <div class="console" id="console-log"></div>
+                    <div class="toolbar console-toolbar">
+                        <input
+                            type="text"
+                            id="console-cmd"
+                            class="console-input"
+                            placeholder="bash command..."
+                        />
+                        <button id="send-cmd">Send</button>
+                        <div class="dropdown">
+                            <button class="last-button">🔽</button>
+                            <div class="dropdown-content">
+                                <button class="btn-send" param="ctrld">
+                                    Ctrl+D
+                                </button>
+                                <button class="btn-send" param="ctrlc">
+                                    Ctrl+C
+                                </button>
+                                <button class="btn-send" param="clear">
+                                    Clear
+                                </button>
+                                <button id="restart-container">
+                                    Reload console
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Upload modal -->
+                <div id="upload-modal" class="hidden">
+                    <div class="upload-container">
+                        <div class="upload-header">
+                            <span>Upload file</span>
+                            <button id="btn-upload-close" class="top-btn">
+                                ❌
+                            </button>
+                        </div>
+                        <div class="upload-body">
+                            <input type="file" id="file-input" />
+                            <button id="btn-upload">Upload</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Templates modal -->
+                <div id="templates-modal" class="hidden">
+                    <div class="upload-container">
+                        <div class="upload-header">
+                            <span>Templates</span>
+                            <button id="btn-templates-close" class="top-btn">
+                                ❌
+                            </button>
+                        </div>
+                        <div
+                            class="upload-body"
+                            style="display: block; overflow: auto"
+                        >
+                            <div hidden>
+                                <label>Destination</label>
+                                <input
+                                    type="text"
+                                    id="tpl-dest"
+                                    placeholder="/app"
+                                    value="/app"
+                                    style="width: 160px"
+                                />
+                                <label
+                                    style="
+                                        display: flex;
+                                        align-items: center;
+                                        gap: 6px;
+                                    "
+                                >
+                                    <input
+                                        type="checkbox"
+                                        id="tpl-clean"
+                                        checked
+                                    />
+                                    clean
+                                </label>
+                            </div>
+                            <div id="tpl-list"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="ai-modal" class="hidden">
+                    <div class="upload-container">
+                        <div class="upload-header">
+                            <span>AI Generator</span>
+                            <button id="btn-ai-close" class="top-btn">
+                                ❌
+                            </button>
+                        </div>
+                        <div
+                            class="upload-body"
+                            style="
+                                display: block;
+                                max-height: 70vh;
+                                overflow: auto;
+                            "
+                        >
+                            <div>
+                                <h3>
+                                    Describe the app you want to generate...
+                                </h3>
+                                <p>
+                                    Be detailed; do not omit information; share
+                                    the goal, main flow, key screens, data
+                                    model, integrations, rules, tech stack. The
+                                    more specific, the better the code 🚀
+                                </p>
+                            </div>
+                            <textarea
+                                id="ai-input"
+                                style="width: 100%; min-height: 220px"
+                                placeholder="Describe the app you want to generate..."
+                            ></textarea>
+                            <div
+                                style="
+                                    display: flex;
+                                    gap: 8px;
+                                    align-items: center;
+                                    margin-top: 8px;
+                                    justify-self: self-end;
+                                "
+                            >
+                                <button id="btn-ai-generate">
+                                    ✨ Generate
+                                </button>
+                                <small
+                                    id="ai-credits"
+                                    style="opacity: 0.8"
+                                ></small>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Upload modal -->
-            <div id="upload-modal" class="hidden">
-                <div class="upload-container">
-                    <div class="upload-header">
-                        <span>Upload file</span>
-                        <button id="btn-upload-close" class="top-btn">❌</button>
-                    </div>
-                    <div class="upload-body">
-                        <input type="file" id="file-input" />
-                        <button id="btn-upload">Upload</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Templates modal -->
-            <div id="templates-modal" class="hidden">
-                <div class="upload-container">
-                    <div class="upload-header">
-                        <span>Templates</span>
-                        <button id="btn-templates-close" class="top-btn">❌</button>
-                    </div>
-                    <div class="upload-body" style="display:block; max-height: 70vh; overflow:auto;">
-                        <div hidden>
-                            <label>Destination</label>
-                            <input type="text" id="tpl-dest" placeholder="/app" value="/app" style="width:160px;" />
-                            <label style="display:flex; align-items:center; gap:6px;">
-                                <input type="checkbox" id="tpl-clean" checked />
-                                clean
-                            </label>
-                        </div>
-                        <div id="tpl-list"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="ai-modal" class="hidden">
-                <div class="upload-container">
-                    <div class="upload-header">
-                        <span>AI Generator</span>
-                        <button id="btn-ai-close" class="top-btn">❌</button>
-                    </div>
-                    <div class="upload-body" style="display:block; max-height:70vh; overflow:auto;">
-                        <div>
-                            <h3>Describe the app you want to generate...</h3>
-                            <p>Be detailed; do not omit information; share the goal, main flow, key screens, data model,
-                                integrations, rules, tech stack. The more specific, the better the code 🚀</p>
-                        </div>
-                        <textarea id="ai-input" style="width:100%; min-height:220px;"
-                            placeholder="Describe the app you want to generate..."></textarea>
-                        <div style="display:flex; gap:8px; align-items:center; margin-top:8px; justify-self: self-end;">
-                            <button id="btn-ai-generate">✨ Generate</button>
-                            <small id="ai-credits" style="opacity:.8;"></small>
-                        </div>
-                    </div>
-                </div>
+            <!-- Global loader -->
+            <div id="global-loader" class="loader-overlay hidden">
+                <div class="loader-backdrop"></div>
+                <div class="loader-spinner"></div>
             </div>
         </div>
 
-        <!-- Global loader -->
-        <div id="global-loader" class="loader-overlay hidden">
-            <div class="loader-backdrop"></div>
-            <div class="loader-spinner"></div>
-        </div>
-    </div>
-
-    <script type="module" src="/js/ide/main.js"></script>
-</body>
-
+        <script type="module" src="/js/ide/main.js"></script>
+    </body>
 </html>

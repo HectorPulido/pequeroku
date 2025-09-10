@@ -1,4 +1,5 @@
 .db_data/
+.redis_data/
 staticfiles/
 ignore_*
 salida.txt

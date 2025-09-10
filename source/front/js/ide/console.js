@@ -55,12 +55,12 @@ export function setupConsole({
 				// Ctrl + C
 				if (e.key === "c" || e.key === "C") {
 					e.preventDefault();
-					onSend?.({ action: "ctrlc" });
+					onSend?.("ctrlc");
 				}
 				// Ctrl + D
 				if (e.key === "d" || e.key === "D") {
 					e.preventDefault();
-					onSend?.({ action: "ctrld" });
+					onSend?.("ctrld");
 				}
 			}
 		});
@@ -78,7 +78,7 @@ export function setupConsole({
 	ctrlButtons.forEach((btn) =>
 		btn.addEventListener("click", () => {
 			const p = btn.getAttribute("param");
-			onSend?.({ action: p });
+			onSend?.(p);
 			console.log("executing:", { action: p });
 		}),
 	);

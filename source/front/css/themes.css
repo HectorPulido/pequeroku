@@ -38,12 +38,12 @@ html[data-theme="dark"] button:hover {
 }
 
 html[data-theme="dark"] .top-btn {
-    background: none;
-    border: none;
-    color: #fff;
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: 0.5rem 0.25rem;
+	background: none;
+	border: none;
+	color: #fff;
+	font-size: 1.2rem;
+	cursor: pointer;
+	padding: 0.5rem 0.25rem;
 }
 
 html[data-theme="dark"] .login-box {
