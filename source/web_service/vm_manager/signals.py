@@ -45,7 +45,7 @@ def create_default_node(sender, **kwargs):
     _, created = Node.objects.get_or_create(
         name="base",
         defaults={
-            "node_hos": "http://vm_services:8080/",
+            "node_host": "http://vm_services:8080/",
             "active": True,
             "auth_token": "N/A",
         },
