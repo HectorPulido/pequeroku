@@ -6,11 +6,8 @@ from typing import Optional
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 import websockets
-from django.conf import settings
 from django.apps import apps
 from django.db import DatabaseError
-
-from .models import Container
 
 from internal_config.audit import audit_log_ws
 
@@ -59,7 +56,6 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
     @sync_to_async
     def _get_container(pk: int):
         container = apps.get_model("vm_manager", "Container")
-        node = apps.get_model("vm_manager", "Node")
 
         container_obj = None
         try:
@@ -137,7 +133,7 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
                 ping_interval=20,
                 ping_timeout=20,
                 close_timeout=5,
-                extra_headers=custom_headers,
+                additional_headers=custom_headers,
             )
         except Exception as e:
             await self.send(text_data=f"Proxy error: could not connect ({e})")
