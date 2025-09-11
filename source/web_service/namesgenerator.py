@@ -266,7 +266,12 @@ right = [
 
 def get_random_name(sep="_"):
     r = random.SystemRandom()
-    return "%s%s%s" % (r.choice(left), sep, r.choice(right))
+    mode = r.choice(["mode_a", "mode_b"])
+
+    if mode == "mode_a":
+        return "%s%s%s" % (r.choice(left), sep, r.choice(right))
+    elif mode == "mode_b":
+        return "%s%sthe%s%s" % (r.choice(right), sep, sep, r.choice(left))
 
 
 if __name__ == "__main__":
