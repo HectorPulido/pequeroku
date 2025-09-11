@@ -14,7 +14,7 @@ from .ssh_ready import _wait_ssh
 
 
 def _drop_privs():
-    import pwd, os
+    import os
 
     os.setsid()
     run_uid = getattr(settings, "VM_RUN_AS_UID", None)
@@ -110,7 +110,7 @@ def _start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
         args,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        preexec_fn=_drop_privs,
+        # preexec_fn=_drop_privs,
     )
     print("Process executed", proc)
 

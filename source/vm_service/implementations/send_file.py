@@ -1,11 +1,7 @@
 import posixpath
 import shlex
 import paramiko
-
-
 import settings
-
-
 from qemu_manager.models import VMUploadFiles, VMRecord, ElementResponse
 
 

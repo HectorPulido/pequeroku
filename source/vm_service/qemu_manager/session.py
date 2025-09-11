@@ -7,7 +7,6 @@ from typing import Callable, Optional
 
 import paramiko
 
-
 import settings
 
 from .models import VMProc

@@ -2,9 +2,8 @@ import socket
 
 
 def _pick_free_port() -> int:
-    """Pick an ephemeral localhost TCP port (bound then released).
-
-    Preserves the original print trace for observability.
+    """
+    Pick an ephemeral localhost TCP port (bound then released).
     """
     print("Picking a port...")
     s = socket.socket()

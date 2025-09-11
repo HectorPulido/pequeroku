@@ -129,6 +129,9 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
 
         upstream_url = f"{container_node_host}vms/{container_id}/tty"
         try:
+            custom_headers = {
+                "Authorization": f"Bearer {node.auth_token}",
+            }
             self.upstream = await websockets.connect(
                 upstream_url,
                 ping_interval=20,

@@ -2,7 +2,6 @@ import os
 import shutil
 import subprocess
 
-
 import settings
 
 from .crypto import _spec_hash
@@ -23,21 +22,29 @@ def _make_overlay(base_image: str, overlay: str, disk_gib: int) -> None:
     print("Creating the overlay with: ", base_image, overlay, disk_gib)
     if os.path.exists(overlay):
         return
-    subprocess.run(
-        [
-            "qemu-img",
-            "create",
-            "-f",
-            "qcow2",
-            "-F",
-            "qcow2",
-            "-b",
-            base_image,
-            overlay,
-            f"{disk_gib}G",
-        ],
-        check=True,
-    )
+
+    args = [
+        "qemu-img",
+        "create",
+        "-f",
+        "qcow2",
+        "-F",
+        "qcow2",
+        "-b",
+        base_image,
+        overlay,
+        f"{disk_gib}G",
+    ]
+    print(args)
+
+    try:
+        subprocess.run(
+            args,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed with error: {e}")
+        print(f"Stderr: {e.stderr}")
 
 
 def _make_seed_iso(
@@ -101,13 +108,15 @@ runcmd:
     meta_data = f"""instance-id: {instance_id}
 local-hostname: {instance_id}
 """
-
+    print("Writting spec")
     open(spec_path, "w", encoding="utf-8").write(want)
 
     wd = os.path.dirname(seed_iso)
     ud = os.path.join(wd, "user-data")
     md = os.path.join(wd, "meta-data")
+    print("writting user_data")
     open(ud, "w", encoding="utf-8").write(user_data)
+    print("writting metadata")
     open(md, "w", encoding="utf-8").write(meta_data)
 
     cloud_localds = shutil.which("cloud-localds")

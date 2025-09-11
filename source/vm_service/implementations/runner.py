@@ -5,16 +5,10 @@ import signal
 import threading
 import time
 
-
 import settings
 
-
 from qemu_manager.vm import _start_vm
-
-
 from qemu_manager.ssh_ready import _wait_ssh
-
-
 from qemu_manager.models import VMState, VMRecord
 
 

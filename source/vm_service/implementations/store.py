@@ -3,8 +3,6 @@ import time
 from typing import Dict, Optional
 import socket
 import redis
-
-
 from qemu_manager.models import VMState, VMRecord
 
 

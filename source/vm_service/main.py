@@ -6,7 +6,14 @@ import uuid
 import asyncio
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    Depends,
+    APIRouter,
+)
 from fastapi.responses import JSONResponse
 
 
@@ -46,13 +53,13 @@ store = RedisStore(settings.REDIS_URL, settings.REDIS_PREFIX)
 runner = Runner(store, settings.NODE_NAME)
 
 # ===== FastAPI app =====
-app = FastAPI(
-    title="vm-service", version="0.1.0", dependencies=[Depends(verify_bearer_token)]
-)
+app = FastAPI(title="vm-service", version="0.1.0")
+
+router = APIRouter(dependencies=[Depends(verify_bearer_token)])
 
 
 # ---- Endpoints REST ----
-@app.post("/vms", response_model=VMOut, status_code=201)
+@router.post("/vms", response_model=VMOut, status_code=201)
 async def create_vm(req: VMCreate) -> VMOut:
     vm_id = str(uuid.uuid4())
     wd = runner.workdir(vm_id)
@@ -69,7 +76,7 @@ async def create_vm(req: VMCreate) -> VMOut:
     return VMOut.from_record(vm, runner)
 
 
-@app.get("/vms/list/{vm_ids}", response_model=list[VMOut])
+@router.get("/vms/list/{vm_ids}", response_model=list[VMOut])
 async def get_vms(vm_ids: str) -> list[VMOut]:
     vm_ids_keys = vm_ids.split(",")
     vm_records: list["VMRecord"] = []
@@ -79,7 +86,7 @@ async def get_vms(vm_ids: str) -> list[VMOut]:
     return vm_records
 
 
-@app.get("/vms/{vm_id}", response_model=VMOut)
+@router.get("/vms/{vm_id}", response_model=VMOut)
 async def get_vm(vm_id: str) -> VMOut:
     try:
         vm: "VMRecord" = store.get(vm_id)
@@ -88,12 +95,12 @@ async def get_vm(vm_id: str) -> VMOut:
         raise HTTPException(404, "VM not found") from e
 
 
-@app.get("/vms", response_model=list[VMOut])
+@router.get("/vms", response_model=list[VMOut])
 async def list_vms() -> list[VMOut]:
     return [VMOut.from_record(v, runner) for v in store.all().values()]
 
 
-@app.post("/vms/{vm_id}/actions", response_model=VMOut)
+@router.post("/vms/{vm_id}/actions", response_model=VMOut)
 async def action_vm(vm_id: str, act: VMAction) -> VMOut:
     try:
         vm: "VMRecord" = store.get(vm_id)
@@ -115,7 +122,7 @@ async def action_vm(vm_id: str, act: VMAction) -> VMOut:
     return VMOut.from_record(vm, runner)
 
 
-@app.post("/vms/{vm_id}/upload-files", response_model=ElementResponse)
+@router.post("/vms/{vm_id}/upload-files", response_model=ElementResponse)
 async def upload_files(vm_id: str, files: VMUploadFiles) -> ElementResponse:
     try:
         vm: "VMRecord" = store.get(vm_id)
@@ -128,7 +135,7 @@ async def upload_files(vm_id: str, files: VMUploadFiles) -> ElementResponse:
     )
 
 
-@app.post("/vms/{vm_id}/list-dir", response_model=list[ListDirItem])
+@router.post("/vms/{vm_id}/list-dir", response_model=list[ListDirItem])
 async def list_dir_endpoint(vm_id: str, root: VMPath) -> list[ListDirItem]:
     try:
         vm: "VMRecord" = store.get(vm_id)
@@ -138,7 +145,7 @@ async def list_dir_endpoint(vm_id: str, root: VMPath) -> list[ListDirItem]:
     return list_dir(vm, root.path)
 
 
-@app.post("/vms/{vm_id}/read-file", response_model=FileContent)
+@router.post("/vms/{vm_id}/read-file", response_model=FileContent)
 async def read_file_endpoint(vm_id: str, path: VMPath) -> FileContent:
     try:
         vm: "VMRecord" = store.get(vm_id)
@@ -148,7 +155,7 @@ async def read_file_endpoint(vm_id: str, path: VMPath) -> FileContent:
     return read_file(vm, path.path)
 
 
-@app.post("/vms/{vm_id}/create-dir", response_model=ElementResponse)
+@router.post("/vms/{vm_id}/create-dir", response_model=ElementResponse)
 async def create_dir_endpoint(vm_id: str, path: VMPath) -> ElementResponse:
     try:
         vm: "VMRecord" = store.get(vm_id)
@@ -158,7 +165,7 @@ async def create_dir_endpoint(vm_id: str, path: VMPath) -> ElementResponse:
     return create_dir(vm, path.path)
 
 
-@app.delete("/vms/{vm_id}", response_model=VMOut)
+@router.delete("/vms/{vm_id}", response_model=VMOut)
 async def delete_vm(vm_id: str) -> VMOut:
     try:
         vm: "VMRecord" = store.get(vm_id)
@@ -169,7 +176,7 @@ async def delete_vm(vm_id: str) -> VMOut:
     return VMOut.from_record(vm, runner)
 
 
-@app.get("/vms/{vm_id}/console/tail")
+@router.get("/vms/{vm_id}/console/tail")
 async def tail_console(vm_id: str, lines: int = 120) -> JSONResponse:
     try:
         vm: "VMRecord" = store.get(vm_id)
@@ -188,7 +195,7 @@ async def tail_console(vm_id: str, lines: int = 120) -> JSONResponse:
     return JSONResponse({"vm_id": vm_id, "lines": lines, "console": out})
 
 
-@app.post("/vms/{vm_id}/execute-sh", response_model=ElementResponse)
+@router.post("/vms/{vm_id}/execute-sh", response_model=ElementResponse)
 async def execute_sh(vm_id: str, vm_command: VMSh) -> ElementResponse:
     print("Initiating bridge...")
     try:
@@ -263,6 +270,8 @@ async def tty_ws(websocket: WebSocket, vm_id: str):
         except Exception:
             pass
 
+
+app.include_router(router)
 
 # ===== Entrypoint =====
 if __name__ == "__main__":
