@@ -1,6 +1,3 @@
-from collections import defaultdict
-from typing import List, Literal, Optional, Dict, Any, Iterable
-
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -10,7 +7,6 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
-from rest_framework.generics import GenericAPIView
 
 from internal_config.audit import audit_log_http
 
@@ -237,6 +233,38 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         return Response(response)
 
     @action(detail=True, methods=["post"], parser_classes=[JSONParser])
+    def create_dir(self, request, pk=None):
+        path = request.data.get("path")
+        obj: Container = self.get_object()
+
+        if not path:
+            audit_log_http(
+                request,
+                action="container.create_dir",
+                target_type="container",
+                target_id=obj.pk,
+                message="Create dir rejected: path is required",
+                success=False,
+            )
+            return Response({"error": "path required"}, status=400)
+
+        service = self._get_service(obj)
+        service.create_dir(
+            str(obj.container_id),
+            path,
+        )
+        audit_log_http(
+            request,
+            action="container.create_dir",
+            target_type="container",
+            target_id=obj.pk,
+            message="Directory created",
+            metadata={"path": path},
+            success=True,
+        )
+        return Response({"status": "ok"})
+
+    @action(detail=True, methods=["post"], parser_classes=[JSONParser])
     def write_file(self, request, pk=None):
         path = request.data.get("path")
         content = request.data.get("content", "")
@@ -254,7 +282,7 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             return Response({"error": "path required"}, status=400)
 
         service = self._get_service(obj)
-        response = service.upload_files(
+        service.upload_files(
             str(obj.container_id),
             VMUploadFiles(
                 dest_path="/",

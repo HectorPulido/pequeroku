@@ -279,6 +279,69 @@ function setPath(p) {
 		}
 	});
 
+	fileTreeEl.addEventListener("finder-action", async (e) => {
+		const { action, path, type } = e.detail || {};
+		if (!action || !path) return;
+		try {
+			if (action === "open") {
+				if (type === "directory") return; // opcional: expandir
+				await openFileIntoEditor(api, editor, path, setPath);
+			}
+			// TODO DELETE & RENAME
+			if (action === "delete") {
+				if (!confirm(`Delete "${path}"?`)) return;
+				// await api("/delete_path/", {
+				//   method: "DELETE",
+				//   body: JSON.stringify({ path }),
+				// });
+				parent.addAlert(`Deleted: ${path}`, "success");
+				await ft.refresh();
+				if (currentFilePath === path) {
+					currentFilePath = null;
+					editor.value = "";
+					pathLabel.innerText = "";
+				}
+			}
+			if (action === "rename") {
+				const base = path.split("/").pop();
+				const name = prompt("New name:", base);
+				if (!name || name === base) return;
+				const new_path = path.replace(/\/[^/]+$/, `/${name}`);
+				// await api("/rename_path/", {
+				//   method: "POST",
+				//   body: JSON.stringify({ src: path, dest: new_path }),
+				// });
+				parent.addAlert(`Renamed to: ${new_path}`, "success");
+				await ft.refresh();
+				if (currentFilePath === path) {
+					await openFileIntoEditor(api, editor, new_path, setPath);
+				}
+			}
+			if (action === "new-file") {
+				const dir = type === "directory" ? path : path.replace(/\/[^/]+$/, "");
+				const name = prompt("File name:");
+				if (!name) return;
+				const newp = `${dir.replace(/\/$/, "")}/${name}`;
+				setPath(newp);
+				editor.value = "";
+				await saveCurrentFile();
+				await ft.refresh();
+			}
+			if (action === "new-folder") {
+				const dir = type === "directory" ? path : path.replace(/\/[^/]+$/, "");
+				const name = prompt("Folder name:");
+				if (!name) return;
+				await api("/create_dir/", {
+					method: "POST",
+					body: JSON.stringify({ path: `${dir.replace(/\/$/, "")}/${name}` }),
+				});
+				await ft.refresh();
+			}
+		} catch (err) {
+			parent.addAlert(err.message || String(err), "error");
+		}
+	});
+
 	// DnD directo al árbol
 	fileTreeEl.addEventListener("dragover", (e) => e.preventDefault());
 	fileTreeEl.addEventListener("drop", async (e) => {

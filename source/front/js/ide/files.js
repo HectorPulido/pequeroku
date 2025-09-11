@@ -1,6 +1,9 @@
 import { detectLangFromPath } from "../shared/langMap.js";
 
 export function setupFileTree({ api, fileTreeEl, onOpen }) {
+	const menu = document.getElementById("finder-menu");
+	let menuTarget = null;
+
 	async function listDir(path = "/app") {
 		return api(`/list_dir/?path=${encodeURIComponent(path)}`);
 	}
@@ -27,6 +30,7 @@ export function setupFileTree({ api, fileTreeEl, onOpen }) {
 			li.classList.add(item.path_type);
 			li.textContent = item.name;
 			li.dataset.path = item.path;
+			li.dataset.type = item.path_type;
 			if (item.path_type === "directory") {
 				li.addEventListener("click", async (e) => {
 					e.stopPropagation();
@@ -46,9 +50,47 @@ export function setupFileTree({ api, fileTreeEl, onOpen }) {
 					onOpen(item.path);
 				});
 			}
+			li.addEventListener("contextmenu", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				openContextMenu(e, li);
+			});
 			ul.appendChild(li);
 		});
 	}
+
+	function openContextMenu(e, li) {
+		menuTarget = li; // li.dataset.path / li.dataset.type
+		menu.classList.remove("hidden");
+		const { innerWidth, innerHeight } = window;
+		const rectW = 200,
+			rectH = 180;
+		let x = e.clientX,
+			y = e.clientY;
+		if (x + rectW > innerWidth) x = innerWidth - rectW - 8;
+		if (y + rectH > innerHeight) y = innerHeight - rectH - 8;
+		menu.style.left = `${x}px`;
+		menu.style.top = `${y}px`;
+	}
+
+	function closeMenu() {
+		menu.classList.add("hidden");
+		menuTarget = null;
+	}
+	window.addEventListener("click", closeMenu);
+	window.addEventListener("scroll", closeMenu);
+	window.addEventListener("resize", closeMenu);
+	menu.addEventListener("click", (ev) => {
+		const act = ev.target?.getAttribute?.("data-action");
+		if (!act || !menuTarget) return;
+		const detail = {
+			action: act,
+			path: menuTarget.dataset.path,
+			type: menuTarget.dataset.type,
+		};
+		fileTreeEl.dispatchEvent(new CustomEvent("finder-action", { detail }));
+		closeMenu();
+	});
 
 	async function refresh() {
 		await loadDir("/app", fileTreeEl);

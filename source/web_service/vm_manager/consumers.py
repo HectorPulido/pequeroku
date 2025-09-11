@@ -149,7 +149,6 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         await asyncio.sleep(0.25)
         await self.upstream.send("ls -la\n")
 
-
     async def receive(self, text_data=None, bytes_data=None):
         if not hasattr(self, "upstream"):
             await self.send(text_data="Proxy: closed upstream")
