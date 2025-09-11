@@ -290,10 +290,10 @@ function setPath(p) {
 			// TODO DELETE & RENAME
 			if (action === "delete") {
 				if (!confirm(`Delete "${path}"?`)) return;
-				// await api("/delete_path/", {
-				//   method: "DELETE",
-				//   body: JSON.stringify({ path }),
-				// });
+				await api("/delete_path/", {
+					method: "POST",
+					body: JSON.stringify({ path }),
+				});
 				parent.addAlert(`Deleted: ${path}`, "success");
 				await ft.refresh();
 				if (currentFilePath === path) {
@@ -307,10 +307,10 @@ function setPath(p) {
 				const name = prompt("New name:", base);
 				if (!name || name === base) return;
 				const new_path = path.replace(/\/[^/]+$/, `/${name}`);
-				// await api("/rename_path/", {
-				//   method: "POST",
-				//   body: JSON.stringify({ src: path, dest: new_path }),
-				// });
+				await api("/move_path/", {
+					method: "POST",
+					body: JSON.stringify({ src: path, dest: new_path }),
+				});
 				parent.addAlert(`Renamed to: ${new_path}`, "success");
 				await ft.refresh();
 				if (currentFilePath === path) {

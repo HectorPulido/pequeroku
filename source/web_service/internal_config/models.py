@@ -32,6 +32,8 @@ class AuditLog(models.Model):
         ("container.list_dir", "Container list_dir"),
         ("container.create_dir", "Container create_dir"),
         ("container.real_status", "Container real_status"),
+        ("container.delete_file", "Container delete_file"),
+        ("container.change_path", "Container change_path"),
         ("template.apply", "Template apply"),
         ("user.info", "User Info"),
         ("ws.connect", "WS Connect"),

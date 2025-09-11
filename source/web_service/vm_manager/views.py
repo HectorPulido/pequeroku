@@ -144,7 +144,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
     def destroy(self, request, *args, **kwargs):
         obj = self.get_object()
         service = self._get_service(obj)
-        service.delete_vm(obj.container_id)
+        try:
+            service.delete_vm(obj.container_id)
+        except Exception as e:
+            print("Could not stop vm, deleting anyway", e)
 
         audit_log_http(
             request,
@@ -157,6 +160,71 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         )
         self.perform_destroy(obj)
         return Response({"status": "stopped"})
+
+    @action(detail=True, methods=["post"])
+    def delete_path(self, request, pk=None):
+        obj: Container = self.get_object()
+        path = request.data.get("path")
+
+        if not path:
+            audit_log_http(
+                request,
+                action="container.delete_file",
+                target_type="container",
+                target_id=obj.pk,
+                message="Deletion rejected: no path provided",
+                metadata={"path": path},
+                success=False,
+            )
+            return Response({"error": "path required"}, status=400)
+
+        service = self._get_service(obj)
+        response = service.execute_sh(str(obj.container_id), f"rm -rf {path}")
+
+        audit_log_http(
+            request,
+            action="container.delete_file",
+            target_type="container",
+            target_id=obj.pk,
+            message="Deletion success",
+            metadata={"path": path, "response": response},
+            success=True,
+        )
+
+        return Response(response)
+
+    @action(detail=True, methods=["post"])
+    def move_path(self, request, pk=None):
+        obj: Container = self.get_object()
+        src = request.data.get("src")
+        dest = request.data.get("dest")
+
+        if not src or not dest:
+            audit_log_http(
+                request,
+                action="container.change_path",
+                target_type="container",
+                target_id=obj.pk,
+                message="Change path rejected, not src or dest",
+                metadata={"src": src, "dest": dest},
+                success=False,
+            )
+            return Response({"error": "path required"}, status=400)
+
+        service = self._get_service(obj)
+        response = service.execute_sh(str(obj.container_id), f"mv -f {src} {dest}")
+
+        audit_log_http(
+            request,
+            action="container.change_path",
+            target_type="container",
+            target_id=obj.pk,
+            message="Deletion success",
+            metadata={"src": src, "dest": dest, "response": response},
+            success=True,
+        )
+
+        return Response(response)
 
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
     def upload_file(self, request, pk=None):
