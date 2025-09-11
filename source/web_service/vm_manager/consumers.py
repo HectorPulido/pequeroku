@@ -125,7 +125,7 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         container_node_host = container_node_host.replace("http://", "ws://")
         container_node_host = container_node_host.replace("https://", "wss://")
 
-        container_id: int = container_obj.container_id
+        container_id = container_obj.container_id
 
         upstream_url = f"{container_node_host}vms/{container_id}/tty"
         try:
@@ -137,6 +137,7 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
                 ping_interval=20,
                 ping_timeout=20,
                 close_timeout=5,
+                extra_headers=custom_headers,
             )
         except Exception as e:
             await self.send(text_data=f"Proxy error: could not connect ({e})")
@@ -149,6 +150,8 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         await self.upstream.send("cd /app\n")
         await asyncio.sleep(0.25)
         await self.upstream.send("ls -la\n")
+        await asyncio.sleep(0.25)
+        await self.upstream.send("clear\n")
 
     async def receive(self, text_data=None, bytes_data=None):
         if not hasattr(self, "upstream"):

@@ -24,6 +24,9 @@ class Node(models.Model):
     def get_random_node() -> "Node|None":
         return Node.objects.order_by("?").last()
 
+    def __str__(self):
+        return f"Node {self.name}"
+
 
 class ResourceQuota(models.Model):
     user = models.OneToOneField(
