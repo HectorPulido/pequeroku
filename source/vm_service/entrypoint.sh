@@ -26,4 +26,21 @@ if command -v ip6tables >/dev/null 2>&1; then
   ip6tables -A VM_HOST_EGRESS6 -m owner --uid-owner vmnet -j ACCEPT
 fi
 
+if [ -e /dev/kvm ]; then
+  KVM_GID="$(stat -c '%g' /dev/kvm)"
+  if ! getent group "${KVM_GID}" >/dev/null; then
+    if getent group kvm >/dev/null; then
+      groupadd -g "${KVM_GID}" kvmhost
+      KVM_GROUP=kvmhost
+    else
+      groupadd -g "${KVM_GID}" kvm
+      KVM_GROUP=kvm
+    fi
+  else
+    KVM_GROUP="$(getent group "${KVM_GID}" | cut -d: -f1)"
+  fi
+  usermod -aG "${KVM_GROUP}" vmnet
+  chmod g+rw /dev/kvm
+fi
+
 python main.py
