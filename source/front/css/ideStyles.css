@@ -3,308 +3,333 @@
 /* ===== Base ===== */
 html,
 body {
-    height: 100%;
+	height: 100%;
 }
 
 body {
-    margin: 0;
-    font-family: sans-serif;
-    overflow: hidden;
+	margin: 0;
+	font-family: sans-serif;
+	overflow: hidden;
 }
 
 /* Lists inside the sidebar */
 .sidebar ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
+	list-style: none;
+	padding: 0;
+	margin: 0;
 }
 
 .sidebar ul ul {
-    padding-left: 12px;
+	padding-left: 12px;
 }
 
 .sidebar li {
-    padding: 4px 8px;
-    cursor: pointer;
+	padding: 4px 8px;
+	cursor: pointer;
 }
 
 .sidebar :is(#file-tree, ul#file-tree) li:hover {
-    background: var(--hover);
+	background: var(--hover);
 }
 
 .sidebar #file-tree li:hover > ul,
 .sidebar #file-tree li ul:hover {
-    background: transparent;
+	background: transparent;
 }
 
 .sidebar li.directory::before {
-    content: "📁 ";
+	content: "📁 ";
 }
 
 .sidebar li.file::before {
-    content: "📄 ";
+	content: "📄 ";
 }
 
 /* Buttons & text inputs */
 button,
 input[type="text"] {
-    background: #3e3e3e;
-    color: #eee;
-    border: 1px solid #555;
-    border-radius: 4px;
-    padding: 4px 8px;
+	background: #3e3e3e;
+	color: #eee;
+	border: 1px solid #555;
+	border-radius: 4px;
+	padding: 4px 8px;
 }
 
 button:hover {
-    background: #303030;
+	background: #303030;
 }
 
 /* ===== Layout (editor shell) ===== */
 #editor-modal {
-    /* Full-viewport editor container */
-    color: #ddd;
-    display: flex;
-    width: 100vw;
-    height: 100vh;
-    max-width: 100%;
-    overflow: hidden;
-    /* avoid accidental horizontal scroll */
+	/* Full-viewport editor container */
+	color: #ddd;
+	display: flex;
+	width: 100vw;
+	height: 100vh;
+	max-width: 100%;
+	overflow: hidden;
+	/* avoid accidental horizontal scroll */
 }
 
 .main {
-    /* Main panel should be able to shrink: min-width: 0 is KEY in flexbox */
-    flex: 1 1 auto;
-    min-width: 0;
-    /* prevents pushing the container */
-    display: flex;
-    flex-direction: column;
-    max-width: 100%;
-    min-height: 0;
-    /* important so the flex editor works */
+	/* Main panel should be able to shrink: min-width: 0 is KEY in flexbox */
+	flex: 1 1 auto;
+	min-width: 0;
+	/* prevents pushing the container */
+	display: flex;
+	flex-direction: column;
+	max-width: 100%;
+	min-height: 0;
+	/* important so the flex editor works */
 }
 
 /* Editor must grow and fit without overflow */
 wc-monaco-editor#editor {
-    flex: 1 1 auto;
-    /* editor grows */
-    min-height: 0;
-    /* prevents overflow in flex */
-    min-width: 0;
-    /* lets flex compute widths correctly */
+	flex: 1 1 auto;
+	/* editor grows */
+	min-height: 0;
+	/* prevents overflow in flex */
+	min-width: 0;
+	/* lets flex compute widths correctly */
 }
 
 /* Console area */
 .console-area {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    min-width: 0;
-    /* avoid width push */
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+	/* avoid width push */
 }
 
 .console-area.collapsed {
-    display: none;
+	display: none;
 }
 
 .console-input {
-    flex: 1;
+	flex: 1;
 }
 
 /* ===== Sidebar (collapsible / off-canvas on mobile) ===== */
 .sidebar {
-    min-width: 250px;
-    width: 250px;
-    background: #2d2d2d;
-    padding: 8px;
-    box-sizing: border-box;
-    overflow-y: auto;
-    transition: transform 0.25s ease;
+	background: #2d2d2d;
+	padding: 8px;
+	box-sizing: border-box;
+	overflow-y: auto;
+	transition: transform 0.25s ease;
+	text-wrap-mode: nowrap;
 }
 
 /* ===== Toolbars & controls ===== */
 .toolbar {
-    /* Toolbars do not push content: they can wrap and won’t overflow */
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-    flex-wrap: wrap;
-    /* on narrow screens, wrap to a new line */
-    background: #2d2d2d;
-    padding: 4px;
+	/* Toolbars do not push content: they can wrap and won’t overflow */
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	flex-wrap: wrap;
+	/* on narrow screens, wrap to a new line */
+	background: #2d2d2d;
+	padding: 4px;
 }
 
 .toolbar > div {
-    /* Both sides of the toolbar can wrap and not force width */
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    min-width: 0;
-    /* crucial for ellipsis to work */
+	/* Both sides of the toolbar can wrap and not force width */
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	min-width: 0;
+	/* crucial for ellipsis to work */
 }
 
 /* The current path should not push the buttons: … when it doesn’t fit */
 #current_path_label {
-    display: inline-block;
-    max-width: 60vw;
-    /* tweak as needed */
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+	display: inline-block;
+	max-width: 60vw;
+	/* tweak as needed */
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 /* Console */
 .console {
-    background: #111111;
-    color: #eee;
-    padding: 4px;
-    overflow-y: auto;
-    font-family: monospace;
-    white-space: pre-wrap;
-    height: 30rem;
-    min-width: 0;
+	background: #111111;
+	color: #eee;
+	padding: 4px;
+	overflow-y: auto;
+	font-family: monospace;
+	white-space: pre-wrap;
+	height: 30rem;
+	min-width: 0;
 }
 
 .console-toolbar .last-button {
-    height: 100%;
+	height: 100%;
 }
 
 /* ===== Dropdown ===== */
 .dropdown {
-    position: relative;
-    display: inline-block;
+	position: relative;
+	display: inline-block;
 }
 
 .dropdown-content {
-    display: none;
-    position: absolute;
-    bottom: 100%;
-    right: 0%;
-    z-index: 100;
+	display: none;
+	position: absolute;
+	bottom: 100%;
+	right: 0%;
+	z-index: 100;
 }
 
 .dropdown-content div {
-    background-color: #222;
-    width: 300px;
-    padding: 10px;
+	background-color: #222;
+	width: 300px;
+	padding: 10px;
 }
 
 .dropdown:hover .dropdown-content {
-    display: block;
+	display: block;
 }
 
 .dropdown-content .btn-send {
-    width: 100%;
+	width: 100%;
 }
 
 /* ===== Modals ===== */
 #templates-modal,
 .upload-body {
-    color: black;
+	color: black;
 }
 
 /* ===== Responsive: phones & tablets ≤ 768px ===== */
 @media (max-width: 768px) {
-    #editor-modal {
-        flex-direction: column;
-        /* vertical layout */
-    }
+	#editor-modal {
+		flex-direction: column;
+		/* vertical layout */
+	}
 
-    .toolbar {
-        position: sticky;
-        top: 0;
-        z-index: 5;
-    }
+	.toolbar {
+		position: sticky;
+		top: 0;
+		z-index: 5;
+	}
 
-    /* Off-canvas drawer sidebar on mobile */
-    .sidebar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        bottom: 0;
-        transform: translateX(-100%);
-        /* hidden off-screen */
-        transition: transform 0.25s ease;
-        width: 80vw;
-        /* drawer-like width */
-        max-width: 320px;
-        border-right: 1px solid #444;
-        z-index: 50;
-    }
+	/* Off-canvas drawer sidebar on mobile */
+	.sidebar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		bottom: 0;
+		transform: translateX(-100%);
+		/* hidden off-screen */
+		transition: transform 0.25s ease;
+		width: 80vw;
+		/* drawer-like width */
+		max-width: 320px;
+		border-right: 1px solid #444;
+		z-index: 50;
+	}
 
-    /* “Open” state on mobile */
-    #editor-modal.sidebar-open .sidebar {
-        transform: translateX(0);
-    }
+	/* “Open” state on mobile */
+	#editor-modal.sidebar-open .sidebar {
+		transform: translateX(0);
+	}
 
-    /* Editor takes remaining vertical space */
-    wc-monaco-editor#editor {
-        height: calc(100vh - 44px);
-        /* approx: top toolbar */
-    }
+	/* Editor takes remaining vertical space */
+	wc-monaco-editor#editor {
+		height: calc(100vh - 44px);
+		/* approx: top toolbar */
+	}
 
-    /* Console is collapsed by default on mobile (JS toggles .collapsed) */
-    .console {
-        height: 32vh;
-        /* when visible, ~1/3 of screen */
-    }
-
-    .console-area {
-        position: sticky;
-        bottom: 0;
-    }
+	.console-area {
+		position: sticky;
+		bottom: 0;
+	}
 }
 
-#editor-modal.sidebar-collapsed .sidebar {
-    display: none;
+#editor-modal.sidebar-collapsed .sidebar,
+#editor-modal.sidebar-collapsed .splitter-v {
+	display: none;
 }
 
 @media (max-width: 768px) {
-    #editor-modal.sidebar-collapsed .sidebar {
-        transform: translateX(-100%);
-    }
+	#editor-modal.sidebar-collapsed .sidebar,
+	#editor-modal.sidebar-collapsed .splitter-v {
+		transform: translateX(-100%);
+	}
 }
 
 .full-viewport-height {
-    height: 100vh !important;
+	height: 100vh !important;
 }
 
 @supports (height: 100dvh) {
-    .full-viewport-height {
-        height: 100dvh !important;
-    }
+	.full-viewport-height {
+		height: 100dvh !important;
+	}
 }
 
 .context-menu {
-    position: fixed;
-    z-index: 9999;
-    list-style: none;
-    margin: 0;
-    padding: 6px;
-    background: var(--console-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    min-width: 180px;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+	position: fixed;
+	z-index: 9999;
+	list-style: none;
+	margin: 0;
+	padding: 6px;
+	background: var(--console-bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	min-width: 180px;
+	box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
 }
 .context-menu.hidden {
-    display: none;
+	display: none;
 }
 .context-menu li {
-    padding: 8px 10px;
-    cursor: pointer;
-    user-select: none;
+	padding: 8px 10px;
+	cursor: pointer;
+	user-select: none;
 }
 .context-menu li:hover {
-    background: var(--hover);
+	background: var(--hover);
 }
 .context-menu .danger {
-    color: var(--danger);
+	color: var(--danger);
 }
 .context-menu .divider {
-    height: 1px;
-    background: var(--console-bg);
-    margin: 6px 0;
-    pointer-events: none;
+	height: 1px;
+	background: var(--console-bg);
+	margin: 6px 0;
+	pointer-events: none;
+}
+
+@media (min-width: 768px) {
+	#editor-modal {
+		display: grid;
+		grid-template-columns: 280px 6px 1fr;
+	}
+	.splitter-v {
+		cursor: col-resize;
+		background: var(--border);
+	}
+	.splitter-v:hover {
+		background: var(--border-strong);
+	}
+
+	.sidebar-collapsed {
+		display: flex !important;
+	}
+}
+
+.console-resizer {
+	height: 10px;
+	cursor: row-resize;
+	background: var(--border);
+}
+.console-resizer:hover {
+	background: var(--border-strong);
+}
+#console-area {
+	height: 260px;
 }

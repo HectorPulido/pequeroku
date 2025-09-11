@@ -22,7 +22,7 @@
 
     <body>
         <div id="editor-modal" class="full-viewport-height">
-            <div class="sidebar">
+            <div class="sidebar" id="sidebar">
                 <div>
                     <button id="refresh-tree" title="Reload">🔄</button>
                     <button id="new-folder" title="Create Folder">📂</button>
@@ -41,7 +41,8 @@
                 </div>
                 <ul id="file-tree"></ul>
             </div>
-            <div class="main">
+            <div class="splitter-v" id="splitter-v"></div>
+            <div class="main" id="main">
                 <div class="toolbar">
                     <div>
                         <button id="toggle-sidebar" title="Toggle sidebar">
@@ -69,6 +70,7 @@
                     word-wrap="true"
                 ></wc-monaco-editor>
 
+                <div class="console-resizer" id="splitter-h"></div>
                 <div class="console-area" id="console-area">
                     <div class="console" id="console-log"></div>
                     <div class="toolbar console-toolbar">
