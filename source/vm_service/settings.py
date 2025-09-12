@@ -25,5 +25,10 @@ REDIS_PREFIX: str = os.environ.get("REDIS_PREFIX", "vmservice:")
 
 AUTH_TOKEN: str = os.environ.get("AUTH_TOKEN", "")
 
-VM_RUN_AS_UID = getpwnam("vmnet").pw_uid
-VM_RUN_AS_GID = getpwnam("vmnet").pw_gid
+VM_RUN_AS_UID = None
+VM_RUN_AS_GID = None
+try:
+    VM_RUN_AS_UID = getpwnam("vmnet").pw_uid
+    VM_RUN_AS_GID = getpwnam("vmnet").pw_gid
+except Exception as e:
+    print("Could not load vmnet", e)

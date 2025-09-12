@@ -208,6 +208,15 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
+    def statistics(self, vm_id: str) -> Any:
+        """GET /metrics/{vm_id}"""
+        resp = self.session.get(
+            self._url(f"/metrics/{vm_id}"),
+            headers=self.headers,
+            timeout=self.timeout,
+        )
+        return self._handle(resp)
+
     def execute_sh(self, vm_id: str, vm_command: str) -> Dict[str, Any]:
         """POST /vms/{vm_id}/execute-sh"""
         p = {"command": vm_command}

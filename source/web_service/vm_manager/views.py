@@ -371,6 +371,16 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         return Response({"status": "ok"})
 
     @action(detail=True, methods=["get"])
+    def statistics(self, request, pk=None):
+        obj: Container = self.get_object()
+        if obj.status != "running":
+            return Response({"error": "VM off"}, status=400)
+
+        service = self._get_service(obj)
+        response = service.statistics(str(obj.container_id))
+        return Response(response)
+
+    @action(detail=True, methods=["get"])
     def list_dir(self, request, pk=None):
         root = request.GET.get("path", "/app")
         obj: Container = self.get_object()

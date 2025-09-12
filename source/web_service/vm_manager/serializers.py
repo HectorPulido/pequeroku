@@ -14,7 +14,6 @@ class ContainerSerializer(serializers.ModelSerializer):
         fields = [
             "name",
             "id",
-            "container_id",
             "base_image",
             "created_at",
             "status",

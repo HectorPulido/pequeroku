@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="utf-8" />
+        <title>Monitor de Métricas (1s)</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <!-- Chart.js CDN -->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+        <link rel="stylesheet" href="/css/themes.css" />
+        <link rel="stylesheet" href="/css/base.css" />
+        <link rel="stylesheet" href="/css/metrics.css" />
+    </head>
+    <body>
+        <main>
+            <div class="grid">
+                <div class="card span-12">
+                    <div class="status">
+                        <span id="status-dot" class="dot"></span>
+                        <span id="status-text">Conectando…</span>
+                        <span
+                            id="last-updated"
+                            class="muted"
+                            style="margin-left: auto"
+                        ></span>
+                    </div>
+                </div>
+
+                <!-- KPIs -->
+                <div class="card span-4">
+                    <div class="kpi">
+                        <div>
+                            <h3>CPU</h3>
+                            <div class="value">
+                                <span id="cpu-val">—</span>%
+                            </div>
+                        </div>
+                        <div class="muted">cpu_percent</div>
+                    </div>
+                </div>
+                <div class="card span-4">
+                    <div class="kpi">
+                        <div>
+                            <h3>Memory RSS</h3>
+                            <div class="value">
+                                <span id="mem-val">—</span> MiB
+                            </div>
+                        </div>
+                        <div class="muted">rss_mib</div>
+                    </div>
+                </div>
+                <div class="card span-4">
+                    <div class="kpi">
+                        <div>
+                            <h3>Threads</h3>
+                            <div class="value"><span id="thr-val">—</span></div>
+                        </div>
+                        <div class="muted">num_threads</div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="card span-6">
+                    <div class="muted">CPU %</div>
+                    <div class="chart-wrap">
+                        <canvas id="cpuChart"></canvas>
+                    </div>
+                </div>
+                <div class="card span-6">
+                    <div class="muted">RSS (MiB)</div>
+                    <div class="chart-wrap">
+                        <canvas id="memChart"></canvas>
+                    </div>
+                </div>
+                <div class="card span-12">
+                    <div class="muted">Threads</div>
+                    <div class="chart-wrap">
+                        <canvas id="thrChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <script type="module" src="/js/metrics/main.js"></script>
+    </body>
+</html>

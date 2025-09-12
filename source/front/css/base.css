@@ -81,7 +81,8 @@
 /* Modal overlay */
 #upload-modal,
 #ai-modal,
-#templates-modal {
+#templates-modal,
+#metrics-modal {
 	position: fixed;
 	top: 0;
 	left: 0;

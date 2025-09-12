@@ -45,12 +45,18 @@ export function setupContainers() {
 	const listElOther = $("#other-container-list");
 	const btnCreate = $("#btn-create");
 	const btnClose = $("#btn-close");
+	const btnCloseMetrics = $("#btn-close-metrics");
 	const btnFullscreen = $("#btn-fullscreen");
 	const modal = $("#console-modal");
 	const modalBody = $("#console-modal-body");
 	const userData = $("#user_data");
 	const quotaInfo = $("#quota_info");
 	const btnRefresh = $("#btn-refresh");
+	const consoleTitle = $("#console-title");
+	const metricsTitle = $("#metrics-title");
+	const metricsModal = $("#metrics-modal");
+	const metricsModalBody = $("#metrics-modal-body");
+	const btnFullscreenMetrics = $("#btn-fullscreen-metrics");
 
 	let lastSig = null;
 	let pollId = null;
@@ -62,6 +68,15 @@ export function setupContainers() {
 		if (current_id)
 			open(`/ide/?containerId=${current_id}`, "_blank", "noopener,noreferrer");
 	});
+	btnFullscreenMetrics.addEventListener("click", () => {
+		if (current_id)
+			open(
+				`/metrics/?container=${current_id}`,
+				"_blank",
+				"noopener,noreferrer",
+			);
+	});
+	btnCloseMetrics.addEventListener("click", closeMetrics);
 	btnClose.addEventListener("click", closeConsole);
 	btnCreate.addEventListener("click", createContainer);
 
@@ -106,13 +121,17 @@ export function setupContainers() {
 <small>${c.username}</small> - <small>${new Date(c.created_at).toLocaleString()}</small>
 <p>Status: <strong id="st-${c.id}" class="status-${c.status}">${c.status}</strong></p>
 <div>
-  <button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Let's Play</button>
+  <button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Open</button>
   <button class="btn-start" ${isRunning ? "hidden" : ""}>▶️ Start</button>
   <button class="btn-stop" ${!isRunning ? "hidden" : ""}>⏹️ Stop</button>
+  <button class="btn-metrics" ${!isRunning ? "hidden" : ""}>📈 Metrics</button>
   <button class="btn-delete">🗑️ Delete</button>
 </div>`;
 
-		card.querySelector(".btn-edit").onclick = () => openConsole(c.id);
+		card.querySelector(".btn-metrics").onclick = () =>
+			openStats(`${c.id} — ${c.name} - Stats`, c.id);
+		card.querySelector(".btn-edit").onclick = () =>
+			openConsole(`${c.id} — ${c.name} - Editor`, c.id);
 		card.querySelector(".btn-delete").onclick = () => deleteContainer(c.id);
 		card.querySelector(".btn-start").onclick = async () => {
 			await fetch(`/api/containers/${c.id}/power_on/`, {
@@ -201,7 +220,19 @@ export function setupContainers() {
 		}
 	}
 
-	function openConsole(id) {
+	function openStats(name, id) {
+		metricsTitle.innerHTML = name;
+		current_id = id;
+		if (isSmallScreen()) {
+			open(`/metrics/?container=${id}`, "_blank", "noopener,noreferrer");
+			return;
+		}
+		metricsModal.classList.remove("hidden");
+		metricsModalBody.innerHTML = `<iframe src="/metrics/?container=${id}" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
+	}
+
+	function openConsole(name, id) {
+		consoleTitle.innerHTML = name;
 		current_id = id;
 		if (isSmallScreen()) {
 			open(`/ide/?containerId=${id}`, "_blank", "noopener,noreferrer");
@@ -210,9 +241,15 @@ export function setupContainers() {
 		modal.classList.remove("hidden");
 		modalBody.innerHTML = `<iframe src="/ide/?containerId=${id}" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
 	}
+
 	function closeConsole() {
 		modal.classList.add("hidden");
 		modalBody.innerHTML = "";
+	}
+
+	function closeMetrics() {
+		metricsModal.classList.add("hidden");
+		metricsModalBody.innerHTML = "";
 	}
 
 	function startPolling() {

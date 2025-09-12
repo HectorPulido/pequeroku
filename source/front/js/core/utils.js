@@ -4,7 +4,7 @@ export function signatureFrom(data) {
 			id: c.id,
 			status: c.status,
 			created_at: c.created_at,
-			container_id: c.container_id,
+			name: c.name,
 		}))
 		.sort((a, b) => String(a.id).localeCompare(String(b.id)));
 	return JSON.stringify(norm);

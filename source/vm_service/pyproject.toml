@@ -12,6 +12,7 @@ fastapi = "^0.116.1"
 paramiko = "^4.0.0"
 redis = "^6.4.0"
 dotenv = "^0.9.9"
+psutil = "^7.0.0"
 
 [tool.pyrefly]
 project-includes = ["**/*"]
