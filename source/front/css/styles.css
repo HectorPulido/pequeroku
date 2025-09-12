@@ -240,3 +240,15 @@ main {
 	cursor: pointer;
 	padding: 0.5rem 0.25rem;
 }
+
+.status-stopped {
+	color: red;
+}
+
+.status-running {
+	color: green;
+}
+
+.status-error {
+	color: yellow;
+}

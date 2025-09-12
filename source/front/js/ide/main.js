@@ -188,21 +188,10 @@ function setPath(p) {
 	localStorage.setItem(`last:${containerId}`, p);
 }
 
-// ====== Initial ======
-(async () => {
-	consoleApi = setupConsole({
-		consoleEl,
-		sendBtn: sendCMDBtn,
-		inputEl: consoleCMD,
-		ctrlButtons: $$(".btn-send"),
-		onSend: (data) => {
-			if (!ws) return;
-			ws.send(data);
-		},
-	});
-	consoleApi.setTheme(getCurrentTheme() === "dark");
+let ws = null;
 
-	const ws = createWS(containerId, {
+function connectWs() {
+	ws = createWS(containerId, {
 		onOpen: () => {
 			consoleApi.addLine("[connected]");
 		},
@@ -214,7 +203,7 @@ function setPath(p) {
 				} else if (msg.type === "clear") {
 					consoleApi.clear();
 				} else if (msg.type === "info") {
-					consoleApi.addLine(`[info] ${msg.message}`);
+					consoleApi.write(`[info] ${msg.message}`);
 				} else if (msg.type === "error") {
 					parent.addAlert(msg.message, "error");
 				} else if (msg.type === "log") {
@@ -237,10 +226,30 @@ function setPath(p) {
 		},
 		onError: () => parent.addAlert("WebSocket error", "error"),
 	});
+}
 
-	// restart container
-	restartContainerBtn.addEventListener("click", async () => {
-		await api("/restart_container/", { method: "POST" });
+// ====== Initial ======
+(async () => {
+	consoleApi = setupConsole({
+		consoleEl,
+		sendBtn: sendCMDBtn,
+		inputEl: consoleCMD,
+		ctrlButtons: $$(".btn-send"),
+		onSend: (data) => {
+			if (!ws) return;
+			ws.send(data);
+		},
+	});
+	consoleApi.setTheme(getCurrentTheme() === "dark");
+
+	connectWs();
+
+	restartContainerBtn.addEventListener("click", () => {
+		try {
+			ws?.close();
+		} catch {}
+		consoleApi.clear();
+		connectWs();
 	});
 
 	const ft = setupFileTree({

@@ -104,7 +104,7 @@ export function setupContainers() {
 		card.innerHTML = `
 <h2>${c.id} — ${c.name}</h2>
 <small>${c.username}</small> - <small>${new Date(c.created_at).toLocaleString()}</small>
-<p>Status: <strong id="st-${c.id}">${c.status}</strong></p>
+<p>Status: <strong id="st-${c.id}" class="status-${c.status}">${c.status}</strong></p>
 <div>
   <button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Let's Play</button>
   <button class="btn-start" ${isRunning ? "hidden" : ""}>▶️ Start</button>
