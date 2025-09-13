@@ -2,7 +2,6 @@ import os
 import socket
 import threading
 import time
-import signal
 from typing import Callable, Optional
 
 import paramiko
@@ -238,83 +237,3 @@ class QemuSession:
         self.chan = None
         self.cli = None
         self.alive = False
-
-    # ---- VM lifecycle ----
-    def stop(self, cleanup_disks: bool = False, wait_s: int = 20) -> None:
-        """
-        Shutdown the VM and clean the resources
-        if channel alive, try: sudo poweroff
-        if not, use terminate/kill on qemu
-        wait for the port to stop
-        lastly clean up averything
-        """
-
-        try:
-            if self.is_alive():
-                try:
-                    # pyrefly: ignore  # missing-attribute
-                    self.chan.send("sudo poweroff\n")
-                except Exception as e:
-                    print("Error sending poweroff", e)
-        except Exception as e:
-            print("Error powering off", e)
-
-        deadline = time.time() + wait_s
-        while time.time() < deadline:
-            if not self.vm or not self._ping_ssh_port(self.vm.port_ssh):
-                break
-            time.sleep(0.5)
-
-        pid = None
-        try:
-            if self.vm and self.vm.pidfile and os.path.exists(self.vm.pidfile):
-                try:
-                    with open(self.vm.pidfile, "r", encoding="utf-8") as f:
-                        pid = int(f.read().strip())
-                    try:
-                        os.killpg(pid, signal.SIGTERM)
-                        time.sleep(1.0)
-                    except Exception as e:
-                        print("Error SIGTERM pgid", e)
-                    try:
-                        os.killpg(pid, signal.SIGKILL)
-                    except Exception as e:
-                        print("Error SIGKILL pgid", e)
-                except Exception as e:
-                    print("Error killing by pidfile", e)
-            elif self.vm and self.vm.proc:
-                try:
-                    self.vm.proc.terminate()
-                    try:
-                        self.vm.proc.wait(timeout=5)
-                    except Exception:
-                        self.vm.proc.kill()
-                except Exception as e:
-                    print("Error terminating process", e)
-        except Exception as e:
-            print("Error terminating process (outer)", e)
-
-        if cleanup_disks and self.vm:
-            for p in (self.vm.overlay, self.vm.seed_iso, self.vm.console_log):
-                try:
-                    if p and os.path.exists(p):
-                        os.remove(p)
-                except Exception as e:
-                    print("Error clearning up", e)
-
-        try:
-            self.container_obj.status = "stopped"
-            self.container_obj.save(update_fields=["status"])
-        except Exception as e:
-            print("Error changing status", e)
-
-        t = self.reader_thread
-        self._close_channel()
-        try:
-            if t:
-                t.join(timeout=2.0)
-        except Exception as e:
-            print("Error joining reader thread", e)
-
-        # pyrefly: ignore  # missing-attribute
-        _remove_pidfile_safe(self.vm.pidfile)
