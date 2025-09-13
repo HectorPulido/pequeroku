@@ -75,6 +75,9 @@ html[data-theme="dark"] .console-body {
 	color: #9be28a;
 	border-color: #1f242b;
 }
+html[data-theme="dark"] .console-body {
+	background: #111111;
+}
 html[data-theme="dark"] .header-dropdown .dropdown-content div {
 	background: #0f131a;
 	color: #e6e6e6;
@@ -97,7 +100,7 @@ html[data-theme="dark"] input[type="text"] {
 }
 
 html[data-theme="dark"] .console {
-	background: #0b0d10;
+	background: #11161c;
 	color: #e6e6e6;
 }
 html[data-theme="dark"] .dropdown-content div {

@@ -11,19 +11,39 @@ export function setupConsole({
 	const history = [];
 	let hIdx = -1;
 
+	const light_theme = {
+		background: "#2d2d2d",
+		foreground: "#fff",
+		cursor: "#cb4b16",
+		selectionBackground: "#111111",
+	};
+	const dark_theme = {
+		background: "#11161c",
+		foreground: "#d1d5db",
+		cursor: "#d1d5db",
+		selectionBackground: "#374151",
+	};
 	const term = new Terminal({
-		cursorBlink: true,
+		cursorBlink: false,
 		scrollback: 5000,
 		convertEol: false,
 		fontFamily:
 			'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
 		fontSize: 13,
-		theme: { background: "#111111" },
+		theme: light_theme,
 	});
 	const fitAddon = new FitAddon();
 	term.loadAddon(fitAddon);
 	term.open(consoleEl);
 	fitAddon.fit();
+
+	window._term = term;
+	window._term.light_theme = light_theme;
+	window._term.dark_theme = dark_theme;
+
+	setTimeout(() => {
+		window._term.options = { theme: window._term.light_theme };
+	}, 50);
 
 	if (sendBtn && inputEl) {
 		sendBtn.addEventListener("click", () => {
@@ -105,9 +125,11 @@ export function setupConsole({
 		clear: () => term.clear(),
 		fit,
 		setTheme(isDark) {
-			term.options.theme = isDark
-				? { background: "#0b0d10", foreground: "#e6e6e6", cursor: "#e6e6e6" }
-				: { background: "#111111", foreground: "#eeeeee", cursor: "#222222" };
+			setTimeout(() => {
+				window._term.options = {
+					theme: isDark ? window._term.dark_theme : window._term.light_theme,
+				};
+			}, 50);
 		},
 	};
 }

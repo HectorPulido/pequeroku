@@ -8,7 +8,13 @@ import {
 	setupThemeToggle,
 } from "../core/themes.js";
 import { setupConsole } from "./console.js";
-import { openFile as openFileIntoEditor } from "./editor.js";
+import {
+	openFile as openFileIntoEditor,
+	clearEditor,
+	getEditorValue,
+	changeTheme,
+	loadMonaco,
+} from "./editor.js";
 import { setupFileTree } from "./files.js";
 import { loadRunConfig } from "./runConfig.js";
 import { setupUploads } from "./uploads.js";
@@ -20,6 +26,7 @@ function clamp(n, min, max) {
 
 installGlobalLoader();
 applyTheme();
+loadMonaco(getCurrentTheme() === "dark");
 
 // ====== CONFIG ======
 const urlParams = new URLSearchParams(window.location.search);
@@ -29,7 +36,6 @@ const api = makeApi(`/api/containers/${containerId}`);
 // ====== DOM refs ======
 const themeToggleBtn = $("#theme-toggle");
 const pathLabel = $("#current_path_label");
-const editor = $("#editor");
 const refreshTreeBtn = $("#refresh-tree");
 const fileTreeEl = $("#file-tree");
 const sendCMDBtn = $("#send-cmd");
@@ -255,7 +261,7 @@ function connectWs() {
 	const ft = setupFileTree({
 		api,
 		fileTreeEl,
-		onOpen: (p) => openFileIntoEditor(api, editor, p, setPath),
+		onOpen: (p) => openFileIntoEditor(api, p, setPath),
 	});
 	refreshTreeBtn.addEventListener("click", async () => {
 		await ft.refresh();
@@ -322,7 +328,7 @@ function connectWs() {
 		const name = prompt("File name:");
 		if (!name) return;
 		setPath(`/app/${name}`);
-		editor.value = "";
+		clearEditor();
 		await saveCurrentFile();
 		refreshTreeBtn.click();
 	});
@@ -357,9 +363,8 @@ function connectWs() {
 		try {
 			if (action === "open") {
 				if (type === "directory") return; // opcional: expandir
-				await openFileIntoEditor(api, editor, path, setPath);
+				await openFileIntoEditor(api, path, setPath);
 			}
-			// TODO DELETE & RENAME
 			if (action === "delete") {
 				if (!confirm(`Delete "${path}"?`)) return;
 				await api("/delete_path/", {
@@ -370,7 +375,7 @@ function connectWs() {
 				await ft.refresh();
 				if (currentFilePath === path) {
 					currentFilePath = null;
-					editor.value = "";
+					clearEditor();
 					pathLabel.innerText = "";
 				}
 			}
@@ -386,7 +391,7 @@ function connectWs() {
 				parent.addAlert(`Renamed to: ${new_path}`, "success");
 				await ft.refresh();
 				if (currentFilePath === path) {
-					await openFileIntoEditor(api, editor, new_path, setPath);
+					await openFileIntoEditor(api, new_path, setPath);
 				}
 			}
 			if (action === "new-file") {
@@ -395,7 +400,7 @@ function connectWs() {
 				if (!name) return;
 				const newp = `${dir.replace(/\/$/, "")}/${name}`;
 				setPath(newp);
-				editor.value = "";
+				clearEditor();
 				await saveCurrentFile();
 				await ft.refresh();
 			}
@@ -432,15 +437,10 @@ function connectWs() {
 	});
 
 	// Carga inicial
-	await waitMonaco();
 	await hydrateRun();
 	await tryOpen("/app/readme.txt");
 	refreshTreeBtn.click();
 
-	async function waitMonaco() {
-		const m = await import("./editor.js");
-		return await m.waitForMonacoReady(editor);
-	}
 	async function hydrateRun() {
 		runCommand = await loadRunConfig(api);
 		runCodeBtn.disabled = !runCommand;
@@ -448,7 +448,7 @@ function connectWs() {
 	async function tryOpen(p) {
 		try {
 			await api(`/read_file/?path=${encodeURIComponent(p)}`);
-			await openFileIntoEditor(api, editor, p, setPath);
+			await openFileIntoEditor(api, p, setPath);
 		} catch {
 			/*noop*/
 		}
@@ -459,16 +459,15 @@ function connectWs() {
 			parent.addAlert("Open a file first", "error");
 			return;
 		}
-		const content = editor.value;
+		const content = getEditorValue();
 		await api("/write_file/", {
 			method: "POST",
-			body: JSON.stringify({ path: currentFilePath, content }),
+			body: JSON.stringify({ path: currentFilePath, content: content }),
 		});
 		parent.addAlert(`File ${currentFilePath} saved`, "success");
 		if (currentFilePath === "/app/config.json") await hydrateRun();
 	}
 
-	// Cerrar WS limpio
 	window.addEventListener("beforeunload", () => {
 		try {
 			ws.close(1000, "bye");
@@ -477,9 +476,6 @@ function connectWs() {
 
 	window.addEventListener("themechange", (ev) => {
 		const isDark = ev.detail?.theme === "dark";
-		try {
-			editor.setAttribute("theme", isDark ? "vs-dark" : "vs");
-			consoleApi?.setTheme?.(isDark);
-		} catch {}
+		changeTheme(isDark, consoleApi);
 	});
 })();

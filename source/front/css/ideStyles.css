@@ -155,7 +155,7 @@ wc-monaco-editor#editor {
 
 /* Console */
 .console {
-	background: #111111;
+	background: #2d2d2d;
 	color: #eee;
 	padding: 4px;
 	overflow-y: auto;
@@ -332,4 +332,13 @@ wc-monaco-editor#editor {
 }
 #console-area {
 	height: 260px;
+}
+
+#editor {
+	overflow: auto;
+	height: 100%;
+}
+
+.resizer {
+	background: #252529;
 }

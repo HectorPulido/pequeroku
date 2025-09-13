@@ -14,10 +14,7 @@
             rel="stylesheet"
             href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"
         />
-        <script
-            type="module"
-            src="https://cdn.jsdelivr.net/gh/vanillawc/wc-monaco-editor@1/index.js"
-        ></script>
+        <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
     </head>
 
     <body>
@@ -41,7 +38,7 @@
                 </div>
                 <ul id="file-tree"></ul>
             </div>
-            <div class="splitter-v" id="splitter-v"></div>
+            <div class="splitter-v resizer" id="splitter-v"></div>
             <div class="main" id="main">
                 <div class="toolbar">
                     <div>
@@ -64,13 +61,9 @@
                         <button id="run-code" title="Run">Run ▶️</button>
                     </div>
                 </div>
-                <wc-monaco-editor
-                    id="editor"
-                    language="python"
-                    word-wrap="true"
-                ></wc-monaco-editor>
+                <div id="editor"></div>
 
-                <div class="console-resizer" id="splitter-h"></div>
+                <div class="console-resizer resizer" id="splitter-h"></div>
                 <div class="console-area" id="console-area">
                     <div class="console" id="console-log"></div>
                     <div class="toolbar console-toolbar">
