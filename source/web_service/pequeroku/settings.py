@@ -88,6 +88,8 @@ SPECTACULAR_SETTINGS = {
 
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
+ASGI_APPLICATION = "pequeroku.asgi.application"
+
 
 DATABASES = {
     "default": {

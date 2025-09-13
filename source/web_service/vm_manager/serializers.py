@@ -12,16 +12,23 @@ class ContainerSerializer(serializers.ModelSerializer):
 
         model = Container
         fields = [
-            "name",
             "id",
+            "name",
             "base_image",
             "created_at",
             "status",
             "user",
             "username",
         ]
+        read_only_fields = [
+            "id",
+            "user",
+            "base_image",
+            "created_at",
+            "status",
+        ]
 
-    username = serializers.SerializerMethodField("get_username")
+    username = serializers.SerializerMethodField("get_username", read_only=True)
 
     def get_username(self, obj) -> str:
         """Get the username for the container"""
