@@ -71,7 +71,7 @@ button:hover {
 	/* avoid accidental horizontal scroll */
 }
 
-.main {
+#main {
 	/* Main panel should be able to shrink: min-width: 0 is KEY in flexbox */
 	flex: 1 1 auto;
 	min-width: 0;
