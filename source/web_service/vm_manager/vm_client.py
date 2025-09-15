@@ -239,3 +239,21 @@ class VMServiceClient:
             timeout=self.timeout,
         )
         return self._handle(resp)
+
+    def download_file(self, vm_id: str, path: str):
+        """POST /vms/{vm_id}/download-file"""
+        return self.session.get(
+            self._url(f"/vms/{vm_id}/download-file"),
+            params={"path": path},
+            headers=self.headers,
+            timeout=self.timeout,
+        )
+
+    def download_folder(self, vm_id: str, root: str = "/app", prefer_fmt: str = "zip"):
+        """POST /vms/{vm_id}/download-folder"""
+        return self.session.get(
+            self._url(f"/vms/{vm_id}/download-folder"),
+            params={"root": root, "prefer_fmt": prefer_fmt},
+            headers=self.headers,
+            timeout=None,
+        )

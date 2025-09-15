@@ -110,7 +110,6 @@ def send_files(container: VMRecord, files: VMUploadFiles):
                 else:
                     data = base64.b64decode(it.content_b64 or "", validate=False)
                 _save_file_bytes(sftp, cli, fullp, data, it.mode)
-                # _save_file(sftp, cli, fullp, it.content, it.mode)
             except Exception as e:
                 failed.append({"path": it.path, "reason": str(e)})
 

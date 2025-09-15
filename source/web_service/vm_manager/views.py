@@ -1,6 +1,8 @@
+import os
 import base64
 from dataclasses import asdict
 
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -467,6 +469,69 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             success=True,
         )
         return Response({"status": "restarted"})
+
+    @action(detail=True, methods=["get"])
+    def download_file(self, request, pk=None):
+        obj: Container = self.get_object()
+        path = request.query_params.get("path")
+        if not path:
+            return Response({"error": "path required"}, status=400)
+
+        service = self._get_service(obj)
+        r = service.download_file(str(obj.container_id), path)
+
+        if r.status_code >= 400:
+            try:
+                return Response(r.json(), status=r.status_code)
+            except Exception:
+                return Response({"error": "download failed"}, status=r.status_code)
+
+        filename = os.path.basename(path) or "download"
+        content_type = r.headers.get("Content-Type", "application/octet-stream")
+        content_disposition = r.headers.get(
+            "Content-Disposition", f'attachment; filename="{filename}"'
+        )
+
+        resp = HttpResponse(content=r.content, content_type=content_type)
+        resp["Content-Disposition"] = content_disposition
+        return resp
+
+    @action(detail=True, methods=["get"])
+    def download_folder(self, request, pk=None):
+        obj: Container = self.get_object()
+        root = request.query_params.get("root", "/app")
+        prefer_fmt = request.query_params.get("prefer_fmt", "zip")
+
+        service = self._get_service(obj)
+        r = service.download_folder(
+            str(obj.container_id), root=root, prefer_fmt=prefer_fmt
+        )
+
+        if r.status_code >= 400:
+            try:
+                return Response(r.json(), status=r.status_code)
+            except Exception:
+                return Response({"error": "download failed"}, status=r.status_code)
+
+        base = os.path.basename(root.rstrip("/")) or "archive"
+
+        if prefer_fmt == "zip" and r.headers.get("Content-Disposition") is None:
+            filename = f"{base}.zip"
+        elif prefer_fmt == "tar.gz" and r.headers.get("Content-Disposition") is None:
+            filename = f"{base}.tar.gz"
+        else:
+            filename = None
+
+        content_type = r.headers.get("Content-Type", "application/octet-stream")
+        content_disposition = r.headers.get(
+            "Content-Disposition",
+            f'attachment; filename="{filename}"' if filename else None,
+        )
+
+        resp = HttpResponse(content=r.content, content_type=content_type)
+        if content_disposition:
+            resp["Content-Disposition"] = content_disposition
+        return resp
 
 
 class UserViewSet(viewsets.ViewSet):

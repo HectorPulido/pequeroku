@@ -1,6 +1,7 @@
 import os
 import shlex
-
+import mimetypes
+from typing import Iterator, Literal
 
 from qemu_manager.models import VMRecord, ListDirItem, FileContent
 from .ssh_cache import open_ssh_and_sftp
@@ -37,7 +38,7 @@ def list_dir(container: VMRecord, root: str = "/app") -> list[ListDirItem]:
 
 
 def read_file(container: VMRecord, path: str):
-    sftp, cli = open_ssh_and_sftp(container, True)
+    sftp, _ = open_ssh_and_sftp(container, True)
 
     data = ""
     if not sftp:
@@ -57,3 +58,96 @@ def read_file(container: VMRecord, path: str):
     return FileContent(
         name=path.split("/")[-1], content=data, length=len(data), found=True
     )
+
+
+def download_file(vm: VMRecord, path: str):
+    sftp, _ = open_ssh_and_sftp(vm, True)
+    if not sftp:
+        print("Issue downloading...", "issue with sftp")
+        return None
+
+    try:
+        st = sftp.stat(path)
+    except Exception as e:
+        print("Issue downloading... File not found", e)
+        return None
+    if str(st.st_mode).startswith("4"):
+        print("Issue downloading...", "Path is a directory; use /download-folder")
+        return None
+
+    try:
+        # pyrefly: ignore  # missing-attribute
+        with sftp.file(path, "rb") as rf:
+            data: bytes = rf.read()
+    except Exception as e:
+        print("Issue downloading...", f"Cannot open: {path}", e)
+        return None
+
+    name = os.path.basename(path) or "download"
+    media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    headers = {"Content-Disposition": f'attachment; filename="{name}"'}
+    return {
+        "content": data,
+        "media_type": media_type,
+        "headers": headers,
+    }
+
+
+def _zip_available(cli) -> bool:
+    check_cmd = "sh -lc 'command -v zip >/dev/null 2>&1 && echo OK || echo NO'"
+    _, out, _ = cli.exec_command(check_cmd)
+    return out.read().decode().strip() == "OK"
+
+
+def download_folder(vm: VMRecord, root: str, prefer_fmt: str = "zip"):
+    _, cli = open_ssh_and_sftp(vm, open_sftp=False)
+    if not cli:
+        print("Error generating zip folder", "SSH unavailable")
+        return None
+
+    safe_root = shlex.quote(root)
+    base = os.path.basename(root.rstrip("/")) or "archive"
+
+    sftp, _ = open_ssh_and_sftp(vm, True)
+    if not sftp:
+        print("Error generating zip folder", "SFTP unavailable")
+        return None
+    try:
+        sftp.stat(root)
+    except Exception as e:
+        print("Error generating zip folder", f"Directory not found: {root}", e)
+        return None
+
+    fmt = prefer_fmt
+    if fmt == "zip" and not _zip_available(cli):
+        fmt = "tar.gz"
+
+    if fmt == "zip":
+        cmd = f"sh -lc 'cd {safe_root} && zip -r - . 2>/dev/null'"
+        media_type = "application/zip"
+        filename = f"{base}.zip"
+    elif fmt == "tar.gz":
+        cmd = f"sh -lc 'tar -C {safe_root} -czf - . 2>/dev/null'"
+        media_type = "application/gzip"
+        filename = f"{base}.tar.gz"
+    else:
+        print("Error generating zip folder", "Invalid format")
+        return None
+
+    _, stdout, stderr = cli.exec_command(cmd)
+
+    archive_bytes: bytes = stdout.read()
+    if not archive_bytes:
+        err = stderr.read().decode(errors="ignore")
+        print(
+            "Error generating zip folder", f"Pack command returned empty output. {err}"
+        )
+        return None
+
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+
+    return {
+        "content": archive_bytes,
+        "media_type": media_type,
+        "headers": headers,
+    }

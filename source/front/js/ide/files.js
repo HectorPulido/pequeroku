@@ -1,6 +1,6 @@
 import { detectLangFromPath } from "../shared/langMap.js";
 
-export function setupFileTree({ api, fileTreeEl, onOpen }) {
+export function setupFileTree({ api, fileTreeEl, onOpen, containerId }) {
 	const menu = document.getElementById("finder-menu");
 	let menuTarget = null;
 
@@ -96,7 +96,7 @@ export function setupFileTree({ api, fileTreeEl, onOpen }) {
 		await loadDir("/app", fileTreeEl);
 	}
 
-	async function newFolder(path) {
+	async function newFolder(path, type) {
 		const name = prompt("Folder name:");
 		if (!name) return;
 
@@ -115,7 +115,7 @@ export function setupFileTree({ api, fileTreeEl, onOpen }) {
 		await refresh();
 	}
 
-	async function newFile(path, setPath, saveCurrentFile, clearEditor) {
+	async function newFile(path, setPath, saveCurrentFile, clearEditor, type) {
 		const name = prompt("File name:");
 		if (!name) return;
 
@@ -178,10 +178,17 @@ export function setupFileTree({ api, fileTreeEl, onOpen }) {
 				}
 			}
 			if (action === "new-file") {
-				newFile(path, setPath, saveCurrentFile, clearEditor);
+				newFile(path, setPath, saveCurrentFile, clearEditor, type);
 			}
 			if (action === "new-folder") {
-				newFolder(path);
+				newFolder(path, type);
+			}
+			if (action === "download") {
+				if (type === "directory") {
+					open(`/api/containers/${containerId}/download_folder/?root=${path}`);
+				} else {
+					open(`/api/containers/${containerId}/download_file/?path=${path}`);
+				}
 			}
 		} catch (err) {
 			parent.addAlert(err.message || String(err), "error");

@@ -53,6 +53,9 @@
                     <button id="btn-open-upload-modal" title="Upload file">
                         <i class="iconoir-cloud-upload"></i>
                     </button>
+                    <button id="btn-download" title="Download folder">
+                        <i class="iconoir-cloud-download"></i>
+                    </button>
                     <button
                         id="toggle-sidebar-2"
                         class="hidden-big"
@@ -243,12 +246,13 @@
 
             <!-- Context menu -->
             <ul id="finder-menu" class="context-menu hidden">
-                <li data-action="open">Open</li>
-                <li data-action="rename">Rename…</li>
-                <li data-action="delete" class="danger">Delete…</li>
+                <li data-action="open"><i class="iconoir-doc-magnifying-glass"></i> Open</li>
+                <li data-action="rename"><i class="iconoir-text"></i> Rename...</li>
+                <li data-action="delete" class="danger"><i class="iconoir-bin-minus-in"></i> Delete...</li>
                 <li class="divider"></li>
-                <li data-action="new-file">New file here…</li>
-                <li data-action="new-folder">New folder here…</li>
+                <li data-action="new-file"><i class="iconoir-multiple-pages-plus"></i> New file here...</li>
+                <li data-action="new-folder"><i class="iconoir-folder-plus"></i> New folder here...</li>
+                <li data-action="download"><i class="iconoir-cloud-download"></i> Download this...</li>
             </ul>
 
             <!-- Global loader -->

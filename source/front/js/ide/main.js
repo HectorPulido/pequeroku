@@ -1,5 +1,4 @@
 import { makeApi } from "../core/api.js";
-import { getCSRF } from "../core/csrf.js";
 import { $, $$ } from "../core/dom.js";
 import { installGlobalLoader } from "../core/loader.js";
 import {
@@ -45,6 +44,7 @@ const saveFileBtn = $("#save-file");
 const consoleEl = $("#console-log");
 const newFolderBtn = $("#new-folder");
 const newFileBtn = $("#new-file");
+const btnDownloadBtn = $("#btn-download");
 
 const btnOpenUpload = $("#btn-open-upload-modal");
 const uploadModal = $("#upload-modal");
@@ -147,6 +147,7 @@ function connectWs() {
 	const ft = setupFileTree({
 		api,
 		fileTreeEl,
+		containerId,
 		onOpen: (p) => openFileIntoEditor(api, p, setPath),
 	});
 	refreshTreeBtn.addEventListener("click", async () => {
@@ -202,10 +203,14 @@ function connectWs() {
 	});
 
 	newFolderBtn.addEventListener("click", async () => {
-		ft.newFolder(null);
+		ft.newFolder(null, "folder");
 	});
 	newFileBtn.addEventListener("click", async () => {
-		ft.newFile(null, setPath, saveCurrentFile, clearEditor);
+		ft.newFile(null, setPath, saveCurrentFile, clearEditor, "folder");
+	});
+
+	btnDownloadBtn.addEventListener("click", async () => {
+		open(`/api/containers/${containerId}/download_folder/`);
 	});
 
 	// Guardar / Run
@@ -245,7 +250,6 @@ function connectWs() {
 
 	fileTreeEl.addEventListener("dragover", (e) => e.preventDefault());
 
-
 	await hydrateRun();
 	await tryOpen("/app/readme.txt");
 	refreshTreeBtn.click();
@@ -258,9 +262,7 @@ function connectWs() {
 		try {
 			await api(`/read_file/?path=${encodeURIComponent(p)}`);
 			await openFileIntoEditor(api, p, setPath);
-		} catch {
-
-		}
+		} catch {}
 	}
 
 	async function saveCurrentFile() {

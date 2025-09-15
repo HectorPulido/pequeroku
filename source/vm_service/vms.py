@@ -5,8 +5,8 @@ import os
 import threading
 import uuid
 
-from fastapi import HTTPException, Depends, APIRouter
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, Depends, APIRouter, Query
+from fastapi.responses import JSONResponse, Response
 
 import settings
 
@@ -32,6 +32,8 @@ from implementations import (
     list_dir,
     read_file,
     create_dir,
+    download_file,
+    download_folder,
 )
 
 from security import verify_bearer_token
@@ -198,7 +200,7 @@ async def execute_sh(vm_id: str, vm_command: VMSh) -> ElementResponse:
         command += "\n"
 
     try:
-        cli, chan = generate_console(vm)
+        _, chan = generate_console(vm)
         await asyncio.sleep(1)
         chan.send(command)
         await asyncio.sleep(1)
@@ -206,3 +208,46 @@ async def execute_sh(vm_id: str, vm_command: VMSh) -> ElementResponse:
         print("Error sending data", e)
 
     return ElementResponse(ok=True, reason="")
+
+
+@vms_router.get("/{vm_id}/download-file")
+async def download_file_ep(
+    vm_id: str,
+    path: str = Query(..., description="Absolute rute of the file"),
+):
+    try:
+        vm: "VMRecord" = store.get(vm_id)
+    except KeyError:
+        return ElementResponse(ok=False, reason="VM doesn't exist")
+    if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
+        return ElementResponse(ok=False, reason="VM is not running")
+
+    data = download_file(vm, path)
+    if not data:
+        return ElementResponse(ok=False, reason="Issue with the file")
+
+    return Response(**data)
+
+
+@vms_router.get("/{vm_id}/download-folder")
+async def download_folder_ep(
+    vm_id: str,
+    root: str = Query("/app", description="Dict to download"),
+    prefer_fmt: str = Query(
+        "zip",
+        pattern="^(zip|tar\\.gz)$",
+        description="Prefeer format; zip, tar, *.gz",
+    ),
+):
+    try:
+        vm: "VMRecord" = store.get(vm_id)
+    except KeyError:
+        return ElementResponse(ok=False, reason="VM doesn't exist")
+    if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
+        return ElementResponse(ok=False, reason="VM is not running")
+
+    data = download_folder(vm, root, prefer_fmt)
+    if not data:
+        return ElementResponse(ok=False, reason="Issue with the file")
+
+    return Response(**data)
