@@ -14,7 +14,6 @@ export function applyTheme(theme) {
 	const t = theme || getCurrentTheme();
 	document.documentElement.setAttribute("data-theme", t);
 	localStorage.setItem(STORAGE_KEY, t);
-	// Señal para quien necesite reaccionar (Monaco, Xterm, etc.)
 	window.dispatchEvent(
 		new CustomEvent("themechange", { detail: { theme: t } }),
 	);
@@ -27,7 +26,10 @@ export function toggleTheme() {
 
 export function setupThemeToggle(btn) {
 	const setIcon = (t) => {
-		btn.textContent = t === "dark" ? "☀️" : "🌙";
+		btn.innerHTML =
+			t === "dark"
+				? '<i class="iconoir-light-bulb-on"></i>'
+				: '<i class="iconoir-light-bulb-off"></i>';
 	};
 	setIcon(getCurrentTheme());
 	btn.addEventListener("click", () => {

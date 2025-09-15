@@ -100,7 +100,7 @@ export function setupContainers() {
 			userData.innerText = `Hello ${data.username?.[0]?.toUpperCase()}${data.username?.slice(1) || ""}!`;
 			quotaInfo.textContent = JSON.stringify(data, null, "\t");
 			if (data.has_quota) {
-				btnCreate.innerText = `➕ New container (${data.quota.max_containers - data.active_containers})`;
+				btnCreate.innerHTML = `<i class="mod-iconoir iconoir-plus-circle"></i> New container (${data.quota.max_containers - data.active_containers})`;
 				btnCreate.disabled =
 					data.active_containers >= data.quota.max_containers;
 			} else {
@@ -116,16 +116,17 @@ export function setupContainers() {
 		const card = document.createElement("div");
 		card.className = "container-card";
 		const isRunning = c.status === "running";
+
 		card.innerHTML = `
 <h2>${c.id} — ${c.name}</h2>
 <small>${c.username}</small> - <small>${new Date(c.created_at).toLocaleString()}</small>
 <p>Status: <strong id="st-${c.id}" class="status-${c.status}">${c.status}</strong></p>
 <div>
-  <button class="btn-edit" ${!isRunning ? "hidden" : ""}>✏️ Open</button>
-  <button class="btn-start" ${isRunning ? "hidden" : ""}>▶️ Start</button>
-  <button class="btn-stop" ${!isRunning ? "hidden" : ""}>⏹️ Stop</button>
-  <button class="btn-metrics" ${!isRunning ? "hidden" : ""}>📈 Metrics</button>
-  <button class="btn-delete">🗑️ Delete</button>
+  <button class="btn-edit" ${!isRunning ? "hidden" : ""}><i class="mod-iconoir iconoir-edit-pencil"></i> Open</button>
+  <button class="btn-start" ${isRunning ? "hidden" : ""}><i class="mod-iconoir iconoir-play"></i> Start</button>
+  <button class="btn-stop" ${!isRunning ? "hidden" : ""}><i class="mod-iconoir iconoir-pause"></i>Stop</button>
+  <button class="btn-metrics" ${!isRunning ? "hidden" : ""}><i class="mod-iconoir iconoir-graph-up"></i> Metrics</button>
+  <button class="btn-delete"><i class="mod-iconoir iconoir-bin-minus-in"></i> Delete</button>
 </div>`;
 
 		card.querySelector(".btn-metrics").onclick = () =>
@@ -228,7 +229,7 @@ export function setupContainers() {
 			return;
 		}
 		metricsModal.classList.remove("hidden");
-		metricsModalBody.innerHTML = `<iframe src="/metrics/?container=${id}" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
+		metricsModalBody.innerHTML = `<iframe src="/metrics/?container=${id}&showHeader" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
 	}
 
 	function openConsole(name, id) {
@@ -239,7 +240,7 @@ export function setupContainers() {
 			return;
 		}
 		modal.classList.remove("hidden");
-		modalBody.innerHTML = `<iframe src="/ide/?containerId=${id}" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
+		modalBody.innerHTML = `<iframe src="/ide/?containerId=${id}&showHeader" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
 	}
 
 	function closeConsole() {

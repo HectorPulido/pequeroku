@@ -19,6 +19,7 @@ import { setupFileTree } from "./files.js";
 import { loadRunConfig } from "./runConfig.js";
 import { setupUploads } from "./uploads.js";
 import { createWS } from "./websockets.js";
+import { hideHeader } from "../core/utils.js";
 
 function clamp(n, min, max) {
 	return Math.max(min, Math.min(max, n));
@@ -27,6 +28,7 @@ function clamp(n, min, max) {
 installGlobalLoader();
 applyTheme();
 loadMonaco(getCurrentTheme() === "dark");
+hideHeader();
 
 // ====== CONFIG ======
 const urlParams = new URLSearchParams(window.location.search);

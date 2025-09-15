@@ -1,4 +1,8 @@
 import { $ } from "../core/dom.js";
+import { applyTheme } from "../core/themes.js";
+import { hideHeader } from "../core/utils.js";
+
+hideHeader();
 
 const DEFAULT_POLL_MS = 1000;
 const TIMEOUT_MS = 8000;
@@ -161,3 +165,4 @@ document.addEventListener("visibilitychange", () => {
 });
 
 startPolling();
+applyTheme();

@@ -11,3 +11,15 @@ export function signatureFrom(data) {
 }
 export const capitalizeFirstLetter = (s) =>
 	s ? s[0].toUpperCase() + s.slice(1) : s;
+
+export function hideHeader() {
+	const queryString = window.location.search;
+	const urlParams = new URLSearchParams(queryString);
+	const showHeader = urlParams.get("showHeader");
+	if (showHeader == null) {
+		return;
+	}
+
+	const header = document.querySelector("body > header");
+	header.classList.add("hidden");
+}

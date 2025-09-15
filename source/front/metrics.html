@@ -7,14 +7,33 @@
         <!-- Chart.js CDN -->
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css"
+        />
         <link rel="stylesheet" href="/css/themes.css" />
         <link rel="stylesheet" href="/css/base.css" />
         <link rel="stylesheet" href="/css/metrics.css" />
     </head>
     <body>
+        <header>
+            <h1>PequeRoku</h1>
+            <div class="user-info">
+                <div>
+                    <div class="dropdown header-dropdown">
+                        <a href="/">
+                            <button class="header-button">
+                                <i
+                                    class="iconoir-long-arrow-down-left"
+                                ></i></button
+                        ></a>
+                    </div>
+                </div>
+            </div>
+        </header>
         <main>
             <div class="grid">
-                <div class="card span-12">
+                <div class="container-card span-12">
                     <div class="status">
                         <span id="status-dot" class="dot"></span>
                         <span id="status-text">Conectando…</span>
@@ -27,7 +46,7 @@
                 </div>
 
                 <!-- KPIs -->
-                <div class="card span-4">
+                <div class="container-card span-4">
                     <div class="kpi">
                         <div>
                             <h3>CPU</h3>
@@ -38,7 +57,7 @@
                         <div class="muted">cpu_percent</div>
                     </div>
                 </div>
-                <div class="card span-4">
+                <div class="container-card span-4">
                     <div class="kpi">
                         <div>
                             <h3>Memory RSS</h3>
@@ -49,7 +68,7 @@
                         <div class="muted">rss_mib</div>
                     </div>
                 </div>
-                <div class="card span-4">
+                <div class="container-card span-4">
                     <div class="kpi">
                         <div>
                             <h3>Threads</h3>
@@ -60,19 +79,19 @@
                 </div>
 
                 <!-- Charts -->
-                <div class="card span-6">
+                <div class="container-card span-6">
                     <div class="muted">CPU %</div>
                     <div class="chart-wrap">
                         <canvas id="cpuChart"></canvas>
                     </div>
                 </div>
-                <div class="card span-6">
+                <div class="container-card span-6">
                     <div class="muted">RSS (MiB)</div>
                     <div class="chart-wrap">
                         <canvas id="memChart"></canvas>
                     </div>
                 </div>
-                <div class="card span-12">
+                <div class="container-card span-12">
                     <div class="muted">Threads</div>
                     <div class="chart-wrap">
                         <canvas id="thrChart"></canvas>

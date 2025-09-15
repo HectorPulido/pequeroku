@@ -15,17 +15,43 @@
             href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"
         />
         <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css"
+        />
     </head>
 
     <body>
+        <header>
+            <h1>PequeRoku</h1>
+            <div class="user-info">
+                <div>
+                    <div class="dropdown header-dropdown">
+                        <a href="/">
+                            <button class="header-button">
+                                <i
+                                    class="iconoir-long-arrow-down-left"
+                                ></i></button
+                        ></a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
         <div id="editor-modal" class="full-viewport-height">
             <div class="sidebar" id="sidebar">
                 <div>
-                    <button id="refresh-tree" title="Reload">🔄</button>
-                    <button id="new-folder" title="Create Folder">📂</button>
-                    <button id="new-file" title="Create file">📄</button>
+                    <button id="refresh-tree" title="Reload">
+                        <i class="iconoir-restart"></i>
+                    </button>
+                    <button id="new-folder" title="Create Folder">
+                        <i class="iconoir-folder-plus"></i>
+                    </button>
+                    <button id="new-file" title="Create file">
+                        <i class="iconoir-multiple-pages-plus"></i>
+                    </button>
                     <button id="btn-open-upload-modal" title="Upload file">
-                        ⬆
+                        <i class="iconoir-cloud-upload"></i>
                     </button>
                     <button
                         id="toggle-sidebar-2"
@@ -33,7 +59,7 @@
                         title="Toggle sidebar"
                         style="height: 30px"
                     >
-                        ☰
+                        <i class="iconoir-menu"></i>
                     </button>
                 </div>
                 <ul id="file-tree"></ul>
@@ -43,7 +69,7 @@
                 <div class="toolbar">
                     <div>
                         <button id="toggle-sidebar" title="Toggle sidebar">
-                            ☰
+                            <i class="iconoir-menu"></i>
                         </button>
                         <span id="current_path_label"></span>
                     </div>
@@ -52,13 +78,17 @@
                             Templates
                         </button>
                         <button id="btn-open-ai-modal" title="AI Features">
-                            ✨AI
+                            <i class="mod-iconoir iconoir-sparks"></i> AI
                         </button>
                         <button id="toggle-console" title="Toggle console">
-                            🖥️
+                            <i class="iconoir-terminal-tag"></i>
                         </button>
-                        <button id="save-file" title="Save file">💾</button>
-                        <button id="run-code" title="Run">Run ▶️</button>
+                        <button id="save-file" title="Save file">
+                            <i class="iconoir-floppy-disk"></i>
+                        </button>
+                        <button id="run-code" title="Run">
+                            <i class="mod-iconoir iconoir-play"></i> Run
+                        </button>
                     </div>
                 </div>
                 <div id="editor"></div>
@@ -73,9 +103,11 @@
                             class="console-input"
                             placeholder="bash command..."
                         />
-                        <button id="send-cmd">Send</button>
+                        <button class="console-btn" id="send-cmd">Send</button>
                         <div class="dropdown">
-                            <button class="last-button">🔽</button>
+                            <button class="console-btn last-button">
+                                <i class="iconoir-nav-arrow-down"></i>
+                            </button>
                             <div class="dropdown-content">
                                 <button class="btn-send" param="ctrld">
                                     Ctrl+D
@@ -86,7 +118,7 @@
                                 <button class="btn-send" param="clear">
                                     Clear
                                 </button>
-                                <button id="restart-container">
+                                <button class="btn-send" id="restart-container">
                                     Reload console
                                 </button>
                             </div>
@@ -100,7 +132,7 @@
                         <div class="upload-header">
                             <span>Upload file</span>
                             <button id="btn-upload-close" class="top-btn">
-                                ❌
+                                <i class="iconoir-xmark-circle"></i>
                             </button>
                         </div>
                         <div class="upload-body">
@@ -116,7 +148,7 @@
                         <div class="upload-header">
                             <span>Templates</span>
                             <button id="btn-templates-close" class="top-btn">
-                                ❌
+                                <i class="iconoir-xmark-circle"></i>
                             </button>
                         </div>
                         <div
@@ -157,7 +189,7 @@
                         <div class="upload-header">
                             <span>AI Generator</span>
                             <button id="btn-ai-close" class="top-btn">
-                                ❌
+                                <i class="iconoir-xmark-circle"></i>
                             </button>
                         </div>
                         <div
@@ -194,7 +226,8 @@
                                 "
                             >
                                 <button id="btn-ai-generate">
-                                    ✨ Generate
+                                    <i class="mod-iconoir iconoir-sparks"></i>
+                                    Generate
                                 </button>
                                 <small
                                     id="ai-credits"

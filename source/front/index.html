@@ -7,6 +7,10 @@
         />
 
         <title>PequeRoku – Just a piece</title>
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css"
+        />
         <link rel="stylesheet" href="/css/themes.css" />
         <link rel="stylesheet" href="/css/base.css" />
         <link rel="stylesheet" href="/css/styles.css" />
@@ -22,13 +26,13 @@
                 <input
                     type="text"
                     id="username"
-                    placeholder="Usuario"
+                    placeholder="Username"
                     required
                 />
                 <input
                     type="password"
                     id="password"
-                    placeholder="Contraseña"
+                    placeholder="Password"
                     required
                 />
                 <button type="submit" id="btn-login">Submit</button>
@@ -45,26 +49,27 @@
             <header>
                 <h1>PequeRoku</h1>
                 <div class="user-info">
-                    <h3 id="user_data">Hola usuario</h3>
+                    <h3 id="user_data">Hello User!</h3>
                     <div>
                         <div class="dropdown header-dropdown">
-                            <button>🤖</button>
+                            <button class="header-button">
+                                <i class="iconoir-user"></i>
+                            </button>
                             <div class="dropdown-content">
                                 <div>
-                                    <pre id="quota_info">
-                  Hola mundo
-                  Hola mundo
-                  Hola mundo
-                  Hola mundo
-                  Hola mundo
-                  </pre
-                                    >
+                                    <pre id="quota_info"></pre>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <button id="btn-refresh">🔄</button>
-                    <button id="btn-create" disabled>➕ New container</button>
+
+                    <button class="header-button" id="btn-refresh">
+                        <i class="iconoir-restart"></i>
+                    </button>
+                    <button class="header-button" id="btn-create" disabled>
+                        <i class="mod-iconoir iconoir-plus-circle"></i> New
+                        container
+                    </button>
                 </div>
             </header>
             <main>
@@ -74,20 +79,6 @@
                     Other containers
                 </h2>
                 <section id="other-container-list"></section>
-                <div id="upload-modal" class="hidden">
-                    <div class="upload-container">
-                        <div class="upload-header">
-                            <span>Upload file</span>
-                            <button id="btn-upload-close" class="top-btn">
-                                ❌
-                            </button>
-                        </div>
-                        <div class="upload-body">
-                            <input type="file" id="file-input" />
-                            <button id="btn-upload">Upload</button>
-                        </div>
-                    </div>
-                </div>
 
                 <div
                     id="metrics-modal"
@@ -98,10 +89,10 @@
                         <span id="metrics-title"></span>
                         <div>
                             <button id="btn-fullscreen-metrics" class="top-btn">
-                                ⏹️
+                                <i class="iconoir-expand"></i>
                             </button>
                             <button id="btn-close-metrics" class="top-btn">
-                                ❌
+                                <i class="iconoir-xmark-circle"></i>
                             </button>
                         </div>
                     </div>
@@ -117,9 +108,11 @@
                         <span id="console-title"></span>
                         <div>
                             <button id="btn-fullscreen" class="top-btn">
-                                ⏹️
+                                <i class="iconoir-expand"></i>
                             </button>
-                            <button id="btn-close" class="top-btn">❌</button>
+                            <button id="btn-close" class="top-btn">
+                                <i class="iconoir-xmark-circle"></i>
+                            </button>
                         </div>
                     </div>
                     <div

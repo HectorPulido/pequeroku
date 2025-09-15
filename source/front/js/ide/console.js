@@ -14,13 +14,13 @@ export function setupConsole({
 	const light_theme = {
 		background: "#2d2d2d",
 		foreground: "#fff",
-		cursor: "#cb4b16",
+		cursor: "#2d2d2d",
 		selectionBackground: "#111111",
 	};
 	const dark_theme = {
 		background: "#11161c",
 		foreground: "#d1d5db",
-		cursor: "#d1d5db",
+		cursor: "#11161c",
 		selectionBackground: "#374151",
 	};
 	const term = new Terminal({
@@ -88,7 +88,7 @@ export function setupConsole({
 		inputEl.addEventListener("focus", () => {
 			setTimeout(() => {
 				try {
-					consoleCMD.scrollIntoView({ block: "nearest", behavior: "smooth" });
+					consoleEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
 				} catch {}
 			}, 50);
 		});
