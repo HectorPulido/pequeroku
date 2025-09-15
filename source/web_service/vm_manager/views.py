@@ -1,3 +1,6 @@
+import base64
+from dataclasses import asdict
+
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -244,17 +247,27 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             )
             return Response({"error": "file required"}, status=400)
         service = self._get_service(obj)
+        response = None
         try:
-            response = service.upload_files(
-                str(obj.container_id),
-                VMUploadFiles(
-                    dest_path=dest,
-                    clean=False,
-                    files=[VMFile(path=f.name, content=f.read().decode("utf-8"))],
-                ),
+            raw = f.read()
+            try:
+                text = raw.decode("utf-8")
+                file_payload = VMFile(path=f.name, text=text)
+            except UnicodeDecodeError:
+                b64 = base64.b64encode(raw).decode("ascii")
+                file_payload = VMFile(path=f.name, content_b64=b64)
+
+            payload = VMUploadFiles(dest_path=dest, clean=False, files=[file_payload])
+            data = asdict(payload)
+            response = service.upload_files_blob(str(obj.container_id), data)
+
+        except Exception as e:
+            return Response(
+                {"error": "invalid file or encoding", "detail": str(e)}, status=400
             )
-        except:
-            return Response({"error": "file required to be a text one"}, status=400)
+
+        if not response:
+            return Response({"error": "invalid file or encoding"}, status=400)
 
         audit_log_http(
             request,
@@ -358,7 +371,7 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             VMUploadFiles(
                 dest_path="/",
                 clean=False,
-                files=[VMFile(path=path, content=content)],
+                files=[VMFile(path=path, text=content)],
             ),
         )
         audit_log_http(

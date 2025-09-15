@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Optional, Literal
 import subprocess
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 @dataclass
@@ -47,7 +47,10 @@ class VMCreate(BaseModel):
 
 class VMFile(BaseModel):
     path: str = Field("/", description="Path for the file")
-    content: str = Field("", description="Content of the path")
+    text: Optional[str] = Field(None, description="UTF-8 text content")
+    content_b64: Optional[str] = Field(
+        None, description="Base64-encoded bytes for binary files"
+    )
     # pyrefly: ignore  # no-matching-overload
     mode: int = Field(example=0o644)
 

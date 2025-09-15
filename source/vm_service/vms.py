@@ -1,15 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import threading
 import uuid
-import asyncio
 
-from fastapi import (
-    HTTPException,
-    Depends,
-    APIRouter,
-)
+from fastapi import HTTPException, Depends, APIRouter
 from fastapi.responses import JSONResponse
 
 import settings

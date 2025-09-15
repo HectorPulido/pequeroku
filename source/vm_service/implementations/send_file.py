@@ -1,3 +1,4 @@
+import base64
 import time
 import posixpath
 import shlex
@@ -37,6 +38,8 @@ def _clean_dest(cli: paramiko.SSHClient, dest_path: str):
 
 def _prepare_vm_for_transfer(container: VMRecord, dest_path="/app", clean=True):
     sftp, cli = open_ssh_and_sftp(container, True)
+    if not sftp:
+        return None, None, None
 
     dest_path = sftp.normalize(dest_path or "/app")
     if clean:
@@ -54,18 +57,17 @@ def _sftp_mkdirs(sftp: paramiko.SFTPClient, remote_dir: str):
         try:
             sftp.stat(cur)
         except (IOError, OSError) as e:
-            # ENOENT: no existe -> crearlo
             if getattr(e, "errno", None) in (errno.ENOENT, 2):
                 sftp.mkdir(cur)
             else:
                 raise
 
 
-def _save_file(
+def _save_file_bytes(
     sftp: paramiko.SFTPClient,
     cli: paramiko.SSHClient,
     full_path: str,
-    content: str,
+    data: bytes,
     file_mode: int,
 ):
     dirn = posixpath.dirname(full_path)
@@ -73,7 +75,6 @@ def _save_file(
         _sftp_mkdirs(sftp, dirn)
     time.sleep(0.02)
 
-    data = (content or "").encode("utf-8")
     with sftp.open(full_path, "wb") as wf:
         wf.write(data)
     time.sleep(0.02)
@@ -97,14 +98,19 @@ def send_files(container: VMRecord, files: VMUploadFiles):
     try:
         sftp, cli, dest_path = _prepare_vm_for_transfer(container, dest_path, clean)
 
-        if not sftp:
+        if not sftp or not dest_path or not cli:
             return ElementResponse(ok=False, reason="No sftp ready")
 
         failed = []
         for it in files.files:
             try:
                 fullp = _norm_join(dest_path, it.path)
-                _save_file(sftp, cli, fullp, it.content, it.mode)
+                if it.text is not None and len(it.text) > 0:
+                    data = (it.text or "").encode("utf-8")
+                else:
+                    data = base64.b64decode(it.content_b64 or "", validate=False)
+                _save_file_bytes(sftp, cli, fullp, data, it.mode)
+                # _save_file(sftp, cli, fullp, it.content, it.mode)
             except Exception as e:
                 failed.append({"path": it.path, "reason": str(e)})
 

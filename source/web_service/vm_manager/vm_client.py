@@ -46,7 +46,8 @@ class VMFile:
 
     mode: int = 0o644
     path: str = "/"
-    content: str = ""
+    text: Optional[str] = ""
+    content_b64: Optional[str] = ""
 
 
 @dataclass
@@ -159,6 +160,17 @@ class VMServiceClient:
         resp = self.session.post(
             self._url(f"/vms/{vm_id}/upload-files"),
             json=data,
+            headers=self.headers,
+            timeout=self.timeout,
+        )
+        return self._handle(resp)
+
+    def upload_files_blob(self, vm_id: str, payload: dict) -> Dict[str, Any]:
+        """POST /vms/{vm_id}/upload-files — Sube archivos de texto a la VM."""
+
+        resp = self.session.post(
+            self._url(f"/vms/{vm_id}/upload-files"),
+            json=payload,
             headers=self.headers,
             timeout=self.timeout,
         )

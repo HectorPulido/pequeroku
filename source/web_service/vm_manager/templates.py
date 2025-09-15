@@ -1,5 +1,5 @@
 from .models import Container, FileTemplate, Node
-from .vm_client import VMServiceClient, VMCreate, VMAction, VMUploadFiles, VMFile
+from .vm_client import VMServiceClient, VMUploadFiles, VMFile
 
 
 def apply_template(
@@ -20,7 +20,7 @@ def apply_template(
             VMFile(
                 mode=it.mode,
                 path=it.path,
-                content=it.content,
+                text=it.content,
             )
         )
 
@@ -80,12 +80,12 @@ def apply_ai_generated_project(
                 VMFile(
                     mode=0o644,
                     path="build_from_gencode.py",
-                    content=code,
+                    text=code,
                 ),
                 VMFile(
                     mode=0o644,
                     path="gencode.txt",
-                    content=content,
+                    text=content,
                 ),
             ],
         ),
