@@ -65,7 +65,7 @@ button:hover {
 	color: #ddd;
 	display: flex;
 	width: 100vw;
-	height: 100vh;
+	/*height: 100vh;*/
 	max-width: 100%;
 	overflow: hidden;
 	/* avoid accidental horizontal scroll */
@@ -259,7 +259,7 @@ wc-monaco-editor#editor {
 
 	.console-area {
 		position: sticky;
-		bottom: 65.328px;
+		/*bottom: 65.328px;*/
 		z-index: 1000;
 	}
 }
@@ -358,7 +358,7 @@ body {
 	background: #252529;
 }
 
-.main.calc {
+.calc {
 	/*Header size*/
-	height: calc(100vh - 65.328px);
+	height: calc(100dvh - 65.328px);
 }
