@@ -15,6 +15,7 @@
 	--button-border: #555;
 	--hover: #303030;
 	--danger: #a1a;
+	--bg-dark: #0b0d10;
 }
 
 html[data-theme="dark"] body {
@@ -91,16 +92,15 @@ html[data-theme="dark"] .sidebar li:hover {
 }
 html[data-theme="dark"] .toolbar {
 	background: #0b0d10;
-	border-bottom: 1px solid #1f242b;
 }
 html[data-theme="dark"] button,
 html[data-theme="dark"] input[type="text"] {
 	color: #e6e6e6;
-	border: 0px solid #2d3748;
+	border: 1px solid #0b0d10;
 }
 
 html[data-theme="dark"] .console {
-	background: #11161c;
+	background: #0b0d10;
 	color: #e6e6e6;
 }
 html[data-theme="dark"] .dropdown-content div {

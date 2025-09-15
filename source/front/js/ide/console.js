@@ -18,7 +18,7 @@ export function setupConsole({
 		selectionBackground: "#111111",
 	};
 	const dark_theme = {
-		background: "#11161c",
+		background: "#0b0d10",
 		foreground: "#d1d5db",
 		cursor: "#11161c",
 		selectionBackground: "#374151",

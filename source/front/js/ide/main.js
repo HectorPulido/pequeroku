@@ -18,7 +18,7 @@ import { setupFileTree } from "./files.js";
 import { loadRunConfig } from "./runConfig.js";
 import { setupUploads } from "./uploads.js";
 import { createWS } from "./websockets.js";
-import { hideHeader } from "../core/utils.js";
+import { hideHeader, sleep } from "../core/utils.js";
 import { setupHiddableDragabble } from "./hiddableDraggable.js";
 
 installGlobalLoader();
@@ -59,6 +59,10 @@ const tplListEl = $("#tpl-list");
 const tplDestEl = $("#tpl-dest");
 const tplCleanEl = $("#tpl-clean");
 
+const btnCloneRepo = $("#btn-clone-repo");
+const btnCloseCloneRepo = $("#btn-github-close");
+const btnSubmitCloneRepo = $("#btn-github");
+
 const btnOpenAi = $("#btn-open-ai-modal");
 const aiModal = $("#ai-modal");
 const btnAiClose = $("#btn-ai-close");
@@ -74,13 +78,13 @@ if (themeToggleBtn) setupThemeToggle(themeToggleBtn);
 let consoleApi = null;
 let currentFilePath = null;
 let runCommand = null;
+let ws = null;
+
 function setPath(p) {
 	currentFilePath = p;
 	pathLabel.innerText = p;
 	localStorage.setItem(`last:${containerId}`, p);
 }
-
-let ws = null;
 
 function connectWs() {
 	ws = createWS(containerId, {
@@ -288,5 +292,26 @@ function connectWs() {
 	window.addEventListener("themechange", (ev) => {
 		const isDark = ev.detail?.theme === "dark";
 		changeTheme(isDark, consoleApi);
+	});
+
+	// Clone Github
+	btnCloneRepo.addEventListener("click", () => {
+		$("#github-modal").classList.remove("hidden");
+	});
+	btnCloseCloneRepo.addEventListener("click", () => {
+		$("#github-modal").classList.add("hidden");
+	});
+	btnSubmitCloneRepo.addEventListener("click", async () => {
+		const repo = $("#url_git").value;
+		const base_path = $("#base_path").value;
+		const cmd = `bash -lc 'set -euo pipefail; REPO="${repo}"; X="${base_path}"; TMP="$(mktemp -d)"; git clone "$REPO" "$TMP/repo"; sudo mkdir -p /app; find /app -mindepth 1 -not -name "readme.txt" -not -name "config.json" -exec rm -rf {} +; SRC="$TMP/repo"; [ "\${X:-/}" != "/" ] && SRC="$TMP/repo/\${X#/}"; shopt -s dotglob nullglob; mv "$SRC"/* /app/; rm -rf "$TMP"'`;
+
+		if (ws != null) {
+			ws.send(cmd);
+			await sleep(5000);
+			await ft.refresh();
+			await hydrateRun();
+			btnCloseCloneRepo.click();
+		}
 	});
 })();

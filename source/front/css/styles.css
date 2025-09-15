@@ -231,3 +231,8 @@ main {
 .console-btn {
 	height: 2em;
 }
+
+#theme-toggle {
+	padding: 1em;
+	font-size: medium;
+}

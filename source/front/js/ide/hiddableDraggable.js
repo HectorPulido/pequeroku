@@ -1,9 +1,10 @@
-import { $ } from "../core/dom.js";
+import { $, $$ } from "../core/dom.js";
 export function setupHiddableDragabble(containerId) {
 	const toggleSidebarBtn = $("#toggle-sidebar");
 	const toggleSidebarBtn2 = $("#toggle-sidebar-2");
 	const toggleConsoleBtn = $("#toggle-console");
 	const consoleArea = $("#console-area");
+	const consoleHiddable = $$(".console-hiddable");
 	const editorModal = $("#editor-modal");
 	const sidebarEl = $("#sidebar");
 	const splitterV = $("#splitter-v");
@@ -25,6 +26,8 @@ export function setupHiddableDragabble(containerId) {
 		localStorage.getItem(LS_CONSOLE_SIZE_KEY) || "260",
 		10,
 	);
+
+	let h = savedH;
 
 	function clamp(n, min, max) {
 		return Math.max(min, Math.min(max, n));
@@ -61,14 +64,14 @@ export function setupHiddableDragabble(containerId) {
 
 		const onMove = (ev) => {
 			const raw = containerBottom - ev.clientY - resizerHeight;
-			const h = clamp(raw, 60, window.innerHeight);
+			h = clamp(raw, 90, window.innerHeight);
 			consoleArea.style.height = `${h}px`;
 			try {
 				consoleApi?.fit?.();
 			} catch {}
 		};
 		const onUp = () => {
-			const h = consoleArea.getBoundingClientRect().height;
+			h = consoleArea.getBoundingClientRect().height;
 			localStorage.setItem(LS_CONSOLE_SIZE_KEY, String(h));
 			window.removeEventListener("mousemove", onMove);
 			window.removeEventListener("mouseup", onUp);
@@ -83,7 +86,15 @@ export function setupHiddableDragabble(containerId) {
 		editorModal.classList.toggle("sidebar-open", state === "open");
 	}
 	function applyConsoleState(state) {
-		consoleArea.classList.toggle("collapsed", state !== "open");
+		consoleHiddable.forEach((a) => {
+			a.classList.toggle("collapsed", state !== "open");
+		});
+		console.log(state);
+		if (state === "open") {
+			consoleArea.style.height = `${h}px`;
+		} else {
+			consoleArea.style.height = "37px";
+		}
 	}
 
 	function getInitialSidebarState() {
@@ -107,7 +118,7 @@ export function setupHiddableDragabble(containerId) {
 	}
 
 	function toggleConsole() {
-		const _collapsed = consoleArea.classList.contains("collapsed");
+		const _collapsed = consoleHiddable[0].classList.contains("collapsed");
 		const next = _collapsed ? "open" : "collapsed";
 		localStorage.setItem(LS_CONSOLE_KEY, next);
 		applyConsoleState(next);

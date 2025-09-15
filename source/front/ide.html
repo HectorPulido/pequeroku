@@ -2,10 +2,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-        <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-        />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
         <title>PequeRoku – Micro-IDE</title>
         <link rel="stylesheet" href="/css/themes.css" />
         <link rel="stylesheet" href="/css/base.css" />
@@ -60,7 +57,6 @@
                         id="toggle-sidebar-2"
                         class="hidden-big"
                         title="Toggle sidebar"
-                        style="height: 30px"
                     >
                         <i class="iconoir-menu"></i>
                     </button>
@@ -72,21 +68,9 @@
             <div class="calc main" id="main">
                 <div class="toolbar">
                     <div>
-                        <button id="toggle-sidebar" title="Toggle sidebar">
-                            <i class="iconoir-menu"></i>
-                        </button>
                         <span id="current_path_label"></span>
                     </div>
                     <div>
-                        <button id="btn-open-templates-modal" title="Templates">
-                            Templates
-                        </button>
-                        <button id="btn-open-ai-modal" title="AI Features">
-                            <i class="mod-iconoir iconoir-sparks"></i> AI
-                        </button>
-                        <button id="toggle-console" title="Toggle console">
-                            <i class="iconoir-terminal-tag"></i>
-                        </button>
                         <button id="save-file" title="Save file">
                             <i class="iconoir-floppy-disk"></i>
                         </button>
@@ -100,8 +84,8 @@
 
                 <div class="console-resizer resizer" id="splitter-h"></div>
                 <div class="console-area" id="console-area">
-                    <div class="console" id="console-log"></div>
-                    <div class="toolbar console-toolbar">
+                    <div class="console console-hiddable" id="console-log"></div>
+                    <div class="toolbar console-toolbar console-hiddable">
                         <input
                             type="text"
                             id="console-cmd"
@@ -129,7 +113,71 @@
                             </div>
                         </div>
                     </div>
+                    <div class="bottom_bar toolbar" style="justify-content: space-between;">
+                        <div>
+                        <button id="toggle-sidebar" title="Toggle sidebar">
+                            <i class="mod-iconoir-big iconoir-menu"></i> <span class="hidde-small">Open tree</span>
+                        </button>
+                        </div>
+                        <div>
+                            <button id="theme-toggle" title="Theme">
+                                <i class="mod-iconoir-big iconoir-orthogonal-view"></i> <span class="hidde-small">Theme</span>
+                            </button>
+                            <button id="btn-open-templates-modal" title="Templates">
+                                <i class="mod-iconoir-big iconoir-orthogonal-view"></i> <span class="hidde-small">Templates</span>
+                            </button>
+                            <button id="btn-clone-repo" title="Clone Repository">
+                                <i class="mod-iconoir-big iconoir-github-circle"></i> <span class="hidde-small">Clone from Github</span>
+                            </button>
+                            <button id="btn-open-ai-modal" title="AI Features">
+                                <i class="mod-iconoir-big iconoir-sparks"></i> AI
+                            </button>
+                            <button id="toggle-console" title="Toggle console">
+                                <i class="mod-iconoir-big iconoir-terminal-tag"></i> <span class="hidde-small">Toggle console</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Clone from github -->
+                <div id="github-modal" class="hidden">
+                    <div class="upload-container">
+                        <div class="upload-header">
+                            <span>Clone from Github</span>
+                            <button id="btn-github-close" class="top-btn">
+                                <i class="iconoir-xmark-circle"></i>
+                            </button>
+                        </div>
+                        <div class="upload-body" style="display: list-item;">
+                            <label for="url_git">Git URL</label>
+                            <br>
+                            <input
+                                id="url_git"
+                                name="url_git"
+                                type="text"
+                                placeholder="/app"
+                                value="https://github.com/HectorPulido/generic-portfolio"
+                                style="width: 100%;"
+                            />
+                            <br><br>
+                            <label for="base_path">
+                                Base path
+                            </label>
+                            <br>
+                            <input
+                                id="base_path"
+                                name="base_path"
+                                type="text"
+                                placeholder="/"
+                                value="/"
+                                style="width: 100%;"
+                            />
+                            <br><br>
+                            <button id="btn-github" type="submit" value="Submit">Clone</button>
+                        </div>
+                    </div>
+                </div>
+
 
                 <!-- Upload modal -->
                 <div id="upload-modal" class="hidden">

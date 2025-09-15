@@ -102,8 +102,8 @@ wc-monaco-editor#editor {
 	/* avoid width push */
 }
 
-.console-area.collapsed {
-	display: none;
+.collapsed {
+	display: none !important;
 }
 
 .console-input {
@@ -259,8 +259,8 @@ wc-monaco-editor#editor {
 
 	.console-area {
 		position: sticky;
-        bottom: 65.328px;
-        z-index: 1000;
+		bottom: 65.328px;
+		z-index: 1000;
 	}
 }
 

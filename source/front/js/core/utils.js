@@ -23,5 +23,11 @@ export function hideHeader() {
 	const header = document.querySelector("body > header");
 	header.classList.add("hidden");
 
-	document.querySelector(".main").classList.remove("calc");
+	try {
+		document.querySelector(".main").classList.remove("calc");
+	} catch {}
+}
+
+export function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }

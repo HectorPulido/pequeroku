@@ -94,7 +94,8 @@ body {
 #upload-modal,
 #ai-modal,
 #templates-modal,
-#metrics-modal {
+#metrics-modal,
+#github-modal {
 	position: fixed;
 	top: 0;
 	left: 0;
@@ -166,6 +167,12 @@ body {
 	.hidden-big {
 		display: inline-block !important;
 	}
+	.hidde-small {
+		display: none !important;
+	}
+	.mod-iconoir-big {
+		transform: translate(0%, 0%) !important;
+	}
 }
 
 .container-card {
@@ -184,13 +191,9 @@ body {
 	right: 0 !important;
 }
 
-.mod-iconoir {
+.mod-iconoir,
+.mod-iconoir-big {
 	transform: translate(-15%, 13%);
-}
-
-#theme-toggle {
-	padding: 1em;
-	font-size: medium;
 }
 
 header {

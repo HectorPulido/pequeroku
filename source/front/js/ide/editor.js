@@ -28,7 +28,7 @@ export function loadMonaco(theme) {
 				{ token: "string", foreground: "e6db74" },
 			],
 			colors: {
-				"editor.background": "#272822",
+				"editor.background": "#2d2d2d",
 				"editor.foreground": "#f8f8f2",
 			},
 		});
