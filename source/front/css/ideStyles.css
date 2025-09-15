@@ -248,6 +248,7 @@ wc-monaco-editor#editor {
 	/* “Open” state on mobile */
 	#editor-modal.sidebar-open .sidebar {
 		transform: translateX(0);
+		z-index: 1001;
 	}
 
 	/* Editor takes remaining vertical space */
@@ -258,7 +259,8 @@ wc-monaco-editor#editor {
 
 	.console-area {
 		position: sticky;
-		bottom: 0;
+        bottom: 65.328px;
+        z-index: 1000;
 	}
 }
 
