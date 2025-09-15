@@ -202,22 +202,11 @@ async def execute_sh(vm_id: str, vm_command: VMSh) -> ElementResponse:
         command += "\n"
 
     try:
-        cli, chan = generate_console(
-            settings.VM_SSH_PRIVKEY,
-            "127.0.0.1",
-            vm.ssh_port,
-            vm.ssh_user,
-        )
+        cli, chan = generate_console(vm)
         await asyncio.sleep(1)
         chan.send(command)
         await asyncio.sleep(1)
     except Exception as e:
         print("Error sending data", e)
-
-    try:
-        chan.close()
-        cli.close()
-    except Exception as e:
-        print("Error closing...", e)
 
     return ElementResponse(ok=True, reason="")

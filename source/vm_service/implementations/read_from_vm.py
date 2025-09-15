@@ -3,7 +3,7 @@ import shlex
 
 
 from qemu_manager.models import VMRecord, ListDirItem, FileContent
-from .send_file import open_ssh_and_sftp
+from .ssh_cache import open_ssh_and_sftp
 
 
 def list_dir(container: VMRecord, root: str = "/app") -> list[ListDirItem]:
@@ -12,11 +12,12 @@ def list_dir(container: VMRecord, root: str = "/app") -> list[ListDirItem]:
         cli,
     ) = open_ssh_and_sftp(container, open_sftp=False)
 
+    items: list[ListDirItem] = []
     try:
         cmd = f"find {shlex.quote(root)} -maxdepth 2 -printf '%p||%y\\n' 2>/dev/null || true"
         _, stdout, _ = cli.exec_command(cmd)
         lines = (stdout.read().decode() or "").strip().splitlines()
-        items: list[ListDirItem] = []
+
         for ln in lines:
             if "||" not in ln:
                 continue
@@ -29,8 +30,8 @@ def list_dir(container: VMRecord, root: str = "/app") -> list[ListDirItem]:
                     path_type="directory" if t == "d" else "file",
                 )
             )
-    finally:
-        cli.close()
+    except Exception as e:
+        print("Exception listing dir ", e)
 
     return items
 
@@ -52,12 +53,6 @@ def read_file(container: VMRecord, path: str):
         return FileContent(
             name=path.split("/")[-1], content=data, length=len(data), found=False
         )
-
-    finally:
-        # pyrefly: ignore  # missing-attribute
-        if sftp:
-            sftp.close()
-        cli.close()
 
     return FileContent(
         name=path.split("/")[-1], content=data, length=len(data), found=True

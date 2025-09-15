@@ -6,24 +6,14 @@ from typing import Optional
 from fastapi import WebSocket
 import paramiko
 
+from qemu_manager.models import VMRecord
+from .ssh_cache import cache_ssh_and_sftp
 
-from qemu_manager.crypto import _load_pkey
 
+def generate_console(container: VMRecord):
+    val = cache_ssh_and_sftp(container)
+    cli = val["cli"]
 
-def generate_console(key_path, host, port, user):
-    k = _load_pkey(key_path)
-    cli = paramiko.SSHClient()
-    cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    cli.connect(
-        host,
-        port=port,
-        username=user,
-        pkey=k,
-        look_for_keys=False,
-        banner_timeout=120,
-        auth_timeout=120,
-        timeout=30,
-    )
     chan = cli.invoke_shell(width=120, height=32)
     chan.settimeout(0.0)
 
@@ -31,14 +21,9 @@ def generate_console(key_path, host, port, user):
 
 
 class TTYBridge:
-    def __init__(
-        self, ws: WebSocket, host: str, port: int, user: str, key_path: str
-    ) -> None:
+    def __init__(self, ws: WebSocket, vm: VMRecord) -> None:
         self.ws = ws
-        self.host = host
-        self.port = port
-        self.user = user
-        self.key_path = key_path
+        self.vm = vm
         self.cli: Optional[paramiko.SSHClient] = None
         self.chan: Optional[paramiko.Channel] = None
         self._alive = False
@@ -46,9 +31,7 @@ class TTYBridge:
     def start(self) -> None:
         def _run():
             try:
-                cli, chan = generate_console(
-                    self.key_path, self.host, self.port, self.user
-                )
+                cli, chan = generate_console(self.vm)
                 self.cli = cli
                 self.chan = chan
                 self._alive = True
@@ -66,11 +49,6 @@ class TTYBridge:
                 try:
                     if self.chan and not self.chan.closed:
                         self.chan.close()
-                except Exception:
-                    pass
-                try:
-                    if self.cli:
-                        self.cli.close()
                 except Exception:
                     pass
 

@@ -32,7 +32,7 @@ class Runner:
                 # Overrides temporales de settings si se especifican
                 vm_ssh_user = settings.VM_SSH_USER
                 # Lanzar QEMU con utilidades existentes
-                proc = _start_vm(vm.workdir, vm.vcpus, vm.mem_mib, vm.disk_gib)
+                proc = _start_vm(vm.workdir, vm.vcpus, vm.mem_mib, vm.disk_gib, vm.id)
                 vm.proc = proc
                 vm.ssh_port = proc.port_ssh
                 vm.ssh_user = vm_ssh_user
@@ -42,6 +42,7 @@ class Runner:
                         port=proc.port_ssh,
                         timeout=settings.VM_TIMEOUT_BOOT_S,
                         user=vm_ssh_user,
+                        vm_id=vm.id,
                     )
                 except Exception:
                     pass

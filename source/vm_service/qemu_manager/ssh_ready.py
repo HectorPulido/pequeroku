@@ -1,12 +1,8 @@
 import socket
 import time
 from typing import Callable, Optional
-
 import paramiko
-
-
 import settings
-
 from .crypto import _load_pkey
 
 
@@ -15,6 +11,7 @@ def _wait_ssh(
     timeout: int,
     user: str,
     is_vm_alive: Optional[Callable[[], bool]] = None,
+    vm_id: str | None = None,
 ) -> bool:
     """
     Wait until an SSH connection is possible to 127.0.0.1:<port>.
@@ -42,7 +39,17 @@ def _wait_ssh(
                 timeout=5,
                 look_for_keys=False,
             )
-            cli.close()
+
+            if cli is not None and vm_id is not None:
+                try:
+                    from implementations.ssh_cache import cache_data
+
+                    cli.exec_command("echo hello")
+                    sftp = cli.open_sftp()
+                    cache_data[vm_id] = {"cli": cli, "sftp": sftp}
+                except Exception:
+                    ...
+
             return True
         except Exception as e:
             time.sleep(1.0)

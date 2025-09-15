@@ -38,7 +38,7 @@
             </div>
         </header>
 
-        <div id="editor-modal" class="full-viewport-height">
+        <main id="editor-modal" class="full-viewport-height">
             <div class="sidebar" id="sidebar">
                 <div>
                     <button id="refresh-tree" title="Reload">
@@ -64,8 +64,9 @@
                 </div>
                 <ul id="file-tree"></ul>
             </div>
+
             <div class="splitter-v resizer" id="splitter-v"></div>
-            <div class="main" id="main">
+            <div class="calc main" id="main">
                 <div class="toolbar">
                     <div>
                         <button id="toggle-sidebar" title="Toggle sidebar">
@@ -92,6 +93,7 @@
                     </div>
                 </div>
                 <div id="editor"></div>
+
 
                 <div class="console-resizer resizer" id="splitter-h"></div>
                 <div class="console-area" id="console-area">
@@ -254,7 +256,7 @@
                 <div class="loader-backdrop"></div>
                 <div class="loader-spinner"></div>
             </div>
-        </div>
+        </main>
 
         <script type="module" src="/js/ide/main.js"></script>
     </body>

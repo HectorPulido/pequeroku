@@ -20,10 +20,7 @@ import { loadRunConfig } from "./runConfig.js";
 import { setupUploads } from "./uploads.js";
 import { createWS } from "./websockets.js";
 import { hideHeader } from "../core/utils.js";
-
-function clamp(n, min, max) {
-	return Math.max(min, Math.min(max, n));
-}
+import { setupHiddableDragabble } from "./hiddableDraggable.js";
 
 installGlobalLoader();
 applyTheme();
@@ -69,122 +66,9 @@ const aiInput = $("#ai-input");
 const btnAiGenerate = $("#btn-ai-generate");
 const aiCredits = $("#ai-credits");
 
-const toggleSidebarBtn = $("#toggle-sidebar");
-const toggleSidebarBtn2 = $("#toggle-sidebar-2");
-const toggleConsoleBtn = $("#toggle-console");
-const consoleArea = $("#console-area");
-const editorModal = $("#editor-modal");
+setupHiddableDragabble(containerId);
 
-const sidebarEl = $("#sidebar");
-const splitterV = $("#splitter-v");
-const splitterH = $("#splitter-h");
-
-const IS_MOBILE = matchMedia("(max-width: 768px)").matches;
-const LS_SIDEBAR_KEY = `ide:${containerId}:sidebar`;
-const LS_CONSOLE_KEY = `ide:${containerId}:console`;
-
-// Drag and drop files and console
-const LS_CONSOLE_SIZE_KEY = `ide:${containerId}:console:px`;
-const LS_SIDEBAR_SIZE_KEY = `ide:${containerId}:sidebar:px`;
-
-const savedW = parseInt(localStorage.getItem(LS_SIDEBAR_SIZE_KEY) || "280", 10);
-const savedH = parseInt(localStorage.getItem(LS_CONSOLE_SIZE_KEY) || "260", 10);
-
-editorModal.style.gridTemplateColumns = `${savedW}px 6px 1fr`;
-consoleArea.style.height = `${savedH}px`;
-
-// Vertical splitter (files)
-splitterV.addEventListener("mousedown", (e) => {
-	e.preventDefault();
-	const startX = e.clientX;
-	const startW = sidebarEl.getBoundingClientRect().width;
-	const onMove = (ev) => {
-		const w = Math.max(20, Math.min(600, startW + (ev.clientX - startX)));
-		editorModal.style.gridTemplateColumns = `${w}px 6px 1fr`;
-	};
-	const onUp = () => {
-		const w = sidebarEl.getBoundingClientRect().width;
-		localStorage.setItem(LS_SIDEBAR_SIZE_KEY, String(w));
-		window.removeEventListener("mousemove", onMove);
-		window.removeEventListener("mouseup", onUp);
-	};
-	window.addEventListener("mousemove", onMove);
-	window.addEventListener("mouseup", onUp);
-});
-
-// Horizontal splitter (console)
-splitterH.addEventListener("mousedown", (e) => {
-	e.preventDefault();
-	const containerRect = editorModal.getBoundingClientRect();
-	const containerBottom = containerRect.bottom; // ancla estable
-	const resizerHeight = splitterH.getBoundingClientRect().height || 0;
-
-	const onMove = (ev) => {
-		const raw = containerBottom - ev.clientY - resizerHeight;
-		const h = clamp(raw, 60, window.innerHeight);
-		consoleArea.style.height = `${h}px`;
-		try {
-			consoleApi?.fit?.();
-		} catch {}
-	};
-	const onUp = () => {
-		const h = consoleArea.getBoundingClientRect().height;
-		localStorage.setItem(LS_CONSOLE_SIZE_KEY, String(h));
-		window.removeEventListener("mousemove", onMove);
-		window.removeEventListener("mouseup", onUp);
-	};
-	window.addEventListener("mousemove", onMove);
-	window.addEventListener("mouseup", onUp);
-});
-
-// Colapse files
-function applySidebarState(state) {
-	editorModal.classList.toggle("sidebar-collapsed", state !== "open");
-	editorModal.classList.toggle("sidebar-open", state === "open");
-}
-function applyConsoleState(state) {
-	consoleArea.classList.toggle("collapsed", state !== "open");
-}
-
-function getInitialSidebarState() {
-	const saved = localStorage.getItem(LS_SIDEBAR_KEY);
-	if (saved) return saved;
-	return IS_MOBILE ? "collapsed" : "open";
-}
-function getInitialConsoleState() {
-	const saved = localStorage.getItem(LS_CONSOLE_KEY);
-	if (saved) return saved;
-	return IS_MOBILE ? "collapsed" : "open";
-}
-
-function toggleSidebar() {
-	const _collapsed =
-		editorModal.classList.contains("sidebar-open") &&
-		!editorModal.classList.contains("sidebar-collapsed");
-	const next = _collapsed ? "collapsed" : "open";
-	localStorage.setItem(LS_SIDEBAR_KEY, next);
-	applySidebarState(next);
-}
-
-function toggleConsole() {
-	const _collapsed = consoleArea.classList.contains("collapsed");
-	const next = _collapsed ? "open" : "collapsed";
-	localStorage.setItem(LS_CONSOLE_KEY, next);
-	applyConsoleState(next);
-	try {
-		consoleApi?.fit?.();
-	} catch {}
-}
-
-// ====== INIT ======
-applySidebarState(getInitialSidebarState());
-applyConsoleState(getInitialConsoleState());
-
-// ====== Listeners ======
-toggleSidebarBtn2.addEventListener("click", toggleSidebar);
-toggleSidebarBtn.addEventListener("click", toggleSidebar);
-toggleConsoleBtn.addEventListener("click", toggleConsole);
-if (themeToggleBtn) setupThemeToggle(themeToggleBtn); // ⬅️
+if (themeToggleBtn) setupThemeToggle(themeToggleBtn);
 
 // ====== State ======
 let consoleApi = null;
@@ -201,7 +85,7 @@ let ws = null;
 function connectWs() {
 	ws = createWS(containerId, {
 		onOpen: () => {
-			consoleApi.addLine("[connected]");
+			consoleApi.write("[connected]\n");
 		},
 		onMessage: (ev) => {
 			try {
@@ -230,7 +114,7 @@ function connectWs() {
 			}
 		},
 		onClose: () => {
-			consoleApi.addLine("[disconnected]");
+			consoleApi.write("[disconnected]\n");
 		},
 		onError: () => parent.addAlert("WebSocket error", "error"),
 	});
@@ -282,6 +166,7 @@ function connectWs() {
 			await ft.refresh();
 			await hydrateRun();
 		},
+		fileTreeEl: fileTreeEl,
 	});
 
 	// Setup AI
@@ -316,23 +201,11 @@ function connectWs() {
 		},
 	});
 
-	// Crear carpeta/archivo
 	newFolderBtn.addEventListener("click", async () => {
-		const name = prompt("Folder name:");
-		if (!name) return;
-		await api("/create_dir/", {
-			method: "POST",
-			body: JSON.stringify({ path: `/app/${name}` }),
-		});
-		refreshTreeBtn.click();
+		ft.newFolder(null);
 	});
 	newFileBtn.addEventListener("click", async () => {
-		const name = prompt("File name:");
-		if (!name) return;
-		setPath(`/app/${name}`);
-		clearEditor();
-		await saveCurrentFile();
-		refreshTreeBtn.click();
+		ft.newFile(null, setPath, saveCurrentFile, clearEditor);
 	});
 
 	// Guardar / Run
@@ -359,86 +232,20 @@ function connectWs() {
 		}
 	});
 
-	fileTreeEl.addEventListener("finder-action", async (e) => {
-		const { action, path, type } = e.detail || {};
-		if (!action || !path) return;
-		try {
-			if (action === "open") {
-				if (type === "directory") return; // opcional: expandir
-				await openFileIntoEditor(api, path, setPath);
-			}
-			if (action === "delete") {
-				if (!confirm(`Delete "${path}"?`)) return;
-				await api("/delete_path/", {
-					method: "POST",
-					body: JSON.stringify({ path }),
-				});
-				parent.addAlert(`Deleted: ${path}`, "success");
-				await ft.refresh();
-				if (currentFilePath === path) {
-					currentFilePath = null;
-					clearEditor();
-					pathLabel.innerText = "";
-				}
-			}
-			if (action === "rename") {
-				const base = path.split("/").pop();
-				const name = prompt("New name:", base);
-				if (!name || name === base) return;
-				const new_path = path.replace(/\/[^/]+$/, `/${name}`);
-				await api("/move_path/", {
-					method: "POST",
-					body: JSON.stringify({ src: path, dest: new_path }),
-				});
-				parent.addAlert(`Renamed to: ${new_path}`, "success");
-				await ft.refresh();
-				if (currentFilePath === path) {
-					await openFileIntoEditor(api, new_path, setPath);
-				}
-			}
-			if (action === "new-file") {
-				const dir = type === "directory" ? path : path.replace(/\/[^/]+$/, "");
-				const name = prompt("File name:");
-				if (!name) return;
-				const newp = `${dir.replace(/\/$/, "")}/${name}`;
-				setPath(newp);
-				clearEditor();
-				await saveCurrentFile();
-				await ft.refresh();
-			}
-			if (action === "new-folder") {
-				const dir = type === "directory" ? path : path.replace(/\/[^/]+$/, "");
-				const name = prompt("Folder name:");
-				if (!name) return;
-				await api("/create_dir/", {
-					method: "POST",
-					body: JSON.stringify({ path: `${dir.replace(/\/$/, "")}/${name}` }),
-				});
-				await ft.refresh();
-			}
-		} catch (err) {
-			parent.addAlert(err.message || String(err), "error");
-		}
-	});
+	fileTreeEl.addEventListener("finder-action", async (e) =>
+		ft.finderAction(
+			e,
+			openFileIntoEditor,
+			setPath,
+			clearEditor,
+			saveCurrentFile,
+			currentFilePath,
+		),
+	);
 
-	// DnD directo al árbol
 	fileTreeEl.addEventListener("dragover", (e) => e.preventDefault());
-	fileTreeEl.addEventListener("drop", async (e) => {
-		e.preventDefault();
-		const f = e.dataTransfer.files?.[0];
-		if (!f) return;
-		const form = new FormData();
-		form.append("file", f);
-		form.append("dest_path", "/app");
-		await api(
-			"/upload_file/",
-			{ headers: { "X-CSRFToken": getCSRF() }, method: "POST", body: form },
-			false,
-		);
-		refreshTreeBtn.click();
-	});
 
-	// Carga inicial
+
 	await hydrateRun();
 	await tryOpen("/app/readme.txt");
 	refreshTreeBtn.click();
@@ -452,7 +259,7 @@ function connectWs() {
 			await api(`/read_file/?path=${encodeURIComponent(p)}`);
 			await openFileIntoEditor(api, p, setPath);
 		} catch {
-			/*noop*/
+
 		}
 	}
 

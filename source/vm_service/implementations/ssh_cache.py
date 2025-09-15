@@ -1,0 +1,97 @@
+import paramiko
+import settings
+from qemu_manager.models import VMRecord
+
+cache_data = {}
+
+
+def clear_cache(vm_id: str):
+    cache_data[vm_id] = {}
+
+
+def clear_all_cache():
+    cache_data = {}
+
+
+def _generate_ssh_and_sftp_by_id(
+    container_id,
+    ssh_port,
+    ssh_user,
+):
+    print("Generating cache for: ", container_id)
+    key = paramiko.Ed25519Key.from_private_key_file(settings.VM_SSH_PRIVKEY)
+    cli = paramiko.SSHClient()
+    cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    port = ssh_port or 22
+
+    cli.connect(
+        "127.0.0.1",
+        port=port,
+        username=ssh_user,
+        pkey=key,
+        look_for_keys=False,
+    )
+
+    sftp = cli.open_sftp()
+
+    cache_data[container_id] = {"cli": cli, "sftp": sftp}
+
+    return cli, sftp
+
+
+def _generate_ssh_and_sftp(container: VMRecord):
+    return _generate_ssh_and_sftp_by_id(
+        container.id, container.ssh_port, container.ssh_user
+    )
+
+
+def cache_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user):
+    if container_id not in cache_data:
+        print("Generating by A")
+        _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
+        return cache_data[container_id]
+
+    data = cache_data[container_id]
+    if "cli" not in data:
+        print("Generating by B")
+        _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
+        return cache_data[container_id]
+    if "sftp" not in data:
+        print("Generating by C")
+        _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
+        return cache_data[container_id]
+
+    print(data)
+    if data["cli"] is None or data["sftp"] is None:
+        print("Generating by D")
+        _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
+        return cache_data[container_id]
+
+    try:
+        cli = data["cli"]
+        cli.exec_command("echo hello")
+    except Exception as e:
+        print("Exception caching: ", e)
+        print("Generating by E")
+        _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
+        return cache_data[container_id]
+
+    print("Cache hit for: ", container_id)
+    return data
+
+
+def cache_ssh_and_sftp(container: VMRecord):
+    return cache_ssh_and_sftp_by_id(
+        container.id, container.ssh_port, container.ssh_user
+    )
+
+
+def open_ssh_and_sftp(container: VMRecord, open_sftp=False):
+    val = cache_ssh_and_sftp(container)
+    sftp = val["sftp"]
+    cli = val["cli"]
+
+    if not open_sftp:
+        return None, cli
+
+    return sftp, cli

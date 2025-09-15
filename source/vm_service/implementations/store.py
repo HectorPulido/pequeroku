@@ -7,17 +7,6 @@ from qemu_manager.models import VMState, VMRecord
 
 
 class RedisStore:
-    """
-    Persistencia de VMRecord en Redis (JSON por VM) con reconciliación de liveness.
-
-    - Clave VM:     <ns>:vm:<id>   -> JSON
-    - Índice IDs:   <ns>:vms       -> Set
-
-    Autocuración:
-      * Si 'running' pero SSH no responde -> 'stopped' y persiste.
-      * Si 'provisioning' excede grace y sin vida -> 'error' (provisioning-timeout).
-    """
-
     def __init__(
         self,
         url: Optional[str] = None,

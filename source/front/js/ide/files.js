@@ -95,5 +95,98 @@ export function setupFileTree({ api, fileTreeEl, onOpen }) {
 	async function refresh() {
 		await loadDir("/app", fileTreeEl);
 	}
-	return { refresh, detectLangFromPath };
+
+	async function newFolder(path) {
+		const name = prompt("Folder name:");
+		if (!name) return;
+
+		let dir = "";
+		if (path == null) {
+			dir = `/app/${name}`;
+		} else {
+			dir = type === "directory" ? path : path.replace(/\/[^/]+$/, "");
+			dir = `${dir.replace(/\/$/, "")}/${name}`;
+		}
+
+		await api("/create_dir/", {
+			method: "POST",
+			body: JSON.stringify({ path: dir }),
+		});
+		await refresh();
+	}
+
+	async function newFile(path, setPath, saveCurrentFile, clearEditor) {
+		const name = prompt("File name:");
+		if (!name) return;
+
+		let dir = "";
+		if (path == null) {
+			dir = `/app/${name}`;
+		} else {
+			dir = type === "directory" ? path : path.replace(/\/[^/]+$/, "");
+			dir = `${dir.replace(/\/$/, "")}/${name}`;
+		}
+		setPath(dir);
+		clearEditor();
+		await saveCurrentFile();
+		await refresh();
+	}
+
+	async function finderAction(
+		e,
+		openFileIntoEditor,
+		setPath,
+		clearEditor,
+		saveCurrentFile,
+		currentFilePath,
+	) {
+		const { action, path, type } = e.detail || {};
+		console.log(action, path, type);
+		if (!action || !path) return;
+		try {
+			if (action === "open") {
+				if (type === "directory") return;
+				await openFileIntoEditor(api, path, setPath);
+			}
+			if (action === "delete") {
+				if (!confirm(`Delete "${path}"?`)) return;
+				await api("/delete_path/", {
+					method: "POST",
+					body: JSON.stringify({ path }),
+				});
+				parent.addAlert(`Deleted: ${path}`, "success");
+				await refresh();
+				if (currentFilePath === path) {
+					currentFilePath = null;
+					clearEditor();
+					pathLabel.innerText = "";
+				}
+			}
+			if (action === "rename") {
+				const base = path.split("/").pop();
+				const name = prompt("New name:", base);
+				if (!name || name === base) return;
+				const new_path = path.replace(/\/[^/]+$/, `/${name}`);
+				await api("/move_path/", {
+					method: "POST",
+					body: JSON.stringify({ src: path, dest: new_path }),
+				});
+				parent.addAlert(`Renamed to: ${new_path}`, "success");
+				await refresh();
+				if (currentFilePath === path) {
+					await openFileIntoEditor(api, new_path, setPath);
+				}
+			}
+			if (action === "new-file") {
+				newFile(path, setPath, saveCurrentFile, clearEditor);
+			}
+			if (action === "new-folder") {
+				newFolder(path);
+			}
+		} catch (err) {
+			parent.addAlert(err.message || String(err), "error");
+		}
+	}
+
+	return { refresh, detectLangFromPath, finderAction, newFolder, newFile };
 }

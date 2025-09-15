@@ -1,30 +1,20 @@
+import time
 import posixpath
 import shlex
 import paramiko
-import settings
 from qemu_manager.models import VMUploadFiles, VMRecord, ElementResponse
+from .ssh_cache import open_ssh_and_sftp
 
 
-def open_ssh_and_sftp(container: VMRecord, open_sftp=False):
-    key = paramiko.Ed25519Key.from_private_key_file(settings.VM_SSH_PRIVKEY)
-    cli = paramiko.SSHClient()
-    cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    port = container.ssh_port or 22
-
-    cli.connect(
-        "127.0.0.1",
-        port=port,
-        username=container.ssh_user,
-        pkey=key,
-        look_for_keys=False,
-    )
-
-    sftp = None
-
-    if open_sftp:
-        sftp = cli.open_sftp()
-
-    return sftp, cli
+def _run_and_check(cli: paramiko.SSHClient, cmd: str, timeout: float | None = None):
+    stdin, stdout, stderr = cli.exec_command(cmd, timeout=timeout)
+    exit_status = stdout.channel.recv_exit_status()
+    if exit_status != 0:
+        err = stderr.read().decode("utf-8", "ignore")
+        out = stdout.read().decode("utf-8", "ignore")
+        raise RuntimeError(
+            f"Command failed ({exit_status}): {cmd}\nSTDERR: {err}\nSTDOUT: {out}"
+        )
 
 
 def _norm_join(dest_path: str, rel: str) -> str:
@@ -42,32 +32,33 @@ def _clean_dest(cli: paramiko.SSHClient, dest_path: str):
         f"rm -rf {shlex.quote(dest_path)}/* "
         f"{shlex.quote(dest_path)}/.[!.]* {shlex.quote(dest_path)}/..?* || true"
     )
-    cli.exec_command(cmd)
+    _run_and_check(cli, cmd)
 
 
 def _prepare_vm_for_transfer(container: VMRecord, dest_path="/app", clean=True):
     sftp, cli = open_ssh_and_sftp(container, True)
 
-    dest_path = posixpath.normpath(dest_path) or "/app"
+    dest_path = sftp.normalize(dest_path or "/app")
     if clean:
         _clean_dest(cli, dest_path)
     else:
-        cli.exec_command(f"mkdir -p {shlex.quote(dest_path)}")
-
-    return sftp, cli
+        _run_and_check(cli, f"mkdir -p {shlex.quote(dest_path)}")
+    return sftp, cli, dest_path
 
 
 def _sftp_mkdirs(sftp: paramiko.SFTPClient, remote_dir: str):
-    # Create if not exist path
     parts = remote_dir.strip("/").split("/")
     cur = "/"
-    # pyrefly: ignore  # bad-assignment
     for p in parts:
         cur = posixpath.join(cur, p)
         try:
             sftp.stat(cur)
-        except FileNotFoundError:
-            sftp.mkdir(cur)
+        except (IOError, OSError) as e:
+            # ENOENT: no existe -> crearlo
+            if getattr(e, "errno", None) in (errno.ENOENT, 2):
+                sftp.mkdir(cur)
+            else:
+                raise
 
 
 def _save_file(
@@ -80,16 +71,18 @@ def _save_file(
     dirn = posixpath.dirname(full_path)
     if dirn and dirn not in (".", "/"):
         _sftp_mkdirs(sftp, dirn)
+    time.sleep(0.02)
 
     data = (content or "").encode("utf-8")
     with sftp.open(full_path, "wb") as wf:
         wf.write(data)
+    time.sleep(0.02)
 
     mode = file_mode or 0o644
     try:
         sftp.chmod(full_path, mode)
     except Exception:
-        cli.exec_command(f"chmod {oct(mode)} {shlex.quote(full_path)}")
+        _run_and_check(cli, f"chmod {oct(mode)} {shlex.quote(full_path)}")
 
 
 def send_files(container: VMRecord, files: VMUploadFiles):
@@ -102,31 +95,32 @@ def send_files(container: VMRecord, files: VMUploadFiles):
     dest_path = files.dest_path or "/app"
 
     try:
-        sftp, cli = _prepare_vm_for_transfer(container, dest_path, clean)
+        sftp, cli, dest_path = _prepare_vm_for_transfer(container, dest_path, clean)
 
         if not sftp:
             return ElementResponse(ok=False, reason="No sftp ready")
 
+        failed = []
         for it in files.files:
-            fullp = _norm_join(dest_path, it.path)
-            # pyrefly: ignore  # bad-argument-type
-            _save_file(sftp, cli, fullp, it.content, it.mode)
+            try:
+                fullp = _norm_join(dest_path, it.path)
+                _save_file(sftp, cli, fullp, it.content, it.mode)
+            except Exception as e:
+                failed.append({"path": it.path, "reason": str(e)})
 
-        # pyrefly: ignore  # missing-attribute
-        sftp.close()
-        cli.close()
+        if failed:
+            return ElementResponse(ok=False, reason=f"Failed files: {failed}")
+        return ElementResponse(ok=True)
+
     except Exception as e:
         return ElementResponse(ok=False, reason=str(e))
-    return ElementResponse(ok=True)
 
 
 def create_dir(container: VMRecord, path: str = "/app"):
     _, cli = open_ssh_and_sftp(container, open_sftp=False)
     try:
-        _, __, ___ = cli.exec_command(f"mkdir -p {shlex.quote(path)}")
-        cli.close()
+        _run_and_check(cli, f"mkdir -p {shlex.quote(path)}")
     except Exception as e:
-        cli.close()
         return ElementResponse(ok=False, reason=str(e))
 
     return ElementResponse(ok=True)

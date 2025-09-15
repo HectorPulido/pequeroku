@@ -51,6 +51,7 @@ class QemuSession:
         vm_base_dir = settings.VM_BASE_DIR or ""
         base = os.path.join(vm_base_dir, "vms")
         self.workdir = os.path.join(base, f"vm-{container_obj.pk}")
+        self.container_id = container_obj.pk
         os.makedirs(self.workdir, exist_ok=True)
 
         self.vm: Optional[VMProc] = None
@@ -90,7 +91,12 @@ class QemuSession:
 
         def _quick_ssh_ok(p: int) -> bool:
             try:
-                _wait_ssh(port=p, timeout=5, user=settings.VM_SSH_USER)
+                _wait_ssh(
+                    port=p,
+                    timeout=5,
+                    user=settings.VM_SSH_USER,
+                    vm_id=self.container_id,
+                )
                 return True
             except Exception as e:
                 print("Quick SSH check failed on reattach", e)
@@ -120,6 +126,7 @@ class QemuSession:
             self.vcpus,
             self.mem_mib,
             self.disk_gib,
+            self.container_id,
         )
         self.container_obj.container_id = f"qemu:{self.vm.port_ssh}"
         self.container_obj.status = "running"
@@ -144,19 +151,14 @@ class QemuSession:
 
         self._close_channel()
 
-        k = _load_pkey(settings.VM_SSH_PRIVKEY)
-        cli = paramiko.SSHClient()
-        cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        cli.connect(
-            "127.0.0.1",
-            port=self.vm.port_ssh,
-            username=settings.VM_SSH_USER,
-            pkey=k,
-            look_for_keys=False,
-            banner_timeout=120,
-            auth_timeout=120,
-            timeout=30,
+        from implementations.ssh_cache import clear_cache, cache_ssh_and_sftp_by_id
+
+        clear_cache(self.container_id)
+
+        val = cache_ssh_and_sftp_by_id(
+            self.container_id, self.vm.port_ssh, settings.VM_SSH_USER
         )
+        cli = val["cli"]
 
         if cli.get_transport() is not None:
             # pyrefly: ignore  # missing-attribute

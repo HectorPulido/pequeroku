@@ -52,10 +52,7 @@ async def tty_ws(websocket: WebSocket, vm_id: str):
 
     bridge = TTYBridge(
         websocket,
-        host="127.0.0.1",
-        port=vm.ssh_port,
-        user=vm.ssh_user,
-        key_path=settings.VM_SSH_PRIVKEY,
+        vm=vm,
     )
     bridge.start()
 

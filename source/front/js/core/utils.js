@@ -22,4 +22,6 @@ export function hideHeader() {
 
 	const header = document.querySelector("body > header");
 	header.classList.add("hidden");
+
+  document.querySelector(".main").classList.remove("calc");
 }

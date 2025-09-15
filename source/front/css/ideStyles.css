@@ -274,12 +274,12 @@ wc-monaco-editor#editor {
 	}
 }
 
-.full-viewport-height {
+body {
 	height: 100vh !important;
 }
 
 @supports (height: 100dvh) {
-	.full-viewport-height {
+	body {
 		height: 100dvh !important;
 	}
 }
@@ -354,4 +354,9 @@ wc-monaco-editor#editor {
 
 .resizer {
 	background: #252529;
+}
+
+.main.calc {
+	/*Header size*/
+	height: calc(100vh - 65.328px);
 }

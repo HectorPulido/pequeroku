@@ -134,7 +134,9 @@ def _clear_stale_pidfile(pidfile: str) -> None:
         print("Error clearing stale pidfile", e)
 
 
-def _start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
+def _start_vm(
+    workdir: str, vcpus: int, mem_mib: int, disk_gib: int, vm_id: str | None = None
+) -> VMProc:
     """
     Start a QEMU VM, wait for SSH to be ready, and return a VMProc handle.
     This keeps prints, timeouts, and error paths identical to the original.
@@ -208,6 +210,7 @@ def _start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
             timeout=vm_timeout_boot_s,
             user=vm_ssh_user,
             is_vm_alive=lambda: proc.poll() is None,
+            vm_id=vm_id,
         )
         if not ok:
             raise TimeoutError("SSH not ready (returned False early)")

@@ -244,14 +244,17 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             )
             return Response({"error": "file required"}, status=400)
         service = self._get_service(obj)
-        response = service.upload_files(
-            str(obj.container_id),
-            VMUploadFiles(
-                dest_path=dest,
-                clean=False,
-                files=[VMFile(path=f.name, content=f.read())],
-            ),
-        )
+        try:
+            response = service.upload_files(
+                str(obj.container_id),
+                VMUploadFiles(
+                    dest_path=dest,
+                    clean=False,
+                    files=[VMFile(path=f.name, content=f.read().decode("utf-8"))],
+                ),
+            )
+        except:
+            return Response({"error": "file required to be a text one"}, status=400)
 
         audit_log_http(
             request,
