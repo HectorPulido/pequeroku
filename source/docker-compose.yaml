@@ -20,8 +20,6 @@ services:
     depends_on:
       - redis
     restart: unless-stopped
-    ports:
-      - "8080:8080"
 
   web:
     build: ./web_service/.
