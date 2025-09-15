@@ -1,230 +1,121 @@
-# Pequeroku
 
-Welcome to **Pequeroku**, your 🎯 go-to MicroVM management platform! Built with Django, QEMU, Docker, Redis, and Nginx, Pequeroku puts the power of containers at your fingertips with a fun and simple SPA frontend. 
+# PequeRoku
 
+PequeRoku is a lightweight platform to **run and share disposable development environments** in the browser.
+It combines **QEMU-based virtual machines**, a **FastAPI control service**, a **Django web backend**, and a **browser-based IDE** with Monaco Editor and Xterm.js.
+
+Think of it as a “mini Heroku + VS Code + Playground”, self-hosted and hackable. 🚀
 
 ## 💡 Motivation
 This project was created to give community members a slice of my servers where they can experiment, learn, and innovate in an isolated environment.
 
 ![brief animation on how the platform works](img/demo.gif)
 
-
 ## ✨ Features
 
-* 🐳 **Container Management**: Instantly start, stop, and restart QEMU VM with a click! 
-* 💻 **Interactive Shell**: Type commands and see real-time logs—just like magic! (AND 100% COMPATIBLE WITH CLOUDFLARE TUNNELS)
-* 🎉 **Live coding enviroment**: You can access your files, upload, edit and run without the console
-* 👥 **User management** Powered by django there is a powerfull user management admin
-* 🛡️ **Resource Quotas**: Keep things fair by limiting CPU, memory, and container counts per user. 
-* 📁 **File Upload**: Drag & drop files directly into your running containers. 
-* 🔗 **RESTful API**: Automate everything programmatically! 
-* 🖥️ **SPA Frontend**: Fast, snappy single-page app written in vanilla JavaScript. 
-* 🌐 **Reverse Proxy**: Nginx for static assets + API proxying—rock-solid performance! 
-* 🤖 **AI CAPABILITIES**: Agentic mode to generate projects
-* 📱 **Mobile compatible**: Responsive UI perfect for phones
-* 🥨 **Template system**: Pequeroku comes with a robuts system to generate templates, super useful for rapid iteration or for learning
+* 🔒 **Secure virtual machines** (QEMU/KVM) managed via FastAPI and Redis.
+* 🖥️ **Web IDE** with:
+
+  * Monaco Editor (syntax highlighting, themes).
+  * Integrated terminal (xterm.js).
+  * File tree, upload/download, templates.
+* 📊 **Metrics dashboard** (Chart.js) for CPU, memory, threads.
+* 🤖 **AI-assisted scaffolding**: generate code templates from natural language prompts.
+* 📂 **Repository cloning** from GitHub.
+* 🐳 **Containerized stack** with Docker Compose.
+* 🧩 **Pluggable architecture** (Redis state store, Django/DRF APIs, FastAPI VM manager).
 
 
-## 🚀 Services
+## 🛠️ Technology Stack
 
-Configured in `docker-compose.yaml`:
-
-* **web**: Django + Gunicorn 🌟
-* **db**: PostgreSQL 16 🗄️ (persistent volume)
-* **nginx**: Nginx latest 🌐 (serves SPA + proxies API)
-
-All on network: `pequeroku-net` 🔗
-
-
-## 🔧 Prerequisites
-
-Before you start, make sure you have:
-
-* 🐳 Docker & Docker Compose
-* 🐍 Python 3.13+
-* ✒️ GNU Make (optional)
-* 📄 A `.env` file with necessary environment variables
+* **Virtualization**: QEMU, KVM (with ARM/x86 support).
+* **Backend (VM Service)**: FastAPI + Paramiko + psutil.
+* **Backend (Web Service)**: Django + Django Rest Framework + Channels.
+* **State**: Redis.
+* **Database**: PostgreSQL.
+* **Frontend**: Vanilla JS, Monaco Editor, Xterm.js, Chart.js, CSS themes.
+* **Orchestration**: Docker Compose, Nginx.
 
 
+## 📦 Installation
 
-## ⚡ Getting Started
+### Prerequisites
 
-### 📥 Clone the Repository
+* Linux host (Ubuntu/Debian recommended).
+* Docker & Docker Compose installed.
+* At least one prepared **base qcow2 image**.
 
-```bash
-git clone https://github.com/yourusername/pequeroku.git
-cd pequeroku
-```
+### 1. Prepare base qcow2 image
 
-### Create qcow2
-# Ubuntu/Debian
+For **Debian 12 (x86)**:
 
-1. Install dependencies
 ```bash
 sudo apt-get update
 sudo apt-get install -y qemu-kvm qemu-utils cloud-image-utils genisoimage \
-                        libvirt-daemon-system libvirt-clients libvirt
-```
-
-2. Download the base image
-```bash
-sudo curl -LO https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
+                        libvirt-daemon-system libvirt-clients libvirt libguestfs-tools
+curl -LO https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
 mv debian-12-genericcloud-amd64.qcow2 debian-raw.qcow2
-sudo apt-get install -y libguestfs-tools
-sudo virt-customize -a debian-raw.qcow2 \
-  --update \
-  --install ca-certificates,curl,gnupg,lsb-release \
-  --run-command 'install -m 0755 -d /etc/apt/keyrings' \
-  --run-command 'curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker-ce.gpg' \
-  --run-command 'chmod a+r /etc/apt/keyrings/docker-ce.gpg' \
-  --run-command 'sh -c "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker-ce.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable\" > /etc/apt/sources.list.d/docker.list"' \
-  --run-command 'apt-get update' \
-  --run-command 'apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin' \
-  --run-command 'systemctl enable docker' \
-  --run-command 'install -m 0755 -d /usr/share/keyrings' \
-  --run-command 'curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg' \
-  --append-line '/etc/apt/sources.list.d/cloudflared.list:deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' \
-  --run-command 'apt-get update && apt-get install -y cloudflared' \
-  --install python3,python3-pip,git
-
+sudo virt-customize -a debian-raw.qcow2 --install docker-ce,python3,git
 sudo qemu-img convert -O qcow2 debian-raw.qcow2 debian12-golden.qcow2
 ```
 
-3. Then move the debian12-golden.qcow2 to "source/vm_data/base/"
+For **ARM64 boards (Raspberry Pi, Orange Pi, etc.)**, follow [ARM qcow2 creation steps](docs/ARM.md) (similar to above, but using `qemu-system-arm`).
 
-4. Edit the docker-compose.yaml
-Add the ssh_authorized_keys on the docker-compose.yaml
-Adjust also the packages, activate the kvm, etc.
-
-### Create qcow2 ARM (Raspberry Pi or Orange pi)
-
-1. Install dependencies (Ubuntu ARM64)
+Finally, move your golden image to:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y \
-    qemu-utils qemu-system-arm libguestfs-tools \
-    util-linux kpartx curl gnupg ca-certificates
+mv debian12-golden.qcow2 ./vm_data/base/
 ```
 
-
-2. Download the debian12 cloud image
+### 2. Clone the repository
 
 ```bash
-curl -LO https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2
-mv debian-12-genericcloud-arm64.qcow2 debian-raw.qcow2
+git clone https://github.com/yourname/pequeroku.git
+cd pequeroku
 ```
 
-3. Generate the chroot
+### 3. Configure environment
+
+* Copy `.env.example` to `.env` and adjust values (DB credentials, auth token, allowed hosts).
+* Ensure your SSH key is mounted in `docker-compose.yaml`.
+
+### 4. Start services
 
 ```bash
-# Load the NBD kernel module with partition support
-sudo modprobe nbd max_part=16
-
-# Attach the qcow2 image to /dev/nbd0
-sudo qemu-nbd -c /dev/nbd0 debian-raw.qcow2
-
-# Get the root partition, it's usually `/dev/nbd0p1`.
-lsblk /dev/nbd0 -o NAME,SIZE,TYPE,MOUNTPOINTS
-
-sudo mkdir -p /mnt/img
-sudo mount /dev/nbd0p1 /mnt/img
-
-# Prepare the chroot environment
-sudo mount --bind /dev  /mnt/img/dev
-sudo mount --bind /proc /mnt/img/proc
-sudo mount --bind /sys  /mnt/img/sys
-sudo mount --bind /run  /mnt/img/run
-sudo cp /etc/resolv.conf /mnt/img/etc/resolv.conf
-sudo chroot /mnt/img /bin/bash
+docker compose up --build
 ```
 
-4. Now you’re **inside the Debian guest**. Run your customizations there:
+![Pequeroku demo on a phone](img/Mobile.gif)
 
-```bash
-set -e
+The stack includes:
 
-apt-get update
-apt-get install -y ca-certificates curl gnupg lsb-release
-
-# Docker
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker-ce.gpg
-chmod a+r /etc/apt/keyrings/docker-ce.gpg
-sh -c 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker-ce.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list'
-
-apt-get update
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-systemctl enable docker || true 
-
-# Cloudflared
-install -m 0755 -d /usr/share/keyrings
-curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
-echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' > /etc/apt/sources.list.d/cloudflared.list
-
-apt-get update
-apt-get install -y cloudflared
-
-# Extra tools
-apt-get install -y python3 python3-pip git
-
-exit
-```
-
-5. Clean up and detach, generate and optimize
-
-```bash
-sudo umount -R /mnt/img
-sudo qemu-nbd -d /dev/nbd0
-sudo qemu-img convert -O qcow2 debian-raw.qcow2 debian12-golden.qcow2
-```
-
-6. Continue with the same path
+* VM manager (FastAPI).
+* Web service (Django + DRF).
+* Redis + Postgres.
+* Nginx (serves frontend + static files).
 
 
-### 🔑 Environment Variables
 
-Create a `.env` file in the source/web_service folder:
-
-```env
-SECRET_KEY=CHANGEME
-DB_NAME=mydb
-DB_USER=myuser
-DB_PASSWORD=mypassword
-DB_HOST=db
-DB_PORT=5432
-DJANGO_SUPERUSER_PASSWORD=testpassword
-DJANGO_SUPERUSER_EMAIL=example@example.com
-DJANGO_SUPERUSER_USERNAME=admin
-DEBUG=1  # 0 for production
-```
-
-### 🏗️ Build and Run
-
-```bash
-docker-compose build
-docker-compose up -d
-```
-
-* 🔍 Visit `http://localhost` to explore Pequeroku!
-* 🔐 Admin: `http://localhost/admin/`
-
-On the admin add Templates, User, Quotas and Configs
-
-## 🎮 Usage
-
-When you are ready now you can create new container, each container is a complete Debian setup where you can break things on a super secure manner, for example, here I created a discord server super easy:
+## 🚀 Usage
 
 ![brief animation on how create a discord server on Pequeroku](img/DiscordExample.gif)
 
-Also Pequeroku is ready to get request from phones by design
-
-![Pequeroku demo on a phone](img/Mobile.gif)
+1. Open the web UI at [http://localhost](http://localhost).
+2. Login with your user (create via Django superuser or API).
+3. Create a container (VM).
+4. Open it in the IDE:
+   * Edit code with Monaco.
+   * Run commands in the terminal.
+   * Upload/download files.
+   * Clone from GitHub.
+5. Open **Metrics dashboard** to monitor CPU, memory, threads.
+6. Optionally, use the **AI Generator** to scaffold new projects.
 
 
 ## 🤖 AI Features
 
 Pequeroku is capable to generate complete projects from scratch using OpenAI compatible services. More ways to use the AI comming soon...
+
 ![brief animation on how the AI part works](img/AI.gif)
 
 
