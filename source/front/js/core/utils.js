@@ -24,7 +24,7 @@ export function hideHeader() {
 	header.classList.add("hidden");
 
 	try {
-		document.querySelector(".main").classList.remove("calc");
+		document.querySelector("main").classList.remove("calc");
 	} catch {}
 }
 

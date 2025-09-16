@@ -65,7 +65,7 @@ button:hover {
 	color: #ddd;
 	display: flex;
 	width: 100vw;
-	/*height: 100vh;*/
+	height: 100dvh;
 	max-width: 100%;
 	overflow: hidden;
 	/* avoid accidental horizontal scroll */
@@ -360,5 +360,5 @@ body {
 
 .calc {
 	/*Header size*/
-	height: calc(100dvh - 65.328px);
+	height: calc(100dvh - 65.328px) !important;
 }
