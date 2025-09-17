@@ -13,6 +13,9 @@ else
   echo "Skipping superuser creation (vars not set)"
 fi
 
-echo "Starting Daphne..."
+echo "Starting gunicorn..."
 DJANGO_MODULE="${DJANGO_MODULE:-pequeroku}"
-exec daphne -b 0.0.0.0 -p 8000 "${DJANGO_MODULE}.asgi:application"
+exec gunicorn "${DJANGO_MODULE}.asgi:application" \
+  -k uvicorn.workers.UvicornWorker \
+  -w "${WORKERS:-4}" \
+  -b 0.0.0.0:8000 --graceful-timeout 30 --timeout 120

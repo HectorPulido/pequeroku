@@ -7,7 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-django = "^5.2.6"
+django = {extras = ["async"], version = "^5.2.6"}
 djangorestframework = "^3.16.1"
 drf-spectacular = "^0.28.0"
 daphne = "^4.2.1"
@@ -17,6 +17,8 @@ requests = "^2.32.5"
 dotenv = "^0.9.9"
 websockets = "^15.0.1"
 openai = "^1.107.0"
+gunicorn = "^23.0.0"
+uvicorn = "^0.35.0"
 
 [tool.pyrefly]
 project-includes = ["**/*"]

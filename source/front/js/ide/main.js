@@ -64,11 +64,8 @@ const btnCloseCloneRepo = $("#btn-github-close");
 const btnSubmitCloneRepo = $("#btn-github");
 
 const btnOpenAi = $("#btn-open-ai-modal");
-const aiModal = $("#ai-modal");
-const btnAiClose = $("#btn-ai-close");
-const aiInput = $("#ai-input");
-const btnAiGenerate = $("#btn-ai-generate");
-const aiCredits = $("#ai-credits");
+const aiModal = $("#ai-chat");
+const btnAiClose = $("#btn-ai-chat-close");
 
 setupHiddableDragabble(containerId);
 
@@ -175,20 +172,10 @@ function connectWs() {
 	});
 
 	// Setup AI
-	const { setupAi } = await import("./ai.js");
-	setupAi({
-		openBtn: btnOpenAi,
-		modalEl: aiModal,
-		closeBtn: btnAiClose,
-		inputEl: aiInput,
-		generateBtn: btnAiGenerate,
-		creditsEl: aiCredits,
-		containerId,
-		onApplied: async () => {
-			await ft.refresh();
-			await hydrateRun();
-		},
+	btnOpenAi.addEventListener("click", () => {
+		aiModal.classList.remove("hidden");
 	});
+	btnAiClose.addEventListener("click", () => aiModal.classList.add("hidden"));
 
 	// Templates
 	const { setupTemplates } = await import("./templates.js");

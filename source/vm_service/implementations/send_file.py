@@ -3,6 +3,7 @@ import time
 import posixpath
 import shlex
 import paramiko
+import errno
 from qemu_manager.models import VMUploadFiles, VMRecord, ElementResponse
 from .ssh_cache import open_ssh_and_sftp
 

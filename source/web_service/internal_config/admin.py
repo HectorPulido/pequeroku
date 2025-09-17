@@ -1,5 +1,10 @@
 from django.contrib import admin
-from .models import Config, AIUsageLog, AuditLog
+from .models import Config, AIUsageLog, AuditLog, AIMemory
+
+
+@admin.register(AIMemory)
+class AIMemoryAdmin(admin.ModelAdmin):
+    list_display = ("user", "container")
 
 
 @admin.register(Config)

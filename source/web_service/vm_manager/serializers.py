@@ -72,11 +72,11 @@ class UserInfoSerializer(serializers.Serializer):
     is_superuser = serializers.BooleanField()
     quota = serializers.SerializerMethodField()
 
-    def get_quota(self, obj):
+    def get_quota(self, obj) -> dict:
         """Get the current quota for an user"""
         quota = obj.get("quota")
         if quota:
-            return ResourceQuotaSerializer(quota).data
+            return dict(ResourceQuotaSerializer(quota).data)
         return {
             "max_containers": 0,
             "max_memory_mb": 0,

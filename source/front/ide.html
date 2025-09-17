@@ -7,15 +7,18 @@
         <link rel="stylesheet" href="/css/themes.css" />
         <link rel="stylesheet" href="/css/base.css" />
         <link rel="stylesheet" href="/css/ideStyles.css" />
+        <link rel="stylesheet" href="/css/ai.css" />
         <link
             rel="stylesheet"
             href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"
         />
-        <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
         <link
             rel="stylesheet"
             href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css"
         />
+
+        <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     </head>
 
     <body>
@@ -91,6 +94,7 @@
                             id="console-cmd"
                             class="console-input"
                             placeholder="bash command..."
+                            autocomplete="off"
                         />
                         <button class="console-btn" id="send-cmd">Send</button>
                         <div class="dropdown">
@@ -236,59 +240,34 @@
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <div id="ai-modal" class="hidden">
-                    <div class="upload-container">
-                        <div class="upload-header">
-                            <span>AI Generator</span>
-                            <button id="btn-ai-close" class="top-btn">
+            <div id="ai-chat" class="hidden">
+                <div class="chat" role="application" aria-label="Chatbot">
+                    <header id="bot-header">
+                        <div class="bot-title">
+                            <div id="ai-dot" class="red-dot" aria-hidden="true"></div>
+                            <h1>Chatbot</h1>
+                        </div>
+                        <div>
+                            <button id="btn-ai-chat-close" class="top-btn">
                                 <i class="iconoir-xmark-circle"></i>
                             </button>
                         </div>
-                        <div
-                            class="upload-body"
-                            style="
-                                display: block;
-                                max-height: 70vh;
-                                overflow: auto;
-                            "
-                        >
-                            <div>
-                                <h3>
-                                    Describe the app you want to generate...
-                                </h3>
-                                <p>
-                                    Be detailed; do not omit information; share
-                                    the goal, main flow, key screens, data
-                                    model, integrations, rules, tech stack. The
-                                    more specific, the better the code 🚀
-                                </p>
-                            </div>
-                            <textarea
-                                id="ai-input"
-                                style="width: 100%; min-height: 220px"
-                                placeholder="Describe the app you want to generate..."
-                            ></textarea>
-                            <div
-                                style="
-                                    display: flex;
-                                    gap: 8px;
-                                    align-items: center;
-                                    margin-top: 8px;
-                                    justify-self: self-end;
-                                "
-                            >
-                                <button id="btn-ai-generate">
-                                    <i class="mod-iconoir iconoir-sparks"></i>
-                                    Generate
-                                </button>
-                                <small
-                                    id="ai-credits"
-                                    style="opacity: 0.8"
-                                ></small>
-                            </div>
-                        </div>
+                    </header>
+                    <div class="hint">
+                        <p id="ai-left">Welcome!</p>
                     </div>
+                    <div id="messages" aria-live="polite" aria-atomic="false"></div>
+
+                    <div id="reconnect" class="reconnect-composer" style="padding: 10px;max-width: 200px;">
+                        <button id="ai-reconect">Reconect</button>
+                    </div>
+
+                    <form id="ai-composer" class="hidden" autocomplete="off">
+                        <textarea id="chat-input" placeholder="Write a message..." aria-label="Write a message"></textarea>
+                        <button id="ai-send" type="submit">Send</button>
+                    </form>
                 </div>
             </div>
 
@@ -311,5 +290,6 @@
         </main>
 
         <script type="module" src="/js/ide/main.js"></script>
+        <script type="module" src="/js/ide/aiChat.js"></script>
     </body>
 </html>

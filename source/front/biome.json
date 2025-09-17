@@ -23,6 +23,11 @@
 			"quoteStyle": "double"
 		}
 	},
+	"html": {
+		"formatter": {
+			"enabled": false
+		}
+	},
 	"assist": {
 		"enabled": true,
 		"actions": {

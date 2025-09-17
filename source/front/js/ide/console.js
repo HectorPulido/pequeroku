@@ -37,6 +37,7 @@ export function setupConsole({
 	term.open(consoleEl);
 	fitAddon.fit();
 
+	window._fitAddon = fitAddon;
 	window._term = term;
 	window._term.light_theme = light_theme;
 	window._term.dark_theme = dark_theme;

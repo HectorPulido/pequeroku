@@ -67,7 +67,7 @@ export function setupHiddableDragabble(containerId) {
 			h = clamp(raw, 90, window.innerHeight);
 			consoleArea.style.height = `${h}px`;
 			try {
-				consoleApi?.fit?.();
+				window?._fitAddon?.fit();
 			} catch {}
 		};
 		const onUp = () => {

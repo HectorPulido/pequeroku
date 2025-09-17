@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from vm_manager.models import Container
 
 
 class AIUsageLog(models.Model):
@@ -14,6 +15,16 @@ class AIUsageLog(models.Model):
         indexes = [
             models.Index(fields=["user", "created_at"]),
         ]
+
+
+class AIMemory(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="user"
+    )
+    container = models.ForeignKey(
+        Container, on_delete=models.CASCADE, related_name="container"
+    )
+    memory = models.JSONField(blank=True, null=True, default=dict)
 
 
 class AuditLog(models.Model):

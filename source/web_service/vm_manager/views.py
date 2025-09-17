@@ -21,8 +21,6 @@ from .serializers import (
     FileTemplateSerializer,
     ApplyTemplateRequestSerializer,
     ApplyTemplateResponseSerializer,
-    ApplyAICodeRequestSerializer,
-    ApplyAICodeResponseSerializer,
 )
 from .models import Container, Node, FileTemplate
 from .vm_client import VMServiceClient, VMCreate, VMAction, VMUploadFiles, VMFile
@@ -30,7 +28,6 @@ from .vm_client import VMServiceClient, VMCreate, VMAction, VMUploadFiles, VMFil
 from .templates import (
     apply_template,
     first_start_of_container,
-    apply_ai_generated_project,
 )
 
 from .mixin import VMSyncMixin
@@ -687,49 +684,3 @@ class FileTemplateViewSet(viewsets.ModelViewSet):
         }
 
         return Response(ApplyTemplateResponseSerializer(payload).data)
-
-    @action(detail=False, methods=["post"], parser_classes=[JSONParser])
-    def apply_ai_generated_code(self, request):
-        """
-        Apply ai generated code to a container.
-        """
-        ser = ApplyAICodeRequestSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        data = ser.validated_data
-
-        container_model_id = data["container_id"]
-        dest_path = data["dest_path"]
-        clean = data["clean"]
-        content = data["content"]
-
-        if request.user.is_superuser:
-            container_obj = get_object_or_404(Container, pk=container_model_id)
-        else:
-            container_obj = get_object_or_404(
-                Container, pk=container_model_id, user=request.user
-            )
-
-        apply_ai_generated_project(
-            container_obj, content, dest_path=dest_path, clean=clean
-        )
-
-        audit_log_http(
-            request,
-            action="template.apply",
-            target_type="container",
-            target_id=container_obj.pk,
-            message="AI code applied to container",
-            metadata={
-                "dest_path": dest_path,
-                "clean": clean,
-            },
-            success=True,
-        )
-
-        payload = {
-            "status": "applied",
-            "container": container_obj.pk,
-            "dest_path": dest_path,
-        }
-
-        return Response(ApplyAICodeResponseSerializer(payload).data)
