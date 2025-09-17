@@ -7,6 +7,7 @@ from vm_manager.models import Container
 from .schemas import SYSTEM_PROMPT_EN, TOOLS_SPEC
 from .tools import (
     ToolError,
+    DedupPolicy,
     read_workspace,
     create_file,
     read_file,
@@ -27,20 +28,22 @@ class DevAgent:
     def bootstrap_messages() -> List[Dict[str, Any]]:
         return [{"role": "system", "content": SYSTEM_PROMPT_EN}]
 
-    def exec_and_select_tool(self, name, container: "Container", **args):
+    def exec_and_select_tool(
+        self, dedup_policy: DedupPolicy, name: str, container: "Container", **args
+    ):
         print("==" * 20)
         print(f"[Agent] Calling {name}, on {container} with {args}")
 
         result = {}
         try:
             if name == "read_workspace":
-                result = read_workspace(container, **args)
+                result = read_workspace(dedup_policy, container, **args)
             elif name == "create_file":
-                result = create_file(container, **args)
+                result = create_file(dedup_policy, container, **args)
             elif name == "read_file":
-                result = read_file(container, **args)
+                result = read_file(dedup_policy, container, **args)
             elif name == "create_full_project":
-                result = create_full_project(container, **args)
+                result = create_full_project(dedup_policy, container, **args)
             else:
                 result = {"error": f"Unknown tool: {name}"}
         except ToolError as te:
@@ -68,6 +71,7 @@ class DevAgent:
         """
 
         new_messages = messages.copy()
+        dedup_policy = DedupPolicy()
 
         info = ""
 
@@ -116,7 +120,9 @@ class DevAgent:
                     except Exception:
                         args = {}
 
-                    result = self.exec_and_select_tool(name, container, **args)
+                    result = self.exec_and_select_tool(
+                        dedup_policy, name, container, **args
+                    )
 
                     if not "error" in result:
                         info += f"{name}({fn.arguments}): {json.dumps(result, ensure_ascii=False)}\n"

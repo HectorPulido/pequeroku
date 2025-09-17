@@ -96,7 +96,7 @@ function addMessage(role, text) {
 	avatar.textContent = role === "user" ? "You" : "Bot";
 	const bubble = document.createElement("div");
 	bubble.className = `bubble ${role}`;
-	bubble.innerHTML = mdParse(text);
+	bubble.innerHTML = text;
 	row.appendChild(avatar);
 	row.appendChild(bubble);
 	messagesEl.appendChild(row);

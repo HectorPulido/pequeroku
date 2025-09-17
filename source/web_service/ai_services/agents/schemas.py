@@ -39,6 +39,7 @@ Extra constraints:
 * Keep markdown to the bare minimum.
 * Be extremely chill but useful — short, direct, no paja, no yapping.
 * If you have to create code from scratch use "create_full_project" if have to debug, rewrite, etc, use: "read_workspace", "create_file" and "read_file"
+* Don't call the same tool with the same path or task more than once in the same shift. Group changes into a single call.
 
 Requests you must satisfy from the user:
 
@@ -64,10 +65,9 @@ TOOLS_SPEC = [
                     "subdir": {
                         "type": "string",
                         "description": "Relative subdirectory",
-                    },
-                    "max_items": {"type": "integer", "description": ""},
+                    }
                 },
-                "required": ["subdir", "max_items"],
+                "required": ["subdir"],
             },
         },
     },
@@ -86,9 +86,8 @@ TOOLS_SPEC = [
                         "description": "Relative path e.g. src/app.py",
                     },
                     "content": {"type": "string"},
-                    "overwrite": {"type": "boolean"},
                 },
-                "required": ["path", "content", "overwrite"],
+                "required": ["path", "content"],
             },
         },
     },
@@ -103,9 +102,8 @@ TOOLS_SPEC = [
                 "type": "object",
                 "properties": {
                     "path": {"type": "string"},
-                    "max_bytes": {"type": "integer", "description": ""},
                 },
-                "required": ["path", "max_bytes"],
+                "required": ["path"],
             },
         },
     },
@@ -114,7 +112,7 @@ TOOLS_SPEC = [
         "function": {
             "strict": True,
             "name": "create_full_project",
-            "description": "Create a full project by using a description from a user, call this only once.",
+            "description": "Create a full project by using a description from a user.",
             "parameters": {
                 "additionalProperties": False,
                 "type": "object",

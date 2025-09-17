@@ -4,6 +4,10 @@ from vm_manager.models import Container, Node
 from vm_manager.vm_client import VMServiceClient, VMUploadFiles, VMFile
 
 
+class DedupPolicy:
+    logs = {}
+
+
 def _get_service(obj: Container) -> VMServiceClient:
     node: Node = obj.node
     return VMServiceClient(
@@ -17,7 +21,9 @@ class ToolError(Exception):
 
 
 def read_workspace(
-    container: Container, subdir: str | None = None, max_items: int = 200
+    _: DedupPolicy | None,
+    container: Container,
+    subdir: str | None = None,
 ) -> Dict[str, Any]:
     path = f"/app/{subdir}".replace("//", "/").replace("/app/app/", "/app/")
     if subdir is None or len(subdir.strip()) == 0:
@@ -28,13 +34,20 @@ def read_workspace(
 
 
 def create_file(
-    container: Container, path: str, content: str, overwrite: bool = False
+    dedup: DedupPolicy,
+    container: Container,
+    path: str,
+    content: str,
 ) -> Dict[str, Any]:
     subdir = f"/app/{path}".replace("//", "/").replace("/app/app/", "/app/")
     if path is None or len(path.strip()) == 0:
         subdir = "/app"
-    service = _get_service(container)
 
+    if f"create_file_{subdir}" in dedup.logs:
+        print("Redup policy applied")
+        return dedup.logs["create_file"]
+
+    service = _get_service(container)
     resp = service.upload_files(
         str(container.container_id),
         VMUploadFiles(
@@ -44,12 +57,12 @@ def create_file(
         ),
     )
     resp["finished"] = True
+
+    dedup.logs[f"create_file_{subdir}"] = resp
     return resp
 
 
-def read_file(
-    container: Container, path: str, max_bytes: int = 200_000
-) -> Dict[str, Any]:
+def read_file(_: DedupPolicy, container: Container, path: str) -> Dict[str, Any]:
     subdir = f"/app/{path}".replace("//", "/").replace("/app/app/", "/app/")
     if path is None or len(path.strip()) == 0:
         subdir = "/app"
@@ -59,13 +72,19 @@ def read_file(
     return resp
 
 
-def create_full_project(container: Container, full_description: str) -> Dict[str, Any]:
+def create_full_project(
+    dedup: DedupPolicy, container: Container, full_description: str
+) -> Dict[str, Any]:
     import os
     from django.conf import settings
     from internal_config.models import Config
 
     from .schemas import PROJECT_GENERATION_PROMPT
     from ..utils import _get_openai_client
+
+    if "create_full_project" in dedup.logs:
+        print("Redup policy applied")
+        return dedup.logs["create_full_project"]
 
     open_ai_data = Config.get_config_values(
         ["openai_api_key", "openai_api_url", "openai_model"]
@@ -123,6 +142,8 @@ def create_full_project(container: Container, full_description: str) -> Dict[str
         str(container.container_id), "cd /app && python3 build_from_gencode.py"
     )
     response["finished"] = True
-    response["workspace"] = read_workspace(container)
+    response["workspace"] = read_workspace(None, container)
+
+    dedup.logs["create_file"] = response
 
     return response
