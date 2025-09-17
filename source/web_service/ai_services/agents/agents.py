@@ -137,7 +137,7 @@ class DevAgent:
                         info += f"{name}({fn.arguments}): {json.dumps(result, ensure_ascii=False)}\n"
 
                     if "dedup" in result:
-                        rounds -= 1
+                        rounds -= 0.5
                         continue
 
                     new_messages.append(
