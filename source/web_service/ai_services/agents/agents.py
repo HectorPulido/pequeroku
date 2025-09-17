@@ -58,6 +58,24 @@ class DevAgent:
         print(f"[Agent] Response {name}, on {container}: {result}")
         return result
 
+    def get_response(self, new_messages):
+        resp = None
+        for _ in range(5):
+            try:
+                resp = self.client.chat.completions.create(
+                    messages=new_messages,
+                    model=self.model,
+                    tools=TOOLS_SPEC,
+                    tool_choice="auto",
+                    stream=False,
+                    parallel_tool_calls=False,
+                )
+                break
+            except Exception as e:
+                print(e)
+        if not resp:
+            return None
+
     def run_tool_loop(
         self,
         messages: List[Dict[str, Any]],
@@ -74,23 +92,12 @@ class DevAgent:
         dedup_policy = DedupPolicy()
 
         info = ""
-
         rounds = 0
+
         while True:
             resp = None
-            for _ in range(5):
-                try:
-                    resp = self.client.chat.completions.create(
-                        messages=new_messages,
-                        model=self.model,
-                        tools=TOOLS_SPEC,
-                        tool_choice="auto",
-                        stream=False,
-                        parallel_tool_calls=False,
-                    )
-                    break
-                except Exception as e:
-                    print(e)
+
+            resp = self.get_response(new_messages)
             if not resp:
                 return messages
 
@@ -127,6 +134,10 @@ class DevAgent:
                     if not "error" in result:
                         info += f"{name}({fn.arguments}): {json.dumps(result, ensure_ascii=False)}\n"
 
+                    if "dedup" in result:
+                        rounds -= 1
+                        continue
+
                     new_messages.append(
                         {
                             "role": "tool",
@@ -139,7 +150,7 @@ class DevAgent:
                 continue
 
             # No tool calls => stop and let caller stream the final answer
-            print(finish_reason)
+            print(f"[AGENT] STOP_REASON: {finish_reason}")
             if finish_reason in ("stop", "length", None):
                 break
 

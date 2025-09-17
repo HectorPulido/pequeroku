@@ -45,7 +45,8 @@ def create_file(
 
     if f"create_file_{subdir}" in dedup.logs:
         print("Redup policy applied")
-        return dedup.logs["create_file"]
+        dedup.logs[f"create_file_{subdir}"]["dedup"] = True
+        return dedup.logs[f"create_file_{subdir}"]
 
     service = _get_service(container)
     resp = service.upload_files(
@@ -84,6 +85,7 @@ def create_full_project(
 
     if "create_full_project" in dedup.logs:
         print("Redup policy applied")
+        dedup.logs["create_full_project"]["dedup"] = True
         return dedup.logs["create_full_project"]
 
     open_ai_data = Config.get_config_values(
