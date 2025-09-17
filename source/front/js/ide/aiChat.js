@@ -42,7 +42,7 @@ function connect() {
 		aiDot.classList.add("dot");
 
 		form.classList.remove("hidden");
-		btnReconnect.classList.add("hidden");
+		btnReconnectDiv.classList.add("hidden");
 	};
 	ws.onmessage = (e) => {
 		try {

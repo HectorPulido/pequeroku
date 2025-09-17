@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 
 from vm_manager.models import Container
 
-from .schemas import SYSTEM_PROMPT_EN, TOOLS_SPEC
+from .schemas import SYSTEM_PROMPT_EN, TOOLS_SPEC, SYSTEM_TOOLS_PROMPT_EN
 from .tools import (
     ToolError,
     DedupPolicy,
@@ -70,9 +70,9 @@ class DevAgent:
                     stream=False,
                     parallel_tool_calls=False,
                 )
-                break
+                return resp
             except Exception as e:
-                print(e)
+                print("[AGENTS] Error getting response: ", e)
         if not resp:
             return None
 
@@ -89,6 +89,8 @@ class DevAgent:
         """
 
         new_messages = messages.copy()
+        new_messages[0] = {"role": "system", "content": SYSTEM_TOOLS_PROMPT_EN}
+
         dedup_policy = DedupPolicy()
 
         info = ""
