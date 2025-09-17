@@ -133,7 +133,10 @@ export function setupContainers() {
 			openStats(`${c.id} — ${c.name} - Stats`, c.id);
 		card.querySelector(".btn-edit").onclick = () =>
 			openConsole(`${c.id} — ${c.name} - Editor`, c.id);
-		card.querySelector(".btn-delete").onclick = () => deleteContainer(c.id);
+		card.querySelector(".btn-delete").onclick = () => {
+			if (!confirm(`Delete VM "${c.id}"?`)) return;
+			deleteContainer(c.id);
+		};
 		card.querySelector(".btn-start").onclick = async () => {
 			await fetch(`/api/containers/${c.id}/power_on/`, {
 				method: "POST",
