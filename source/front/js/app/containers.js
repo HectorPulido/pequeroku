@@ -134,7 +134,7 @@ export function setupContainers() {
 		card.querySelector(".btn-edit").onclick = () =>
 			openConsole(`${c.id} — ${c.name} - Editor`, c.id);
 		card.querySelector(".btn-delete").onclick = () => {
-			if (!confirm(`Delete VM "${c.id}"?`)) return;
+			if (!confirm(`Delete VM "${c.id} — ${c.name}"?`)) return;
 			deleteContainer(c.id);
 		};
 		card.querySelector(".btn-start").onclick = async () => {
