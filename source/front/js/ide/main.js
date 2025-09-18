@@ -6,20 +6,21 @@ import {
 	getCurrentTheme,
 	setupThemeToggle,
 } from "../core/themes.js";
+import { hideHeader, sleep } from "../core/utils.js";
 import { setupConsole } from "./console.js";
 import {
-	openFile as openFileIntoEditor,
+	changeTheme,
 	clearEditor,
 	getEditorValue,
-	changeTheme,
 	loadMonaco,
+	openFile as openFileIntoEditor,
 } from "./editor.js";
 import { setupFileTree } from "./files.js";
+import { createFSWS } from "./fs-ws.js";
+import { setupHiddableDragabble } from "./hiddableDraggable.js";
 import { loadRunConfig } from "./runConfig.js";
 import { setupUploads } from "./uploads.js";
 import { createWS } from "./websockets.js";
-import { hideHeader, sleep } from "../core/utils.js";
-import { setupHiddableDragabble } from "./hiddableDraggable.js";
 
 installGlobalLoader();
 applyTheme();
@@ -29,6 +30,7 @@ hideHeader();
 // ====== CONFIG ======
 const urlParams = new URLSearchParams(window.location.search);
 const containerId = urlParams.get("containerId");
+const containerPk = parseInt(containerId, 10);
 const api = makeApi(`/api/containers/${containerId}`);
 
 // ====== DOM refs ======
@@ -71,11 +73,21 @@ setupHiddableDragabble(containerId);
 
 if (themeToggleBtn) setupThemeToggle(themeToggleBtn);
 
-// ====== State ======
 let consoleApi = null;
 let currentFilePath = null;
 let runCommand = null;
 let ws = null;
+let ft;
+
+const fsws = createFSWS({
+	containerPk,
+	onOpen: async () => {},
+	onBroadcast: async (_evt) => {
+		try {
+			await ft.refresh();
+		} catch {}
+	},
+});
 
 function setPath(p) {
 	currentFilePath = p;
@@ -121,7 +133,6 @@ function connectWs() {
 	});
 }
 
-// ====== Initial ======
 (async () => {
 	consoleApi = setupConsole({
 		consoleEl,
@@ -145,18 +156,17 @@ function connectWs() {
 		connectWs();
 	});
 
-	const ft = setupFileTree({
-		api,
+	ft = setupFileTree({
+		fsws,
 		fileTreeEl,
 		containerId,
-		onOpen: (p) => openFileIntoEditor(api, p, setPath),
+		onOpen: (p) => openFileIntoEditor(apiReadFileWrapper, p, setPath),
 	});
 	refreshTreeBtn.addEventListener("click", async () => {
 		await ft.refresh();
 		await hydrateRun();
 	});
 
-	// Uploads
 	setupUploads({
 		api,
 		openBtn: btnOpenUpload,
@@ -171,13 +181,11 @@ function connectWs() {
 		fileTreeEl: fileTreeEl,
 	});
 
-	// Setup AI
 	btnOpenAi.addEventListener("click", () => {
 		aiModal.classList.remove("hidden");
 	});
 	btnAiClose.addEventListener("click", () => aiModal.classList.add("hidden"));
 
-	// Templates
 	const { setupTemplates } = await import("./templates.js");
 	setupTemplates({
 		openBtn: btnOpenTemplates,
@@ -204,7 +212,6 @@ function connectWs() {
 		open(`/api/containers/${containerId}/download_folder/`);
 	});
 
-	// Guardar / Run
 	saveFileBtn.addEventListener("click", saveCurrentFile);
 	runCodeBtn.addEventListener("click", async () => {
 		await saveCurrentFile();
@@ -216,7 +223,6 @@ function connectWs() {
 			);
 	});
 
-	// Atajos
 	window.addEventListener("keydown", (e) => {
 		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
 			e.preventDefault();
@@ -231,7 +237,7 @@ function connectWs() {
 	fileTreeEl.addEventListener("finder-action", async (e) =>
 		ft.finderAction(
 			e,
-			openFileIntoEditor,
+			async (path) => openFileIntoEditor(apiReadFileWrapper, path, setPath),
 			setPath,
 			clearEditor,
 			saveCurrentFile,
@@ -245,15 +251,29 @@ function connectWs() {
 	await tryOpen("/app/readme.txt");
 	refreshTreeBtn.click();
 
-	async function hydrateRun() {
-		runCommand = await loadRunConfig(api);
-		runCodeBtn.disabled = !runCommand;
-	}
 	async function tryOpen(p) {
 		try {
-			await api(`/read_file/?path=${encodeURIComponent(p)}`);
-			await openFileIntoEditor(api, p, setPath);
-		} catch {}
+			// await api(`/read_file/?path=${encodeURIComponent(p)}`);
+			await openFileIntoEditor(apiReadFileWrapper, p, setPath);
+		} catch (error) {
+			console.log(error);
+		}
+	}
+
+	// await tryOpen("/app/readme.txt");
+
+	async function hydrateRun() {
+		runCommand = await loadRunConfig(apiReadFileWrapper);
+		runCodeBtn.disabled = !runCommand;
+	}
+
+	// === "API-like" wrapper so editor.js remains unchanged but reads via WS ===
+	async function apiReadFileWrapper(url) {
+		const qs = new URLSearchParams(url.split("?")[1] || "");
+		const path = qs.get("path");
+		const data = await fsws.call("read_file", { path });
+		if (typeof data.rev === "number") fsws.revs.set(path, data.rev);
+		return { content: data.content ?? "" };
 	}
 
 	async function saveCurrentFile() {
@@ -262,12 +282,37 @@ function connectWs() {
 			return;
 		}
 		const content = getEditorValue();
-		await api("/write_file/", {
-			method: "POST",
-			body: JSON.stringify({ path: currentFilePath, content: content }),
-		});
-		parent.addAlert(`File ${currentFilePath} saved`, "success");
-		if (currentFilePath === "/app/config.json") await hydrateRun();
+		const prev = fsws.revs.get(currentFilePath) || 0;
+		try {
+			const res = await fsws.call("write_file", {
+				path: currentFilePath,
+				prev_rev: prev,
+				content,
+			});
+			const nextRev = typeof res?.rev === "number" ? res.rev : prev + 1;
+			fsws.revs.set(currentFilePath, nextRev);
+			parent.addAlert(`File ${currentFilePath} saved`, "success");
+			if (currentFilePath === "/app/config.json") await hydrateRun();
+		} catch (e) {
+			if (String(e.message).includes("conflict")) {
+				const cur = fsws.revs.get(currentFilePath) || 0;
+				parent.addAlert(
+					`Conflict saving saving current Rev ${cur}. Reload...`,
+					"error",
+				);
+				await openFileIntoEditor(apiReadFileWrapper, currentFilePath, setPath);
+			} else {
+				parent.addAlert(e.message || String(e), "error");
+			}
+		}
+
+		// try {
+		//   console.log("A")
+		//   await openFileIntoEditor(apiReadFileWrapper, "/app/readme.txt", setPath);
+		// 	console.log("B")
+		// }catch (error ) {
+		//   console.log(error)
+		// }
 	}
 
 	window.addEventListener("beforeunload", () => {
@@ -281,7 +326,6 @@ function connectWs() {
 		changeTheme(isDark, consoleApi);
 	});
 
-	// Clone Github
 	btnCloneRepo.addEventListener("click", () => {
 		$("#github-modal").classList.remove("hidden");
 	});

@@ -30,6 +30,7 @@ services:
       - pequeroku-net
     depends_on:
       - db
+      - redis
     restart: unless-stopped
 
   nginx:

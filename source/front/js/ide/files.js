@@ -1,14 +1,24 @@
 import { detectLangFromPath } from "../shared/langMap.js";
 
-export function setupFileTree({ api, fileTreeEl, onOpen, containerId }) {
+export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
+	let refreshing = false;
+
 	const menu = document.getElementById("finder-menu");
 	let menuTarget = null;
 
+	// === WS: list_dir ===
 	async function listDir(path = "/app") {
-		return api(`/list_dir/?path=${encodeURIComponent(path)}`);
+		const r = await fsws.call("list_dir", { path });
+		return r.entries || [];
 	}
 
 	async function loadDir(path, ul) {
+		if (refreshing) {
+			console.log("Refresing dedup...");
+			return;
+		}
+
+		refreshing = true;
 		ul.innerHTML = "";
 		const items = await listDir(path);
 		const prefix = `${path.replace(/\/$/, "")}/`;
@@ -57,6 +67,7 @@ export function setupFileTree({ api, fileTreeEl, onOpen, containerId }) {
 			});
 			ul.appendChild(li);
 		});
+		refreshing = false;
 	}
 
 	function openContextMenu(e, li) {
@@ -93,9 +104,11 @@ export function setupFileTree({ api, fileTreeEl, onOpen, containerId }) {
 	});
 
 	async function refresh() {
+		console.log("Refreshing...");
 		await loadDir("/app", fileTreeEl);
 	}
 
+	// === WS: create_dir ===
 	async function newFolder(path, type) {
 		const name = prompt("Folder name:");
 		if (!name) return;
@@ -108,13 +121,11 @@ export function setupFileTree({ api, fileTreeEl, onOpen, containerId }) {
 			dir = `${dir.replace(/\/$/, "")}/${name}`;
 		}
 
-		await api("/create_dir/", {
-			method: "POST",
-			body: JSON.stringify({ path: dir }),
-		});
+		await fsws.call("create_dir", { path: dir });
 		await refresh();
 	}
 
+	// newFile doesn't create anything in the FS yet: adjusts the path, clears the editor, and delegates to saveCurrentFile
 	async function newFile(path, setPath, saveCurrentFile, clearEditor, type) {
 		const name = prompt("File name:");
 		if (!name) return;
@@ -132,6 +143,7 @@ export function setupFileTree({ api, fileTreeEl, onOpen, containerId }) {
 		await refresh();
 	}
 
+	// === WS in finder actions ===
 	async function finderAction(
 		e,
 		openFileIntoEditor,
@@ -146,14 +158,11 @@ export function setupFileTree({ api, fileTreeEl, onOpen, containerId }) {
 		try {
 			if (action === "open") {
 				if (type === "directory") return;
-				await openFileIntoEditor(api, path, setPath);
+				await openFileIntoEditor(path);
 			}
 			if (action === "delete") {
 				if (!confirm(`Delete "${path}"?`)) return;
-				await api("/delete_path/", {
-					method: "POST",
-					body: JSON.stringify({ path }),
-				});
+				await fsws.call("delete_path", { path });
 				parent.addAlert(`Deleted: ${path}`, "success");
 				await refresh();
 				if (currentFilePath === path) {
@@ -167,14 +176,11 @@ export function setupFileTree({ api, fileTreeEl, onOpen, containerId }) {
 				const name = prompt("New name:", base);
 				if (!name || name === base) return;
 				const new_path = path.replace(/\/[^/]+$/, `/${name}`);
-				await api("/move_path/", {
-					method: "POST",
-					body: JSON.stringify({ src: path, dest: new_path }),
-				});
+				await fsws.call("move_path", { src: path, dst: new_path });
 				parent.addAlert(`Renamed to: ${new_path}`, "success");
 				await refresh();
 				if (currentFilePath === path) {
-					await openFileIntoEditor(api, new_path, setPath);
+					await openFileIntoEditor(new_path);
 				}
 			}
 			if (action === "new-file") {
@@ -184,6 +190,7 @@ export function setupFileTree({ api, fileTreeEl, onOpen, containerId }) {
 				newFolder(path, type);
 			}
 			if (action === "download") {
+				// Downloads still go over HTTP
 				if (type === "directory") {
 					open(`/api/containers/${containerId}/download_folder/?root=${path}`);
 				} else {

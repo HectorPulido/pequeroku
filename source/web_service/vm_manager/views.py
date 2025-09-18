@@ -163,71 +163,6 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         self.perform_destroy(obj)
         return Response({"status": "stopped"})
 
-    @action(detail=True, methods=["post"])
-    def delete_path(self, request, pk=None):
-        obj: Container = self.get_object()
-        path = request.data.get("path")
-
-        if not path:
-            audit_log_http(
-                request,
-                action="container.delete_file",
-                target_type="container",
-                target_id=obj.pk,
-                message="Deletion rejected: no path provided",
-                metadata={"path": path},
-                success=False,
-            )
-            return Response({"error": "path required"}, status=400)
-
-        service = self._get_service(obj)
-        response = service.execute_sh(str(obj.container_id), f"rm -rf {path}")
-
-        audit_log_http(
-            request,
-            action="container.delete_file",
-            target_type="container",
-            target_id=obj.pk,
-            message="Deletion success",
-            metadata={"path": path, "response": response},
-            success=True,
-        )
-
-        return Response(response)
-
-    @action(detail=True, methods=["post"])
-    def move_path(self, request, pk=None):
-        obj: Container = self.get_object()
-        src = request.data.get("src")
-        dest = request.data.get("dest")
-
-        if not src or not dest:
-            audit_log_http(
-                request,
-                action="container.change_path",
-                target_type="container",
-                target_id=obj.pk,
-                message="Change path rejected, not src or dest",
-                metadata={"src": src, "dest": dest},
-                success=False,
-            )
-            return Response({"error": "path required"}, status=400)
-
-        service = self._get_service(obj)
-        response = service.execute_sh(str(obj.container_id), f"mv -f {src} {dest}")
-
-        audit_log_http(
-            request,
-            action="container.change_path",
-            target_type="container",
-            target_id=obj.pk,
-            message="Deletion success",
-            metadata={"src": src, "dest": dest, "response": response},
-            success=True,
-        )
-
-        return Response(response)
-
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
     def upload_file(self, request, pk=None):
         f = request.FILES.get("file")
@@ -280,112 +215,6 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         return Response(response)
 
     @action(detail=True, methods=["get"])
-    def read_file(self, request, pk=None):
-        container = self.get_object()
-        path = request.GET.get("path")
-
-        if not path:
-            audit_log_http(
-                request,
-                action="container.read_file",
-                target_type="container",
-                target_id=container.pk,
-                message="Read rejected: path is required",
-                success=False,
-            )
-            return Response({"error": "path required"}, status=400)
-
-        obj: Container = self.get_object()
-        service = self._get_service(obj)
-        response = service.read_file(str(obj.container_id), path)
-
-        audit_log_http(
-            request,
-            action="container.read_file",
-            target_type="container",
-            target_id=container.pk,
-            message="File read via SFTP",
-            metadata={"path": path, "bytes_read": response.get("length", 0)},
-            success=True,
-        )
-
-        if not response.get("found", False):
-            first_start_of_container(obj)
-            return Response({"error": "File not found"}, status=404)
-
-        return Response(response)
-
-    @action(detail=True, methods=["post"], parser_classes=[JSONParser])
-    def create_dir(self, request, pk=None):
-        path = request.data.get("path")
-        obj: Container = self.get_object()
-
-        if not path:
-            audit_log_http(
-                request,
-                action="container.create_dir",
-                target_type="container",
-                target_id=obj.pk,
-                message="Create dir rejected: path is required",
-                success=False,
-            )
-            return Response({"error": "path required"}, status=400)
-
-        service = self._get_service(obj)
-        service.create_dir(
-            str(obj.container_id),
-            path,
-        )
-        audit_log_http(
-            request,
-            action="container.create_dir",
-            target_type="container",
-            target_id=obj.pk,
-            message="Directory created",
-            metadata={"path": path},
-            success=True,
-        )
-        return Response({"status": "ok"})
-
-    @action(detail=True, methods=["post"], parser_classes=[JSONParser])
-    def write_file(self, request, pk=None):
-        path = request.data.get("path")
-        content = request.data.get("content", "")
-        obj: Container = self.get_object()
-
-        if not path:
-            audit_log_http(
-                request,
-                action="container.write_file",
-                target_type="container",
-                target_id=obj.pk,
-                message="Write rejected: path is required",
-                success=False,
-            )
-            return Response({"error": "path required"}, status=400)
-
-        service = self._get_service(obj)
-        service.upload_files(
-            str(obj.container_id),
-            VMUploadFiles(
-                dest_path="/",
-                clean=False,
-                files=[VMFile(path=path, text=content)],
-            ),
-        )
-        audit_log_http(
-            request,
-            action="container.write_file",
-            target_type="container",
-            target_id=obj.pk,
-            message="File written via SFTP",
-            metadata={"path": path, "bytes": len(content or "")},
-            success=True,
-        )
-
-        return Response({"status": "ok"})
-
-    @action(detail=True, methods=["get"])
     def statistics(self, request, pk=None):
         obj: Container = self.get_object()
         if obj.status != "running":
@@ -393,24 +222,6 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
         service = self._get_service(obj)
         response = service.statistics(str(obj.container_id))
-        return Response(response)
-
-    @action(detail=True, methods=["get"])
-    def list_dir(self, request, pk=None):
-        root = request.GET.get("path", "/app")
-        obj: Container = self.get_object()
-        service = self._get_service(obj)
-        response = service.list_dir(str(obj.container_id), root)
-
-        audit_log_http(
-            request,
-            action="container.list_dir",
-            target_type="container",
-            target_id=obj.pk,
-            message="Directory listed via find",
-            metadata={"root": root, "count": len(response)},
-            success=True,
-        )
         return Response(response)
 
     @action(detail=True, methods=["post"])

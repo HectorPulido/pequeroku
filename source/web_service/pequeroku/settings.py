@@ -17,9 +17,10 @@ CSRF_TRUSTED_ORIGINS = [f"http://{h}" for h in ALLOWED_HOSTS] + [
     f"https://{h}" for h in ALLOWED_HOSTS
 ]
 
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/1")
+REDIS_PREFIX = os.getenv("REDIS_PREFIX", "web_service:")
 
 # Application definition
-
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
