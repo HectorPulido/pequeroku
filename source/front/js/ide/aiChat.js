@@ -27,6 +27,7 @@ const btnReconnect = $("#ai-reconect");
 
 let bubble = null;
 let buffer = "";
+let bubbleType = null;
 
 const urlParams = new URLSearchParams(window.location.search);
 const containerId = urlParams.get("containerId");
@@ -50,12 +51,19 @@ function connect() {
 			if (data.event === "start_text") {
 				if (data.role === "user") {
 					bubble = addMessage("user", "...");
+					bubbleType = data.role;
 				} else {
 					bubble = addMessage("bot", "...");
+					bubbleType = data.role;
 				}
 			} else if (data.event === "text" && bubble != null) {
 				buffer += data.content;
-				bubble.innerHTML = mdParse(buffer);
+
+				if (bubbleType === "user") {
+					bubble.innerText = buffer;
+				} else {
+					bubble.innerHTML = mdParse(buffer);
+				}
 			} else if (data.event === "finish_text") {
 				bubble = null;
 				buffer = "";

@@ -149,3 +149,10 @@ def create_full_project(
     dedup.logs["create_file"] = response
 
     return response
+
+
+def exec_command(_: DedupPolicy, container: Container, command: str) -> Dict[str, Any]:
+    service = _get_service(container)
+    resp = service.execute_sh(str(container.container_id), command)
+    resp["finished"] = True
+    return resp

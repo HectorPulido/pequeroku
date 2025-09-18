@@ -86,12 +86,6 @@ class AIConsumer(AsyncJsonWebsocketConsumer):
             ["openai_api_key", "openai_api_url", "openai_model"]
         )
 
-    @sync_to_async
-    def _run_tool_loop(
-        self,
-    ):
-        return self.agent.run_tool_loop(self.messages, self.container_obj)
-
     async def send_history(self, memory):
         for i, msg in enumerate(memory):
             if i == 0:
@@ -121,7 +115,6 @@ class AIConsumer(AsyncJsonWebsocketConsumer):
                     messages=self.messages,
                     model=self.openai_model,
                     stream=True,
-                    tool_choice="none",
                     response_format={"type": "text"},
                 ):
                     chunk = evt.choices[0].delta.content
@@ -201,7 +194,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer):
         )
 
     async def receive_json(self, content, **kwargs):
-        user_text = content.get("text", "")[:1000]
+        user_text = content.get("text", "")[:3000]
         if not user_text.strip():
             return
 
@@ -222,18 +215,45 @@ class AIConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4401)
             return
 
+        if user_text == "/clear":
+            await self.send_json({"event": "start_text"})
+            await self.send_json({"event": "text", "content": "Memory clear..."})
+            await self.send_json({"event": "finish_text"})
+            self.messages = self.agent.bootstrap_messages()
+            await self._set_memory(self.user, self.container_obj, self.messages)
+            return
+
+        await self.send_json({"event": "start_text"})
+        await self.send_json({"event": "text", "content": "..."})
+
         # Process LLM
         self.messages.append({"role": "user", "content": user_text})
 
-        await self.send_json({"event": "start_text"})
-        self.messages = await self._run_tool_loop()
+        loop = await self.agent.run_tool_loop(self.messages, self.container_obj)
+        async for finish, t in loop:
+            if finish:
+                self.messages = t
+                break
+            await self.send_json({"event": "start_text"})
+            await self.send_json({"event": "text", "content": f"Using {t}..."})
+            await self.send_json({"event": "finish_text"})
 
+        await self.send_json({"event": "start_text"})
         buffer = ""
+        thinking = False
         for chunk in self.response_retry():
             if not chunk:
                 continue
             buffer += chunk
-            await self.send_json({"event": "text", "content": chunk})
+
+            # Do not send anything if thinking
+            thinking = "<think>" in buffer and "</think>" not in buffer
+            if not thinking:
+                await self.send_json({"event": "text", "content": chunk})
+
+        # If stop talking but didn't stop thinking, just send everything
+        if thinking:
+            await self.send_json({"event": "text", "content": buffer})
 
         self.messages.append({"role": "assistant", "content": buffer})
 

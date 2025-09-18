@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 from typing import List, Dict, Any
+from asgiref.sync import sync_to_async
 
 from vm_manager.models import Container
 
@@ -12,6 +13,7 @@ from .tools import (
     create_file,
     read_file,
     create_full_project,
+    exec_command,
 )
 
 
@@ -28,6 +30,7 @@ class DevAgent:
     def bootstrap_messages() -> List[Dict[str, Any]]:
         return [{"role": "system", "content": SYSTEM_PROMPT_EN}]
 
+    @sync_to_async
     def exec_and_select_tool(
         self, dedup_policy: DedupPolicy, name: str, container: "Container", **args
     ):
@@ -44,6 +47,8 @@ class DevAgent:
                 result = read_file(dedup_policy, container, **args)
             elif name == "create_full_project":
                 result = create_full_project(dedup_policy, container, **args)
+            elif name == "exec_command":
+                result = exec_command(dedup_policy, container, **args)
             else:
                 result = {"error": f"Unknown tool: {name}"}
         except ToolError as te:
@@ -58,6 +63,7 @@ class DevAgent:
         print(f"[Agent] Response {name}, on {container}: {result}")
         return result
 
+    @sync_to_async
     def get_response(self, new_messages):
         resp = None
         for _ in range(5):
@@ -76,12 +82,13 @@ class DevAgent:
         if not resp:
             return None
 
-    def run_tool_loop(
+    @sync_to_async
+    async def run_tool_loop(
         self,
         messages: List[Dict[str, Any]],
         container: "Container",
         max_rounds: int = 8,
-    ) -> List[Dict[str, Any]]:
+    ):
         """Run function-calling until the model stops requesting tools.
 
         Returns the updated messages; caller can then do a final streaming
@@ -99,9 +106,9 @@ class DevAgent:
         while True:
             resp = None
 
-            resp = self.get_response(new_messages)
+            resp = await self.get_response(new_messages)
             if not resp:
-                return messages
+                break
 
             choice = resp.choices[0]
             tool_calls = getattr(choice.message, "tool_calls", None)
@@ -129,7 +136,9 @@ class DevAgent:
                     except Exception:
                         args = {}
 
-                    result = self.exec_and_select_tool(
+                    yield False, name
+
+                    result = await self.exec_and_select_tool(
                         dedup_policy, name, container, **args
                     )
 
@@ -137,8 +146,26 @@ class DevAgent:
                         info += f"{name}({fn.arguments}): {json.dumps(result, ensure_ascii=False)}\n"
 
                     if "dedup" in result:
-                        rounds -= 0.5
                         continue
+
+                    new_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": tc.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": name,
+                                        "arguments": json.dumps(
+                                            args, ensure_ascii=False
+                                        ),
+                                    },
+                                }
+                            ],
+                        }
+                    )
 
                     new_messages.append(
                         {
@@ -164,4 +191,4 @@ class DevAgent:
                     "content": f"Here some info that can help you with the user request: {info}",
                 },
             )
-        return messages
+        yield True, messages

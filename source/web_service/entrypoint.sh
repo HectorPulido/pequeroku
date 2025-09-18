@@ -17,5 +17,5 @@ echo "Starting gunicorn..."
 DJANGO_MODULE="${DJANGO_MODULE:-pequeroku}"
 exec gunicorn "${DJANGO_MODULE}.asgi:application" \
   -k uvicorn.workers.UvicornWorker \
-  -w "${WORKERS:-4}" \
-  -b 0.0.0.0:8000 --graceful-timeout 30 --timeout 120
+  -w "${WORKERS:-8}" \
+  -b 0.0.0.0:8000 --graceful-timeout 30 --timeout 600
