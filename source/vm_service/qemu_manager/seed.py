@@ -7,12 +7,6 @@ import settings
 from .crypto import _spec_hash
 
 
-def _write_file(path: str, contents: str) -> None:
-    """Write text to a file with UTF-8 encoding."""
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(contents)
-
-
 def _make_overlay(base_image: str, overlay: str, disk_gib: int) -> None:
     """
     Create a qcow2 overlay disk if it doesn't already exist.
@@ -84,9 +78,6 @@ users:
     ssh_authorized_keys:
       - {pubkey}
 
-packages:
-  - docker.io
-
 write_files:
   - path: /etc/ssh/sshd_config.d/pequeroku.conf
     owner: root:root
@@ -95,14 +86,6 @@ write_files:
       PermitRootLogin yes
       PasswordAuthentication no
 
-runcmd:
-  - systemctl restart ssh
-  - usermod -aG docker {settings.VM_SSH_USER}
-  - mkdir -p /app
-  - chown {settings.VM_SSH_USER}:{settings.VM_SSH_USER} /app
-  - chmod 0777 /app
-  - systemctl enable --now docker
-  - cd /app
 """
 
     meta_data = f"""instance-id: {instance_id}

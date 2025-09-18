@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Optional, Literal
 import subprocess
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 @dataclass

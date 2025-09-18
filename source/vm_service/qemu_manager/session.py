@@ -10,19 +10,7 @@ import settings
 
 from .models import VMProc
 from .vm import _start_vm
-from .crypto import _load_pkey
 from .ssh_ready import _wait_ssh
-
-
-def _remove_pidfile_safe(pidfile: Optional[str]) -> None:
-    if not pidfile:
-        return
-    try:
-        if os.path.exists(pidfile):
-            os.remove(pidfile)
-            print(f"Removed pidfile: {pidfile}")
-    except Exception as e:
-        print("Error removing pidfile", e)
 
 
 class QemuSession:

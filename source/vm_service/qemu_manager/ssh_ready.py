@@ -34,9 +34,9 @@ def _wait_ssh(
                 port=port,
                 username=user,
                 pkey=pkey,
-                banner_timeout=30,
-                auth_timeout=30,
-                timeout=5,
+                banner_timeout=10,
+                auth_timeout=10,
+                timeout=3,
                 look_for_keys=False,
             )
 
@@ -50,9 +50,12 @@ def _wait_ssh(
                 except Exception:
                     ...
 
+            waited = time.time() - start
+            print(f"SSH Connection READY! TIME TAKEN: {waited}")
             return True
         except Exception as e:
-            time.sleep(1.0)
+            waited = time.time() - start
+            time.sleep(0.15 if waited < 5 else 0.5)
             if str(e).strip() != "":
                 print("Error opening ssh", e)
             if is_vm_alive is not None and not is_vm_alive():
