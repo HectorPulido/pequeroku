@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("internal_config", "0002_alter_auditlog_action"),
         ("vm_manager", "0002_alter_container_base_image_and_more"),

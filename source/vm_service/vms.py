@@ -103,9 +103,11 @@ async def action_vm(vm_id: str, act: VMAction) -> VMOut:
         if vm.state == VMState.running:
             return VMOut.from_record(vm, runner)
         runner.start(vm)
+        store.set_status(vm, VMState.provisioning)
     elif act.action == "reboot":
         runner.stop(vm)
         threading.Timer(1.0, lambda: runner.start(vm)).start()
+        store.set_status(vm, VMState.provisioning)
     else:
         raise HTTPException(400, "Unsupported action")
 
@@ -161,7 +163,6 @@ async def delete_vm(vm_id: str) -> VMOut:
         vm: "VMRecord" = store.get(vm_id)
     except KeyError as e:
         raise HTTPException(404, "VM not found") from e
-    # detener y limpiar
     runner.stop(vm, cleanup_disks=True)
     return VMOut.from_record(vm, runner)
 

@@ -39,9 +39,9 @@ class VMCreate(BaseModel):
     mem_mib: int = Field(ge=256, example=2048)
     # pyrefly: ignore  # no-matching-overload
     disk_gib: int = Field(ge=5, example=10)
-    base_image: Optional[str] = Field(None, description="Override de VM_BASE_IMAGE")
+    base_image: Optional[str] = Field(None, description="VM_BASE_IMAGE Override")
     timeout_boot_s: Optional[int] = Field(
-        None, description="Override de VM_TIMEOUT_BOOT_S"
+        None, description="VM_TIMEOUT_BOOT_S Override"
     )
 
 
@@ -74,7 +74,7 @@ class VMSh(BaseModel):
     command: str
 
 
-# ===== Dominio/Store en memoria (extensible a DB) =====
+# ===== Dominio/Store =====
 @dataclass
 class VMRecord:
     id: str
@@ -90,6 +90,7 @@ class VMRecord:
     proc: Optional[VMProc] = None
     created_at: float = time.time()
     updated_at: float = time.time()
+    booted_at: float = time.time()
 
 
 class VMOut(BaseModel):
@@ -102,6 +103,7 @@ class VMOut(BaseModel):
     key_ref: Optional[str]
     created_at: float
     updated_at: float
+    booted_at: Optional[float]
     error_reason: Optional[str] = None
 
     @staticmethod
@@ -118,6 +120,7 @@ class VMOut(BaseModel):
             created_at=vm.created_at,
             updated_at=vm.updated_at,
             error_reason=vm.error_reason,
+            booted_at=vm.booted_at,
         )
 
 

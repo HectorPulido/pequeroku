@@ -18,7 +18,6 @@ _path_norm = lambda p: re.sub(r"/+", "/", p or "").rstrip("/") or "/"
 
 
 class EditorConsumer(AsyncJsonWebsocketConsumer):
-
     async def _bump_rev(self, cid: str, p: str) -> int:
         return await VersionStore.bump_rev(cid=cid, path=p)
 

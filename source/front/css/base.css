@@ -234,7 +234,7 @@ header h3 {
 
 header button {
 	background: #28a745;
-	border: none;
+	border: 1px solid #0b0d1000;
 	padding: 0.5rem 1rem;
 	color: white;
 	cursor: pointer;

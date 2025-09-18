@@ -11,10 +11,12 @@ class RedisStore:
         self,
         url: Optional[str] = None,
         namespace: str = "vmservice",
-        provisioning_grace_s: int = 900,  # 15 min por defecto
+        provisioning_grace_s: int = 900,  # 15 mins default
     ) -> None:
+        if not url:
+            return
+
         self.r = redis.Redis.from_url(
-            # pyrefly: ignore  # bad-argument-type
             url,
             decode_responses=True,
         )
@@ -26,11 +28,9 @@ class RedisStore:
     def _key(self, vm_id: str) -> str:
         return f"{self.ns}:vm:{vm_id}"
 
-    # ---- (de)serialización segura ----
+    # ---- (de)Deserialization ----
     def _to_dict(self, vm) -> dict:
-        # Serialización explícita (evita Enum y objetos no serializables)
         state = vm.state.value if hasattr(vm.state, "value") else str(vm.state)
-        # Normaliza posibles "VMState.running" heredados de versiones previas
         if state.startswith("VMState."):
             state = state.split(".", 1)[1]
         return {
@@ -87,20 +87,16 @@ class RedisStore:
             return False
 
     def _reconcile(self, vm):
-        now = time.time()
-        # Corrige running sin puerto vivo
         if vm.state == VMState.running and not self._ssh_alive(vm.ssh_port):
-            vm.state = VMState.stopped
-            vm.error_reason = "reconciled: ssh port not reachable"
-            self.put(vm)
-        # Corrige provisioning atascado (timeout)
+            self.set_status(
+                vm, VMState.stopped, error_reason="reconciled: ssh port not reachable"
+            )
         elif vm.state == VMState.provisioning:
-            age = now - vm.created_at
-            # Si ya excedió la gracia y no hay señales de vida en el puerto -> error
+            age = time.time() - vm.booted_at
             if age > self.provisioning_grace_s and not self._ssh_alive(vm.ssh_port):
-                vm.state = VMState.error
-                vm.error_reason = "provisioning-timeout"
-                self.put(vm)
+                self.set_status(
+                    vm, VMState.stopped, error_reason="provisioning-timeout"
+                )
         return vm
 
     # ---- API compatible ----
@@ -143,13 +139,24 @@ class RedisStore:
         return out
 
     def reconcile_all(self) -> int:
-        """Llama esto al arrancar el servicio para autocurar el catálogo."""
+        """Call this when service start to autohealth the catalog..."""
         cnt = 0
         # pyrefly: ignore  # no-matching-overload
         for vid in list(self.r.smembers(self.ids_key)):
             try:
-                _ = self.get(vid)  # ya reconcilia y persiste si procede
+                _ = self.get(vid)
                 cnt += 1
             except KeyError:
                 continue
         return cnt
+
+    def set_status(
+        self,
+        vm,
+        status: VMState,
+        error_reason: Optional[str] = None,
+    ):
+        print(f"Setting {vm} to status: {status}, with error_reason={error_reason}")
+        vm.state = status
+        vm.error_reason = error_reason
+        self.put(vm)

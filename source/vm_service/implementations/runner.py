@@ -26,17 +26,15 @@ class Runner:
         return wd
 
     def start(self, vm: VMRecord) -> None:
-        # Bloqueante: ejecutar en thread para no bloquear event loop
+        # This is blocking
         def _run():
             try:
-                # Overrides temporales de settings si se especifican
                 vm_ssh_user = settings.VM_SSH_USER
-                # Lanzar QEMU con utilidades existentes
                 proc = _start_vm(vm.workdir, vm.vcpus, vm.mem_mib, vm.disk_gib, vm.id)
                 vm.proc = proc
                 vm.ssh_port = proc.port_ssh
                 vm.ssh_user = vm_ssh_user
-                # Espera de SSH si _start_vm no lo garantiza (defensivo):
+
                 try:
                     _wait_ssh(
                         port=proc.port_ssh,
@@ -46,15 +44,16 @@ class Runner:
                     )
                 except Exception:
                     pass
-                vm.state = VMState.running
-                vm.error_reason = None
+
+                self.store.set_status(vm, VMState.running)
             except Exception as e:  # pylint: disable=broad-except
-                vm.state = VMState.error
-                vm.error_reason = str(e)
+                self.store.set_status(vm, VMState.error, error_reason=str(e))
             finally:
                 self.store.put(vm)
 
         threading.Thread(target=_run, daemon=True).start()
+        vm.booted_at = time.time()
+        self.store.put(vm)
 
     @staticmethod
     def _clean_up(vm: VMRecord):
@@ -146,12 +145,9 @@ class Runner:
                 except Exception:
                     pass
 
-                vm.state = VMState.stopped
-                vm.updated_at = time.time()
-                vm.error_reason = None
+                self.store.set_status(vm, VMState.stopped)
             except Exception as e:  # pylint: disable=broad-except
-                vm.state = VMState.error
-                vm.error_reason = str(e)
+                self.store.set_status(vm, VMState.error, error_reason=str(e))
             finally:
                 self.store.put(vm)
 
