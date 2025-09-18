@@ -9,7 +9,7 @@ from asgiref.sync import sync_to_async
 from internal_config.audit import audit_log_ws  # TODO
 from pequeroku.redis import VersionStore
 from .vm_client import VMServiceClient, VMUploadFiles, VMFile
-from .models import Container, Node
+from .models import Container
 
 from .templates import first_start_of_container
 
@@ -51,8 +51,7 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
             return None, None
 
     def _service(self, container: Container) -> VMServiceClient:
-        node: Node = container.node
-        return VMServiceClient(base_url=str(node.node_host), token=str(node.auth_token))
+        return VMServiceClient(container.node)
 
     def _group_name(self, pk: int) -> str:
         return f"container-fs-{pk}"

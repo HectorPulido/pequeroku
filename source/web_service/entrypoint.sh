@@ -13,6 +13,9 @@ else
   echo "Skipping superuser creation (vars not set)"
 fi
 
+sleep 5
+python manage.py reconcile_containers
+
 echo "Starting gunicorn..."
 DJANGO_MODULE="${DJANGO_MODULE:-pequeroku}"
 exec gunicorn "${DJANGO_MODULE}.asgi:application" \

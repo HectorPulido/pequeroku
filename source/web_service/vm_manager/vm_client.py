@@ -1,7 +1,11 @@
 from __future__ import annotations
+
+import requests
+from django.utils import timezone
 from dataclasses import dataclass, asdict
 from typing import List, Literal, Optional, Dict, Any
-import requests
+
+from .models import Node
 
 
 VMState = Literal["provisioning", "running", "stopped", "error"]
@@ -61,30 +65,26 @@ class VMUploadFiles:
 
 class VMServiceClient:
     """
-    Cliente para la API vm-service (OpenAPI 3.1.0).
-    Ejemplo de uso:
-        client = VMServiceClient("https://tu-api", token="XYZ")
-        vms = client.list_vms()
-        vm = client.create_vm(VMCreate(vcpus=2, mem_mib=2048, disk_gib=10))
+    Client for the vm-service API
     """
 
     def __init__(
         self,
-        base_url: str,
-        token: Optional[str] = None,
+        node: Node,
         timeout: float = 30.0,
         session: Optional[requests.Session] = None,
         extra_headers: Optional[Dict[str, str]] = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        self.node = node
+        self.base_url = str(node.node_host).rstrip("/")
         self.timeout = timeout
         self.session = session or requests.Session()
         self.headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
-        if token:
-            self.headers["Authorization"] = f"Bearer {token}"
+        if node.auth_token:
+            self.headers["Authorization"] = f"Bearer {node.auth_token}"
         if extra_headers:
             self.headers.update(extra_headers)
 
@@ -93,6 +93,7 @@ class VMServiceClient:
 
     def _handle(self, resp: requests.Response) -> Any:
         if not resp.ok:
+            self.set_healthy(False)
             try:
                 detail = resp.json()
             except Exception:
@@ -101,9 +102,38 @@ class VMServiceClient:
                 f"HTTP {resp.status_code} - {resp.reason} - {detail}", response=resp
             )
         if resp.status_code == 204 or not resp.content:
+            self.set_healthy(True)
             return None
 
+        self.set_healthy(True)
         return resp.json()
+
+    def set_healthy(self, healthy: bool):
+        if healthy:
+            self.node.healthy = True
+            self.node.heartbeat_at = timezone.now()
+            self.node.save()
+            return
+        # if not healthy
+        try:
+            health = self.get_health()
+            health = health.json()
+            if health.ok:
+                self.node.healthy = health["ok"] == "True"
+                self.node.heartbeat_at = timezone.now()
+            else:
+                self.node.healthy = False
+        except:
+            self.node.healthy = False
+        finally:
+            self.node.save()
+
+    def get_health(self) -> requests.Response:
+        """GET /health"""
+        resp = self.session.get(
+            self._url("/health"), headers=self.headers, timeout=self.timeout
+        )
+        return resp
 
     def list_vms(self) -> List[Dict[str, Any]]:
         """GET /vms — Lista todas las VMs."""

@@ -19,6 +19,11 @@ class ContainerSerializer(serializers.ModelSerializer):
             "status",
             "user",
             "username",
+            "desired_state",
+            "container_id",
+            "memory_mb",
+            "vcpus",
+            "disk_gib",
         ]
         read_only_fields = [
             "id",
@@ -26,6 +31,10 @@ class ContainerSerializer(serializers.ModelSerializer):
             "base_image",
             "created_at",
             "status",
+            "container_id",
+            "memory_mb",
+            "vcpus",
+            "disk_gib",
         ]
 
     username = serializers.SerializerMethodField("get_username", read_only=True)

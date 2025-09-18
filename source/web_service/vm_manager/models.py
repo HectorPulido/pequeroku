@@ -16,6 +16,57 @@ class Node(models.Model):
     active = models.BooleanField(default=True)
     auth_token = models.CharField(max_length=128, default="")
 
+    arch = models.CharField(
+        max_length=16, default="", help_text="Host architecture (e.g., x86_64, aarch64)"
+    )
+    kvm_available = models.BooleanField(
+        default=False, help_text="Whether /dev/kvm is available"
+    )
+    capacity_vcpus = models.PositiveIntegerField(
+        default=1, help_text="Total host vCPUs"
+    )
+    capacity_mem_mb = models.PositiveIntegerField(
+        default=1024, help_text="Total host memory in MB"
+    )
+
+    healthy = models.BooleanField(
+        default=False, help_text="Did the node respond correctly?"
+    )
+    heartbeat_at = models.DateTimeField(
+        null=True, blank=True, help_text="Last heartbeat received"
+    )
+
+    def get_node_score(self) -> float:
+        """
+        Score a feasible node; higher is better.
+        """
+        running = self.get_running_nodes()
+        free_v, free_m = self.get_free_resources()
+        return 2.0 * float(free_m) + 1.0 * float(free_v) - 0.5 * float(running)
+
+    def get_running_nodes(self) -> int:
+        return int(Container.objects.filter(node=self, desired_state="running").count())
+
+    def get_free_resources(self):
+        used_vcpus, used_vram = self.get_used_resources()
+
+        free_v = max(int(self.capacity_vcpus) - used_vcpus, 0)
+        free_m = max(int(self.capacity_mem_mb) - used_vram, 0)
+
+        return free_v, free_m
+
+    def get_used_resources(self):
+        vcpus = 0
+        vram = 0
+
+        containers = Container.objects.filter(node=self, desired_state="running").all()
+
+        for container in containers:
+            vcpus += container.vcpus
+            vram += container.memory_mb
+
+        return vcpus, vram
+
     @staticmethod
     def get_node_by_name(name: str) -> "Node|None":
         return Node.objects.filter(name=name).last()
@@ -105,6 +156,16 @@ class FileTemplateItem(models.Model):
 
 
 class Container(models.Model):
+    CONTAINER_STATUS = [
+        ("created", "created"),
+        ("provisioning", "provisioning"),
+        ("running", "running"),
+        ("stopped", "stopped"),
+        ("error", "error"),
+    ]
+
+    DESIRABLE_STATUS = [("running", "running"), ("stopped", "stopped")]
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="containers"
     )
@@ -121,8 +182,20 @@ class Container(models.Model):
     vcpus = models.PositiveIntegerField(default=2, help_text="CPU for the container")
     disk_gib = models.PositiveIntegerField(default=10, help_text="disk in gb")
 
+    desired_state = models.CharField(
+        max_length=16,
+        default="running",
+        choices=DESIRABLE_STATUS,
+        help_text="Desired state for reconciliation",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=32, default="created")
+    status = models.CharField(
+        max_length=32,
+        default="created",
+        choices=CONTAINER_STATUS,
+        help_text="Current status",
+    )
 
     def save(self, *args, **kwargs):
         if not self.name:

@@ -4,6 +4,7 @@ from dataclasses import asdict
 
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout
@@ -27,7 +28,6 @@ from .vm_client import VMServiceClient, VMCreate, VMAction, VMUploadFiles, VMFil
 
 from .templates import (
     apply_template,
-    first_start_of_container,
 )
 
 from .mixin import VMSyncMixin
@@ -99,17 +99,15 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             )
             return Response("Quota exceeded", status=status.HTTP_403_FORBIDDEN)
 
-        node = Node.get_random_node()
+        node = self.choose_node(quota.vcpus, quota.max_memory_mb)
 
         if not node:
             return Response(
-                "No available nodes", status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": "No available nodes with enough capacity"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        service = VMServiceClient(
-            base_url=str(node.node_host),
-            token=str(node.auth_token),
-        )
+        service = VMServiceClient(node)
 
         vm = service.create_vm(
             VMCreate(

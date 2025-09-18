@@ -1,4 +1,4 @@
-from .models import Container, FileTemplate, Node
+from .models import Container, FileTemplate
 from .vm_client import VMServiceClient, VMUploadFiles, VMFile
 
 
@@ -8,11 +8,7 @@ def apply_template(
     """
     Apply a template to a container
     """
-    node: Node = container.node
-    client = VMServiceClient(
-        base_url=str(node.node_host),
-        token=str(node.auth_token),
-    )
+    client = VMServiceClient(container.node)
 
     files = []
     for it in template.items.all().order_by("order", "path"):

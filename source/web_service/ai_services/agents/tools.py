@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Dict, Any
-from vm_manager.models import Container, Node
+from vm_manager.models import Container
 from vm_manager.vm_client import VMServiceClient, VMUploadFiles, VMFile
 
 
@@ -9,11 +9,7 @@ class DedupPolicy:
 
 
 def _get_service(obj: Container) -> VMServiceClient:
-    node: Node = obj.node
-    return VMServiceClient(
-        base_url=str(node.node_host),
-        token=str(node.auth_token),
-    )
+    return VMServiceClient(obj.node)
 
 
 class ToolError(Exception):

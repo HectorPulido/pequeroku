@@ -1,25 +1,52 @@
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import Dict, Iterable, List, Any, Tuple, Optional
+from typing import Dict, Iterable, List, Any, Optional
+
+from datetime import timedelta
+from django.utils import timezone
 
 from .models import Container, Node
 from .vm_client import VMServiceClient
 
 
-@dataclass(frozen=True)
-class _Creds:
-    host: str
-    token: str
-
-
 class VMSyncMixin:
     BATCH_SIZE = 100
 
-    def _group_by_node(self, objs: Iterable) -> Dict[_Creds, List]:
-        groups: Dict[_Creds, List] = defaultdict(list)
+    # Scheduler helpers
+    def _candidate_nodes(self, heartbeat_ttl_s: int = 60) -> List[Node]:
+        """
+        Return active nodes with a recent heartbeat.
+        """
+        cutoff = timezone.now() - timedelta(seconds=heartbeat_ttl_s)
+        return list(
+            Node.objects.filter(active=True, healthy=True, heartbeat_at__gte=cutoff)
+        )
+
+    def choose_node(
+        self,
+        needed_vcpus: int,
+        needed_mem_mb: int,
+        heartbeat_ttl_s: int = 60,
+    ) -> Optional[Node]:
+        """
+        Choose the best node by capacity and recent heartbeat. Returns None if no feasible node.
+        """
+        candidates = self._candidate_nodes(heartbeat_ttl_s)
+        best: Optional[Node] = None
+        best_score = float("-inf")
+        for n in candidates:
+            free_v, free_m = n.get_free_resources()
+            if free_v < int(needed_vcpus) or free_m < int(needed_mem_mb):
+                continue
+            score = n.get_node_score()
+            if score > best_score:
+                best = n
+                best_score = score
+        return best
+
+    def _group_by_node(self, objs: Iterable) -> Dict[Node, List]:
+        groups: Dict[Node, List] = defaultdict(list)
         for obj in objs:
-            node = obj.node
-            groups[_Creds(str(node.node_host), str(node.auth_token))].append(obj)
+            groups[obj.node].append(obj)
         return groups
 
     def _index_vms_by_id(self, payload: Any) -> Dict[str, Dict[str, Any]]:
@@ -63,8 +90,8 @@ class VMSyncMixin:
         changed: List = []
         groups = self._group_by_node(objs)
 
-        clients: Dict[_Creds, VMServiceClient] = {
-            creds: self._service(creds) for creds in groups.keys()
+        clients: Dict[Node, VMServiceClient] = {
+            creds: self._get_service_by_node(creds) for creds in groups.keys()
         }
 
         for creds, items in groups.items():
@@ -84,12 +111,8 @@ class VMSyncMixin:
 
         return changed
 
-    def _service(self, creds: _Creds) -> VMServiceClient:
-        return VMServiceClient(base_url=creds.host, token=creds.token)
+    def _get_service_by_node(self, node: Node) -> VMServiceClient:
+        return VMServiceClient(node)
 
     def _get_service(self, obj: Container) -> VMServiceClient:
-        node: Node = obj.node
-        return VMServiceClient(
-            base_url=str(node.node_host),
-            token=str(node.auth_token),
-        )
+        return VMServiceClient(obj.node)
