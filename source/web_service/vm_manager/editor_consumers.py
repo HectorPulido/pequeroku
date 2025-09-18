@@ -11,6 +11,8 @@ from pequeroku.redis import VersionStore
 from .vm_client import VMServiceClient, VMUploadFiles, VMFile
 from .models import Container, Node
 
+from .templates import first_start_of_container
+
 SAFE_ROOT = "/app"
 _path_norm = lambda p: re.sub(r"/+", "/", p or "").rstrip("/") or "/"
 
@@ -22,6 +24,12 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
 
     async def _get_rev(self, cid: str, p: str) -> int:
         return await VersionStore.get_rev(cid=cid, path=p)
+
+    @sync_to_async
+    def _first_start_of_container(
+        self,
+    ):
+        first_start_of_container(self.container)
 
     @staticmethod
     @sync_to_async
@@ -79,6 +87,8 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
 
         self.client = self._service(self.container)
         self.container_id = str(self.container.container_id)
+
+        await self._first_start_of_container()
 
         await self.channel_layer.group_add(self._group_name(self.pk), self.channel_name)
         await self.send_json({"event": "connected"})
