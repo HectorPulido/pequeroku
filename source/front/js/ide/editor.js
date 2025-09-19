@@ -70,6 +70,49 @@ export function loadMonaco(theme) {
 	});
 }
 
+async function waitForMonaco(callback) {
+	// oh my god, what have I done...
+	const max = 500;
+	for (let i = 0; i < max; i++) {
+		try {
+			callback();
+			return;
+		} catch (error) {
+			console.warn("Error opening File, Try number:", i, error);
+		}
+		console.log("Waiting for monaco...");
+		await sleep(500 * i);
+	}
+	throw new Error("Monaco not ready");
+}
+
+export async function mobileConfig(isMobile) {
+	await waitForMonaco(() => {
+		if (isMobile) {
+			window._editor.updateOptions({
+				minimap: { enabled: false },
+				wordWrap: "on",
+				fontSize: 16,
+				lineNumbers: "off",
+				glyphMargin: false,
+				folding: false,
+				lineDecorationsWidth: 14,
+				lineNumbersMinChars: 0,
+				scrollbar: {
+					vertical: "hidden",
+					horizontal: "hidden",
+				},
+			});
+		} else {
+			window._editor.updateOptions({
+				minimap: { enabled: true },
+				wordWrap: "false",
+				fontSize: 14,
+			});
+		}
+	});
+}
+
 export function clearEditor() {
 	const model = window._editor.getModel();
 	model.setValue("");
@@ -89,24 +132,14 @@ export function changeTheme(isDark, consoleApi) {
 }
 
 export async function openFile(api, path, setPathLabel) {
-	// oh my god, what have I done...
-	const max = 500;
-	for (let i = 0; i < max; i++) {
-		try {
-			const lang = detectLangFromPath(path);
-			const model = window._editor.getModel();
-			monaco.editor.setModelLanguage(model, lang);
-			const { content } = await api(
-				`/read_file/?path=${encodeURIComponent(path)}`,
-			);
-			model.setValue(content);
-			setPathLabel(path);
-			return;
-		} catch (error) {
-			console.warn("Error opening File, Try number:", i, error);
-		}
-		console.log("Waiting for monaco...");
-		await sleep(500 * i);
-	}
-	throw new Error("Monaco not ready");
+	await waitForMonaco(async () => {
+		const lang = detectLangFromPath(path);
+		const model = window._editor.getModel();
+		monaco.editor.setModelLanguage(model, lang);
+		const { content } = await api(
+			`/read_file/?path=${encodeURIComponent(path)}`,
+		);
+		model.setValue(content);
+		setPathLabel(path);
+	});
 }

@@ -50,6 +50,7 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
         except ContainerM.DoesNotExist:
             return None, None
 
+    @sync_to_async
     def _service(self, container: Container) -> VMServiceClient:
         return VMServiceClient(container.node)
 
@@ -83,7 +84,7 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4404)
             return
 
-        self.client = self._service(self.container)
+        self.client = await self._service(self.container)
         self.container_id = str(self.container.container_id)
 
         await self._first_start_of_container()
@@ -124,6 +125,7 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
                     }
                 )
         except Exception as e:
+            print("Error receive_json: ", e)
             await self.send_json({"event": "error", "req_id": req_id, "error": str(e)})
 
     async def ws_broadcast(self, event):

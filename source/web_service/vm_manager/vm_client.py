@@ -74,7 +74,9 @@ class VMServiceClient:
         timeout: float = 30.0,
         session: Optional[requests.Session] = None,
         extra_headers: Optional[Dict[str, str]] = None,
+        blocking: bool = False,
     ) -> None:
+        self.blocking = blocking
         self.node = node
         self.base_url = str(node.node_host).rstrip("/")
         self.timeout = timeout
@@ -109,6 +111,9 @@ class VMServiceClient:
         return resp.json()
 
     def set_healthy(self, healthy: bool):
+        if not self.blocking:
+            return
+
         if healthy:
             self.node.healthy = True
             self.node.heartbeat_at = timezone.now()

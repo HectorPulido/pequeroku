@@ -24,6 +24,9 @@ const aiDot = $("#ai-dot");
 const aiUsesLeft = $("#ai-left");
 const btnReconnectDiv = $("#reconnect");
 const btnReconnect = $("#ai-reconect");
+const btnOpenAi = $("#btn-open-ai-modal");
+const aiModal = $("#ai-chat");
+const btnAiClose = $("#btn-ai-chat-close");
 
 let bubble = null;
 let buffer = "";
@@ -58,6 +61,9 @@ function connect() {
 				}
 			} else if (data.event === "text" && bubble != null) {
 				buffer += data.content;
+				if (bubble.innerHTML === mdParse("...")) {
+					bubble.innerHTML = "";
+				}
 
 				if (bubbleType === "user") {
 					bubble.innerText = buffer;
@@ -146,5 +152,13 @@ input.addEventListener("input", () => {
 	input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
 });
 
-connect();
-addMessage("bot", "Hello, how can I help you today?");
+btnOpenAi.addEventListener("click", () => {
+	console.log("Click btnOpenAi");
+	if (ws === null) {
+		console.log("Starting connection...");
+		connect();
+		addMessage("bot", "Hello, how can I help you today?");
+	}
+	aiModal.classList.remove("hidden");
+});
+btnAiClose.addEventListener("click", () => aiModal.classList.add("hidden"));

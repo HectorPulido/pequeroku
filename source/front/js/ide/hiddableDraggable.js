@@ -1,5 +1,5 @@
 import { $, $$ } from "../core/dom.js";
-export function setupHiddableDragabble(containerId) {
+export async function setupHiddableDragabble(containerId, callback) {
 	const toggleSidebarBtn = $("#toggle-sidebar");
 	const toggleSidebarBtn2 = $("#toggle-sidebar-2");
 	const toggleConsoleBtn = $("#toggle-console");
@@ -93,7 +93,7 @@ export function setupHiddableDragabble(containerId) {
 		if (state === "open") {
 			consoleArea.style.height = `${h}px`;
 		} else {
-			consoleArea.style.height = "37px";
+			consoleArea.style.height = "50px";
 		}
 	}
 
@@ -135,4 +135,6 @@ export function setupHiddableDragabble(containerId) {
 	toggleSidebarBtn2.addEventListener("click", toggleSidebar);
 	toggleSidebarBtn.addEventListener("click", toggleSidebar);
 	toggleConsoleBtn.addEventListener("click", toggleConsole);
+
+	await callback(IS_MOBILE);
 }

@@ -13,6 +13,7 @@ import {
 	clearEditor,
 	getEditorValue,
 	loadMonaco,
+	mobileConfig,
 	openFile as openFileIntoEditor,
 } from "./editor.js";
 import { setupFileTree } from "./files.js";
@@ -65,11 +66,9 @@ const btnCloneRepo = $("#btn-clone-repo");
 const btnCloseCloneRepo = $("#btn-github-close");
 const btnSubmitCloneRepo = $("#btn-github");
 
-const btnOpenAi = $("#btn-open-ai-modal");
-const aiModal = $("#ai-chat");
-const btnAiClose = $("#btn-ai-chat-close");
-
-setupHiddableDragabble(containerId);
+await setupHiddableDragabble(containerId, async (isMobile) => {
+	await mobileConfig(isMobile);
+});
 
 if (themeToggleBtn) setupThemeToggle(themeToggleBtn);
 
@@ -181,11 +180,6 @@ function connectWs() {
 		fileTreeEl: fileTreeEl,
 	});
 
-	btnOpenAi.addEventListener("click", () => {
-		aiModal.classList.remove("hidden");
-	});
-	btnAiClose.addEventListener("click", () => aiModal.classList.add("hidden"));
-
 	const { setupTemplates } = await import("./templates.js");
 	setupTemplates({
 		openBtn: btnOpenTemplates,
@@ -253,14 +247,11 @@ function connectWs() {
 
 	async function tryOpen(p) {
 		try {
-			// await api(`/read_file/?path=${encodeURIComponent(p)}`);
 			await openFileIntoEditor(apiReadFileWrapper, p, setPath);
 		} catch (error) {
 			console.log(error);
 		}
 	}
-
-	// await tryOpen("/app/readme.txt");
 
 	async function hydrateRun() {
 		runCommand = await loadRunConfig(apiReadFileWrapper);
@@ -305,14 +296,6 @@ function connectWs() {
 				parent.addAlert(e.message || String(e), "error");
 			}
 		}
-
-		// try {
-		//   console.log("A")
-		//   await openFileIntoEditor(apiReadFileWrapper, "/app/readme.txt", setPath);
-		// 	console.log("B")
-		// }catch (error ) {
-		//   console.log(error)
-		// }
 	}
 
 	window.addEventListener("beforeunload", () => {

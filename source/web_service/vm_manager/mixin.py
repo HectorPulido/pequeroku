@@ -112,7 +112,7 @@ class VMSyncMixin:
         return changed
 
     def _get_service_by_node(self, node: Node) -> VMServiceClient:
-        return VMServiceClient(node)
+        return VMServiceClient(node, blocking=True)
 
     def _get_service(self, obj: Container) -> VMServiceClient:
-        return VMServiceClient(obj.node)
+        return VMServiceClient(obj.node, blocking=True)
