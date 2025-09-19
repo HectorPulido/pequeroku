@@ -89,9 +89,14 @@ export async function setupHiddableDragabble(containerId, callback) {
 		consoleHiddable.forEach((a) => {
 			a.classList.toggle("collapsed", state !== "open");
 		});
-		console.log(state);
+		console.log("state: ", state);
 		if (state === "open") {
-			consoleArea.style.height = `${h}px`;
+			if (IS_MOBILE) {
+				console.log("MOBILE");
+				consoleArea.style.height = `185dvh`;
+			} else {
+				consoleArea.style.height = `${h}px`;
+			}
 		} else {
 			consoleArea.style.height = "50px";
 		}

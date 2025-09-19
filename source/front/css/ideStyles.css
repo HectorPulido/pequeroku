@@ -267,6 +267,10 @@ wc-monaco-editor#editor {
 #editor-modal.sidebar-collapsed .splitter-v {
 	display: none;
 }
+.calc {
+	/*Header size*/
+	height: calc(100dvh - 65.328px) !important;
+}
 
 @media (max-width: 768px) {
 	#editor-modal.sidebar-collapsed .sidebar,
@@ -277,6 +281,18 @@ wc-monaco-editor#editor {
 	.toolbar > button,
 	.toolbar > div > button {
 		font-size: larger !important;
+	}
+
+	.toolbar > input {
+		height: 32px;
+	}
+
+	header {
+		display: none !important;
+	}
+
+	.calc {
+		height: 100dvh !important;
 	}
 }
 
@@ -360,9 +376,4 @@ body {
 
 .resizer {
 	background: #252529;
-}
-
-.calc {
-	/*Header size*/
-	height: calc(100dvh - 65.328px) !important;
 }
