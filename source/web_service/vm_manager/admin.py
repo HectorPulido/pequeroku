@@ -22,12 +22,12 @@ class NodeAdmin(admin.ModelAdmin):
             return "-"
 
         node_score = obj.get_node_score()
-        running_nodes = obj.get_running_nodes()
+        running_containers = obj.get_running_containers()
         free_vcpus, free_vram = obj.get_free_resources()
         used_vcpus, used_vram = obj.get_used_resources()
 
         rows = [
-            ("Running nodes", running_nodes),
+            ("Running containers", running_containers),
             ("Node score", node_score),
             ("Used vCPUs", f"{used_vcpus} / {obj.capacity_vcpus}"),
             ("Used VRAM", f"{used_vram}mb / {obj.capacity_mem_mb}mb"),
@@ -47,11 +47,151 @@ class NodeAdmin(admin.ModelAdmin):
 @admin.register(Container)
 class ContainerAdmin(admin.ModelAdmin):
     list_display = ("name", "node", "user", "status", "created_at")
+    readonly_fields = (
+        "ai_logs",
+        "extra_details",
+    )
+
+    @admin.display(description="AI Logs")
+    def ai_logs(self, obj):
+        if not obj:
+            return "-"
+
+        logs = []
+        logs = obj.get_user_ai_logs()
+
+        logs.insert(
+            0,
+            (
+                "query",
+                "response",
+                "created_at",
+            ),
+        )
+        return format_html(
+            '<table style="width:auto" class="adminlist">{}</table>',
+            format_html_join(
+                "",
+                "<tr><th>{}</th><td>{}</td><td>{}</td></tr>",
+                ((query, response, created_at) for query, response, created_at in logs),
+            ),
+        )
+
+    @admin.display(description="Logs")
+    def extra_details(self, obj):
+        if not obj:
+            return "-"
+
+        logs = obj.get_machine_logs()
+        logs.insert(
+            0,
+            (
+                "action",
+                "message",
+                "metadata",
+                "success",
+                "created_at",
+            ),
+        )
+        return format_html(
+            '<table style="width:auto" class="adminlist">{}</table>',
+            format_html_join(
+                "",
+                "<tr><th>{}</th><th>{}</th><td>{}</td><td>{}</td><td>{}</td></tr>",
+                (
+                    (action, message, metadata, success, created_at)
+                    for action, message, metadata, success, created_at in logs
+                ),
+            ),
+        )
+
+
+class ContainersInline(admin.TabularInline):
+    model = Container
+    extra = 1
+    fields = (
+        "node",
+        "name",
+        "memory_mb",
+        "vcpus",
+        "disk_gib",
+        "desired_state",
+        "status",
+    )
+    formfield_overrides = {
+        models.TextField: {
+            "widget": Textarea(attrs={"rows": 18, "style": "font-family: monospace;"})
+        }
+    }
 
 
 @admin.register(ResourceQuota)
 class ResourceQuotaAdmin(admin.ModelAdmin):
     list_display = ("user", "max_containers", "max_memory_mb", "vcpus")
+    readonly_fields = ("logs", "ai_logs")
+    inlines = [ContainersInline]
+
+    @admin.display(description="Logs")
+    def logs(self, obj):
+        if not obj:
+            return "-"
+
+        logs = []
+        try:
+            logs = obj.get_user_logs()
+        except Exception as e:
+            print(e)
+
+        logs.insert(
+            0,
+            (
+                "action",
+                "message",
+                "metadata",
+                "success",
+                "created_at",
+            ),
+        )
+        return format_html(
+            '<table style="width:auto" class="adminlist">{}</table>',
+            format_html_join(
+                "",
+                "<tr><th>{}</th>,<th>{}</th><td>{}</td><td>{}</td><td>{}</td></tr>",
+                (
+                    (action, message, metadata, success, created_at)
+                    for action, message, metadata, success, created_at in logs
+                ),
+            ),
+        )
+
+    @admin.display(description="AI Logs")
+    def ai_logs(self, obj):
+        if not obj:
+            return "-"
+
+        logs = []
+        logs = obj.get_user_ai_logs()
+
+        logs.insert(
+            0,
+            (
+                "query",
+                "response",
+                "container",
+                "created_at",
+            ),
+        )
+        return format_html(
+            '<table style="width:auto" class="adminlist">{}</table>',
+            format_html_join(
+                "",
+                "<tr><th>{}</th><td>{}</td><td>{}</td><td>{}</td></tr>",
+                (
+                    (query, response, container, created_at)
+                    for query, response, container, created_at in logs
+                ),
+            ),
+        )
 
 
 class FileTemplateItemInline(admin.TabularInline):

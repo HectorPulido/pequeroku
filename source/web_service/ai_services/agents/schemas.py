@@ -22,6 +22,7 @@ Tool usage:
 * If debugging/editing use `read_workspace`, `create_file`, `read_file`.
 * Propose sensible file/project structure before creating files.
 * Group changes into a single call. Don’t call the same tool with the same path/task more than once per shift.
+* Remember that exec_command wont give you feedback, so "try > output.txt" to know the result of your command, eg. "echo 'hello world' > log.txt" and then read the log.txt
 
 """.strip()
 

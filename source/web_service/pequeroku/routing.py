@@ -1,7 +1,7 @@
 from django.urls import re_path
-from vm_manager.consumers import ConsoleConsumer
+from vm_manager.console_consumers import ConsoleConsumer
 from vm_manager.editor_consumers import EditorConsumer
-from ai_services.consumers import AIConsumer
+from ai_services.ai_consumers import AIConsumer
 
 websocket_urlpatterns = [
     re_path(r"^ws/containers/(?P<pk>\d+)/$", ConsoleConsumer.as_asgi()),

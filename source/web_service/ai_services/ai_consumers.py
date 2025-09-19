@@ -1,43 +1,20 @@
 from __future__ import annotations
-from django.apps import apps
+from django.db import DatabaseError
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.apps import apps
 
 from internal_config.models import Config
 from .utils import _get_openai_client
 from .agents.agents import DevAgent
+from pequeroku.mixins import ContainerAccessMixin
 
 
-class AIConsumer(AsyncJsonWebsocketConsumer):
+class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
     """Thin WebSocket consumer: authorization, client/model init, streaming.
 
     All agent logic (tool loops, schemas, system prompt) lives in app.agents.*
     """
-
-    @staticmethod
-    @sync_to_async
-    def _get_container(pk: int):
-        container = apps.get_model("vm_manager", "Container")
-
-        container_obj = None
-        try:
-            container_obj = container.objects.get(pk=pk)
-        except container.DoesNotExist:
-            return None
-
-        return container_obj
-
-    @staticmethod
-    @sync_to_async
-    def _user_owns_container(pk: int, user_pk: int) -> bool:
-        user_mod = apps.get_model("auth", "User")
-
-        user = user_mod.objects.get(pk=user_pk)
-        if user.is_superuser:
-            return True
-
-        container = apps.get_model("vm_manager", "Container")
-        return container.objects.filter(pk=pk, user_id=user_pk).exists()
 
     @staticmethod
     @sync_to_async
@@ -51,9 +28,11 @@ class AIConsumer(AsyncJsonWebsocketConsumer):
 
     @staticmethod
     @sync_to_async
-    def _set_quota(user, query: str, response: str):
+    def _set_quota(user, query: str, response: str, container):
         ai_usage_log_model = apps.get_model("internal_config", "AIUsageLog")
-        ai_usage_log_model.objects.create(user=user, query=query, response=response)
+        ai_usage_log_model.objects.create(
+            user=user, query=query, response=response, container=container
+        )
 
     @staticmethod
     @sync_to_async
@@ -62,7 +41,6 @@ class AIConsumer(AsyncJsonWebsocketConsumer):
         memory, created = ai_memory.objects.get_or_create(
             user=user, container=container, defaults={"memory": memory_data}
         )
-
         if not created:
             memory.memory = memory_data
             memory.save()
@@ -136,7 +114,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer):
         self.agent: DevAgent | None = None
         self.user = None
         self.pk = -1
-        self.container = None
+        self.container_obj = None
 
     async def connect(self):
         self.user = self.scope["user"]
@@ -173,7 +151,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=1011)
             return
 
-        self.container_obj = await self._get_container(self.pk)
+        self.container_obj = await self._get_container_simple(self.pk)
         if not self.container_obj:
             await self.close(code=4404)
             return
@@ -263,7 +241,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer):
         await self._set_memory(self.user, self.container_obj, self.messages)
 
         # Set Quota
-        await self._set_quota(self.user, user_text, buffer)
+        await self._set_quota(self.user, user_text, buffer, self.container_obj)
         quota, ai_uses_left_today = await self._get_quota(self.user.pk)
 
         await self.send_json(

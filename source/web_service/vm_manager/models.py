@@ -1,7 +1,9 @@
+from django.db.models import Q
 from django.db import models
 from django.conf import settings
 from django.utils.text import slugify
 from django.utils import timezone
+from django.apps import apps
 
 from namesgenerator import get_random_name
 
@@ -40,11 +42,11 @@ class Node(models.Model):
         """
         Score a feasible node; higher is better.
         """
-        running = self.get_running_nodes()
+        running = self.get_running_containers()
         free_v, free_m = self.get_free_resources()
         return 2.0 * float(free_m) + 1.0 * float(free_v) - 0.5 * float(running)
 
-    def get_running_nodes(self) -> int:
+    def get_running_containers(self) -> int:
         return int(Container.objects.filter(node=self, desired_state="running").count())
 
     def get_free_resources(self):
@@ -115,6 +117,45 @@ class ResourceQuota(models.Model):
     def __str__(self):
         return f"Quota {self.user.username}"
 
+    def get_user_logs(self):
+        AuditLogModel = apps.get_model("internal_config", "AuditLog")
+
+        response = []
+        audit_logs = (
+            AuditLogModel.objects.filter(user=self.user).order_by("-created_at").all()
+        )
+        for audit_log in audit_logs:
+            response.append(
+                (
+                    audit_log.action,
+                    audit_log.message,
+                    audit_log.metadata,
+                    audit_log.success,
+                    audit_log.created_at,
+                )
+            )
+
+        return response
+
+    def get_user_ai_logs(self):
+        AIUsageLogModel = apps.get_model("internal_config", "AIUsageLog")
+
+        response = []
+        audit_logs = (
+            AIUsageLogModel.objects.filter(user=self.user).order_by("-created_at").all()
+        )
+        for audit_log in audit_logs:
+            response.append(
+                (
+                    audit_log.query[:100],
+                    audit_log.response[:100],
+                    audit_log.container,
+                    audit_log.created_at,
+                )
+            )
+
+        return response
+
 
 class FileTemplate(models.Model):
     name = models.CharField(max_length=100, unique=True)
@@ -169,6 +210,13 @@ class Container(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="containers"
     )
+    resource_quota = models.ForeignKey(
+        "ResourceQuota",
+        on_delete=models.CASCADE,
+        related_name="containers",
+        null=True,
+        blank=True,
+    )
     node = models.ForeignKey(
         Node, on_delete=models.CASCADE, related_name="container_node"
     )
@@ -198,10 +246,54 @@ class Container(models.Model):
     )
 
     def save(self, *args, **kwargs):
+        if self.user_id and hasattr(self.user, "quota"):
+            self.resource_quota = self.user.quota
         if not self.name:
             self.name = get_random_name()
-
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.user.username} - {self.name}"
+
+    def get_machine_logs(self):
+        AuditLogModel = apps.get_model("internal_config", "AuditLog")
+
+        response = []
+        audit_logs = (
+            AuditLogModel.objects.filter(
+                Q(target_type="container"),
+                Q(target_id=self.pk) | Q(target_id=self.container_id),
+            )
+            .order_by("-created_at")
+            .all()
+        )
+        for audit_log in audit_logs:
+            response.append(
+                (
+                    audit_log.action,
+                    audit_log.message,
+                    audit_log.metadata,
+                    audit_log.success,
+                    audit_log.created_at,
+                )
+            )
+
+        return response
+
+    def get_user_ai_logs(self):
+        AIUsageLogModel = apps.get_model("internal_config", "AIUsageLog")
+
+        response = []
+        audit_logs = (
+            AIUsageLogModel.objects.filter(container=self).order_by("-created_at").all()
+        )
+        for audit_log in audit_logs:
+            response.append(
+                (
+                    audit_log.query[:100],
+                    audit_log.response[:100],
+                    audit_log.created_at,
+                )
+            )
+
+        return response

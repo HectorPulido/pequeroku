@@ -7,6 +7,13 @@ class AIUsageLog(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ai_usage_logs"
     )
+    container = models.ForeignKey(
+        Container,
+        on_delete=models.CASCADE,
+        related_name="r_container",
+        null=True,
+        blank=True,
+    )
     query = models.TextField(blank=True, default="")
     response = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)

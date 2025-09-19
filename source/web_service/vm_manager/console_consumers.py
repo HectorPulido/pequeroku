@@ -1,78 +1,32 @@
-import json
 import asyncio
 import contextlib
-from asyncio.events import AbstractEventLoop
 from typing import Optional
-
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
 import websockets
-from django.apps import apps
 from django.db import DatabaseError
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
-from internal_config.audit import audit_log_ws
-
-from asgiref.sync import sync_to_async
+from pequeroku.mixins import ContainerAccessMixin, AuditMixin
 
 
-class ConsoleConsumer(AsyncJsonWebsocketConsumer):
+class ConsoleConsumer(
+    AsyncJsonWebsocketConsumer,
+    ContainerAccessMixin,
+    AuditMixin,
+):
     """
     Client <-> Django <-> FastAPI
     """
 
-    @staticmethod
-    @sync_to_async
-    def _user_owns_container(pk: int, user_pk: int) -> bool:
-        user_mod = apps.get_model("auth", "User")
-
-        user = user_mod.objects.get(pk=user_pk)
-        if user.is_superuser:
-            return True
-
-        container = apps.get_model("vm_manager", "Container")
-        return container.objects.filter(pk=pk, user_id=user_pk).exists()
-
-    def _ws_client_ip(self, scope) -> str:
-        try:
-            return scope.get("client", [None])[0] or ""
-        except Exception:
-            return ""
-
-    def _ws_user_agent(self, scope) -> str:
-        try:
-            for k, v in scope.get("headers", []):
-                if k == b"user-agent":
-                    return v.decode("utf-8", "ignore")
-        except Exception:
-            pass
-        return ""
-
-    async def _send_json(self, obj: dict):
-        """
-        Consistent JSON writer; ensures ascii is not forced.
-        """
-        await self.send(text_data=json.dumps(obj, ensure_ascii=False))
-
-    @staticmethod
-    @sync_to_async
-    def _get_container(pk: int):
-        container = apps.get_model("vm_manager", "Container")
-
-        container_obj = None
-        try:
-            container_obj = container.objects.get(pk=pk)
-        except container.DoesNotExist:
-            return None
-
-        return container_obj, container_obj.node
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.pk: int = -1
-        self.loop: Optional[AbstractEventLoop] = None
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.session = None
+        self.user = None
 
     async def connect(self):
-        if self.scope["user"].is_anonymous:
+        self.user = self.scope["user"]
+        if self.user.is_anonymous:
             await self.close(code=4401)
             return
 
@@ -80,13 +34,11 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         self.loop = asyncio.get_running_loop()
 
         try:
-            allowed = await self._user_owns_container(self.pk, self.scope["user"].pk)
+            allowed = await self._user_owns_container(self.pk, self.user.pk)
             if not allowed:
-                await audit_log_ws(
+                await self.audit_ws(
                     action="ws.connect",
-                    user=self.scope["user"],
-                    ip=self._ws_client_ip(self.scope),
-                    user_agent=self._ws_user_agent(self.scope),
+                    user=self.user,
                     target_type="container",
                     target_id=str(self.pk),
                     message="Unauthorized WebSocket connect attempt",
@@ -100,22 +52,20 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
 
         await self.accept()
 
-        container_obj, node = await self._get_container(self.pk)
+        container_obj, node = await self._get_container_with_node(self.pk)
         if not container_obj or not node:
-            await audit_log_ws(
+            await self.audit_ws(
                 action="ws.connect",
-                user=self.scope["user"],
-                ip=self._ws_client_ip(self.scope),
-                user_agent=self._ws_user_agent(self.scope),
+                user=self.user,
                 target_type="container",
                 target_id=str(self.pk),
                 message="WebSocket connect failed: container not found",
-                success=False,
+                success=True,
             )
             await self.close(code=4404)
             return
 
-        await self._send_json({"type": "info", "message": "Connected"})
+        await self.send_json_safe({"type": "info", "message": "Connected"})
 
         container_node_host: str = node.node_host
         container_node_host = container_node_host.replace("http://", "ws://")
@@ -158,6 +108,16 @@ class ConsoleConsumer(AsyncJsonWebsocketConsumer):
         if text_data is not None:
             if not text_data.endswith("\n"):
                 text_data += "\n"
+
+            await self.audit_ws(
+                action="ws.cmd",
+                user=self.user,
+                target_type="container",
+                target_id=str(self.pk),
+                message=text_data,
+                success=True,
+            )
+
             try:
                 await self.upstream.send(text_data)
             except Exception as e:

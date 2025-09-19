@@ -2,22 +2,24 @@ from __future__ import annotations
 import shlex
 import re
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from django.apps import apps
 from django.db import DatabaseError
 from asgiref.sync import sync_to_async
 
-from internal_config.audit import audit_log_ws  # TODO
+from pequeroku.mixins import ContainerAccessMixin, AuditMixin
 from pequeroku.redis import VersionStore
 from .vm_client import VMServiceClient, VMUploadFiles, VMFile
 from .models import Container
-
 from .templates import first_start_of_container
 
 SAFE_ROOT = "/app"
 _path_norm = lambda p: re.sub(r"/+", "/", p or "").rstrip("/") or "/"
 
 
-class EditorConsumer(AsyncJsonWebsocketConsumer):
+class EditorConsumer(
+    AsyncJsonWebsocketConsumer,
+    ContainerAccessMixin,
+    AuditMixin,
+):
     async def _bump_rev(self, cid: str, p: str) -> int:
         return await VersionStore.bump_rev(cid=cid, path=p)
 
@@ -25,30 +27,14 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
         return await VersionStore.get_rev(cid=cid, path=p)
 
     @sync_to_async
-    def _first_start_of_container(
-        self,
-    ):
+    def _first_start_of_container(self):
         first_start_of_container(self.container)
 
-    @staticmethod
-    @sync_to_async
-    def _user_owns_container(pk: int, user_pk: int) -> bool:
-        User = apps.get_model("auth", "User")
-        user = User.objects.get(pk=user_pk)
-        if user.is_superuser:
-            return True
-        ContainerM = apps.get_model("vm_manager", "Container")
-        return ContainerM.objects.filter(pk=pk, user_id=user_pk).exists()
-
-    @staticmethod
-    @sync_to_async
-    def _get_container(pk: int):
-        ContainerM = apps.get_model("vm_manager", "Container")
-        try:
-            obj = ContainerM.objects.select_related("node").get(pk=pk)
-            return obj, obj.node
-        except ContainerM.DoesNotExist:
-            return None, None
+    def _check_path(self, p: str) -> str:
+        p = _path_norm(p)
+        if not p.startswith(SAFE_ROOT):
+            raise ValueError("path must be under /app")
+        return p
 
     @sync_to_async
     def _service(self, container: Container) -> VMServiceClient:
@@ -57,20 +43,24 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
     def _group_name(self, pk: int) -> str:
         return f"container-fs-{pk}"
 
-    def _check_path(self, p: str) -> str:
-        p = _path_norm(p)
-        if not p.startswith(SAFE_ROOT):
-            raise ValueError("path must be under /app")
-        return p
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.pk: int = -1
+        self.user = None
+        self.container = None
+        self.node = None
+        self.client = None
+        self.container_id = ""
 
     async def connect(self):
-        if self.scope["user"].is_anonymous:
+        self.user = self.scope["user"]
+        if self.user.is_anonymous:
             await self.close(code=4401)
             return
 
         self.pk = int(self.scope["url_route"]["kwargs"]["pk"])
         try:
-            allowed = await self._user_owns_container(self.pk, self.scope["user"].pk)
+            allowed = await self._user_owns_container(self.pk, self.user.pk)
             if not allowed:
                 await self.close(code=4403)
                 return
@@ -79,7 +69,9 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
             return
 
         await self.accept()
-        self.container, self.node = await self._get_container(self.pk)
+        self.container, self.node = await self._get_container_with_node(
+            self.pk, use_select_related=True
+        )
         if not self.container:
             await self.close(code=4404)
             return
@@ -141,7 +133,8 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
                 "data": {"entries": data, "path": path},
             }
         )
-        await audit_log_ws(
+        await self.audit_ws(
+            user=self.user,
             action="container.list_dir",
             target_type="container",
             target_id=self.container_id,
@@ -157,7 +150,8 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
         data["rev"] = await self._get_rev(self.container_id, path)
         await self.send_json({"event": "ok", "req_id": req_id, "data": data})
 
-        await audit_log_ws(
+        await self.audit_ws(
+            user=self.user,
             action="container.read_file",
             target_type="container",
             target_id=self.container_id,
@@ -185,7 +179,8 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
         )
         await self.send_json({"event": "ok", "req_id": req_id})
 
-        await audit_log_ws(
+        await self.audit_ws(
+            user=self.user,
             action="container.create_dir",
             target_type="container",
             target_id=self.container_id,
@@ -233,7 +228,8 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
         )
         await self.send_json({"event": "ok", "req_id": req_id, "rev": r})
 
-        await audit_log_ws(
+        await self.audit_ws(
+            user=self.user,
             action="container.write_file",
             target_type="container",
             target_id=self.container_id,
@@ -243,31 +239,32 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
         )
 
     async def _handle_move_path(self, content, req_id):
-        src = self._check_path(content["src"])
-        dst = self._check_path(content["dst"])
-        cmd = f"set -e; mv -f {shlex.quote(src)} {shlex.quote(dst)}"
+        path_src = self._check_path(content["src"])
+        path_dst = self._check_path(content["dst"])
+        cmd = f"set -e; mv -f {shlex.quote(path_src)} {shlex.quote(path_dst)}"
         resp = self.client.execute_sh(self.container_id, cmd)
-        r = await self._bump_rev(self.container_id, dst)
+        r = await self._bump_rev(self.container_id, path_dst)
         await self.channel_layer.group_send(
             self._group_name(self.pk),
             {
                 "type": "ws.broadcast",
                 "payload": {
                     "event": "path_moved",
-                    "src": src,
-                    "dst": dst,
+                    "src": path_src,
+                    "dst": path_dst,
                     "rev": r,
                 },
             },
         )
         await self.send_json({"event": "ok", "req_id": req_id, "rev": r})
 
-        await audit_log_ws(
+        await self.audit_ws(
+            user=self.user,
             action="container.change_path",
             target_type="container",
             target_id=self.container_id,
             message="Deletion success",
-            metadata={"src": src, "dest": dst, "response": resp},
+            metadata={"src": path_src, "dest": path_dst, "response": resp},
             success=True,
         )
 
@@ -286,7 +283,8 @@ class EditorConsumer(AsyncJsonWebsocketConsumer):
         )
         await self.send_json({"event": "ok", "req_id": req_id, "rev": r})
 
-        await audit_log_ws(
+        await self.audit_ws(
+            user=self.user,
             action="container.delete_file",
             target_type="container",
             target_id=self.container_id,
