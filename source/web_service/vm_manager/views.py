@@ -4,7 +4,6 @@ from dataclasses import asdict
 
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout
@@ -23,7 +22,7 @@ from .serializers import (
     ApplyTemplateRequestSerializer,
     ApplyTemplateResponseSerializer,
 )
-from .models import Container, Node, FileTemplate
+from .models import Container, FileTemplate
 from .vm_client import VMServiceClient, VMCreate, VMAction, VMUploadFiles, VMFile
 
 from .templates import (
@@ -39,11 +38,15 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
     queryset = Container.objects.all()
 
     def get_queryset(self):
-        qs = super().get_queryset().select_related("node")
         user = self.request.user
+
+        if not user.is_authenticated:
+            return Container.objects.none()
+
         if user.is_superuser:
-            return qs
-        return qs.filter(user=user)
+            return super().get_queryset().select_related("node")
+
+        return Container.visible_containers_for(user)
 
     def list(self, request, *args, **kwargs):
         """
@@ -76,8 +79,7 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
-        # Quota check
-        quota = getattr(request.user, "quota", None)
+        quota = self._check_quota(request)
         if not quota:
             audit_log_http(
                 request,
@@ -102,6 +104,9 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         node = self.choose_node(quota.vcpus, quota.max_memory_mb)
 
         if not node:
+            print(
+                f"quota.vcpus: {quota.vcpus}, quota.max_memory_mb: {quota.max_memory_mb}"
+            )
             return Response(
                 {"error": "No available nodes with enough capacity"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -142,6 +147,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
     def destroy(self, request, *args, **kwargs):
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
         obj = self.get_object()
         service = self._get_service(obj)
         try:
@@ -163,6 +172,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
     def upload_file(self, request, pk=None):
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
         f = request.FILES.get("file")
         dest = request.data.get("dest_path", "/app")
         obj: Container = self.get_object()
@@ -214,6 +227,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["get"])
     def statistics(self, request, pk=None):
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
         obj: Container = self.get_object()
         if obj.status != "running":
             return Response({"error": "VM off"}, status=400)
@@ -224,6 +241,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["post"])
     def power_on(self, request, pk=None):
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
         obj: Container = self.get_object()
         service = self._get_service(obj)
         service.action_vm(
@@ -242,6 +263,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["post"])
     def power_off(self, request, pk=None):
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
         obj: Container = self.get_object()
         service = self._get_service(obj)
         service.action_vm(
@@ -260,6 +285,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["post"])
     def restart_container(self, request, pk=None):
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
         obj: Container = self.get_object()
         service = self._get_service(obj)
         service.action_vm(
@@ -278,6 +307,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["get"])
     def download_file(self, request, pk=None):
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
         obj: Container = self.get_object()
         path = request.query_params.get("path")
         if not path:
@@ -304,6 +337,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["get"])
     def download_folder(self, request, pk=None):
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
         obj: Container = self.get_object()
         root = request.query_params.get("root", "/app")
         prefer_fmt = request.query_params.get("prefer_fmt", "zip")

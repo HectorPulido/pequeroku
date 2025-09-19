@@ -48,7 +48,7 @@ class ContainerAccessMixin:
         if user.is_superuser:
             return True
         Container = apps.get_model("vm_manager", "Container")
-        return Container.objects.filter(pk=pk, user_id=user_pk).exists()
+        return Container.can_view_container(user, pk=pk)
 
     @staticmethod
     @sync_to_async

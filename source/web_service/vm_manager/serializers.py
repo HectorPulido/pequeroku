@@ -61,6 +61,7 @@ class ResourceQuotaSerializer(serializers.ModelSerializer):
             "vcpus",
             "ai_use_per_day",
             "ai_uses_left_today",
+            "active",
         )
 
     def get_ai_uses_left_today(self, obj) -> int:

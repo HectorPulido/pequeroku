@@ -185,9 +185,19 @@ class Command(BaseCommand):
             action="store_true",
             help="Only compute and print plan; do not send actions or update DB.",
         )
+        parser.add_argument(
+            "--container-ids",
+            dest="container_ids",
+            help="Only reconcile the specified container_id",
+        )
 
     def handle(self, *args, **options):
         dry_run = bool(options.get("dry_run"))
+        container_ids = []
+        try:
+            container_ids = options.get("container_ids", "").split(",")
+        except:
+            ...
 
         reconciler = Reconciler(self.stdout, self.stderr)
 
@@ -222,6 +232,27 @@ class Command(BaseCommand):
 
             reconciler._sync_statuses = _dry_sync  # type: ignore
             reconciler.reconcile_batch = _dry_reconcile  # type: ignore
+
+        if len(container_ids) > 0:
+            try:
+                obj = Container.objects.select_related("node", "user").get(
+                    pk__in=container_ids
+                )
+            except Container.DoesNotExist:
+                self.stderr.write(
+                    self.style.ERROR(
+                        f"[reconciler] container {container_ids} not found"
+                    )
+                )
+                return
+            actions_total, updated_total = reconciler.reconcile_batch([obj])
+            batches = 1
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"[reconciler] container_id={container_ids} batches={batches} actions={actions_total} local_updates={updated_total}"
+                )
+            )
+            return
 
         batches, actions_total, updated_total = reconciler.reconcile_once()
 

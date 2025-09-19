@@ -8,7 +8,32 @@ from .models import (
     FileTemplate,
     FileTemplateItem,
     Node,
+    Team,
+    TeamMembership,
 )
+
+
+class TeamMembershipItemInline(admin.TabularInline):
+    model = TeamMembership
+    extra = 1
+    fields = ("user", "team", "role", "active")
+    readonly_fields = ("joined_at",)
+    formfield_overrides = {
+        models.TextField: {
+            "widget": Textarea(attrs={"rows": 18, "style": "font-family: monospace;"})
+        }
+    }
+
+
+@admin.register(Team)
+class TeamAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "slug",
+        "owner",
+        "created_at",
+    )
+    inlines = [TeamMembershipItemInline]
 
 
 @admin.register(Node)

@@ -91,12 +91,6 @@ class RedisStore:
             self.set_status(
                 vm, VMState.stopped, error_reason="reconciled: ssh port not reachable"
             )
-        elif vm.state == VMState.provisioning:
-            age = time.time() - vm.booted_at
-            if age > self.provisioning_grace_s and not self._ssh_alive(vm.ssh_port):
-                self.set_status(
-                    vm, VMState.stopped, error_reason="provisioning-timeout"
-                )
         return vm
 
     # ---- API compatible ----

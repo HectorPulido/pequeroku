@@ -1,3 +1,4 @@
+from __future__ import annotations
 from django.db.models import Q
 from django.db import models
 from django.conf import settings
@@ -6,6 +7,8 @@ from django.utils import timezone
 from django.apps import apps
 
 from namesgenerator import get_random_name
+
+User = settings.AUTH_USER_MODEL
 
 
 class Node(models.Model):
@@ -49,7 +52,7 @@ class Node(models.Model):
     def get_running_containers(self) -> int:
         return int(Container.objects.filter(node=self, desired_state="running").count())
 
-    def get_free_resources(self):
+    def get_free_resources(self) -> tuple[int, int]:
         used_vcpus, used_vram = self.get_used_resources()
 
         free_v = max(int(self.capacity_vcpus) - used_vcpus, 0)
@@ -57,15 +60,15 @@ class Node(models.Model):
 
         return free_v, free_m
 
-    def get_used_resources(self):
+    def get_used_resources(self) -> tuple[int, int]:
         vcpus = 0
         vram = 0
 
         containers = Container.objects.filter(node=self, desired_state="running").all()
 
         for container in containers:
-            vcpus += container.vcpus
-            vram += container.memory_mb
+            vcpus += int(container.vcpus)
+            vram += int(container.memory_mb)
 
         return vcpus, vram
 
@@ -83,7 +86,7 @@ class Node(models.Model):
 
 class ResourceQuota(models.Model):
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
+        User,
         on_delete=models.CASCADE,
         related_name="quota",
         help_text="Resource quota user",
@@ -103,10 +106,25 @@ class ResourceQuota(models.Model):
     default_disk_gib = models.PositiveIntegerField(
         default=10, help_text="Max disk in gb"
     )
+    active = models.BooleanField(default=True)
+
+    def save(self, *args, **kwargs):
+        if not self.active:
+            from django.core.management import call_command
+
+            queryset = Container.objects.filter(resource_quota=self)
+            queryset.update(desired_state="stopped")
+
+            ids = ",".join([str(pk) for pk in queryset.values_list("pk", flat=True)])
+            call_command("reconcile_containers", container_ids=ids)
+        super().save(*args, **kwargs)
 
     def can_create_container(self, user) -> bool:
-        active = Container.objects.filter(user=user).count()
-        return self.max_containers > active
+        if not self.active:
+            return False
+
+        active_vms = Container.objects.filter(user=user).count()
+        return self.max_containers > active_vms
 
     def ai_uses_left_today(self) -> int:
         """Get the ai uses left for today"""
@@ -197,19 +215,18 @@ class FileTemplateItem(models.Model):
 
 
 class Container(models.Model):
-    CONTAINER_STATUS = [
-        ("created", "created"),
-        ("provisioning", "provisioning"),
-        ("running", "running"),
-        ("stopped", "stopped"),
-        ("error", "error"),
-    ]
+    class Status(models.TextChoices):
+        CREATED = "created", "created"
+        PROVISIONING = "provisioning", "provisioning"
+        RUNNING = "running", "running"
+        STOPPED = "stopped", "stopped"
+        ERROR = "error", "error"
 
-    DESIRABLE_STATUS = [("running", "running"), ("stopped", "stopped")]
+    class DesirableStatus(models.TextChoices):
+        RUNNING = "running", "running"
+        STOPPED = "stopped", "stopped"
 
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="containers"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="containers")
     resource_quota = models.ForeignKey(
         "ResourceQuota",
         on_delete=models.CASCADE,
@@ -230,19 +247,19 @@ class Container(models.Model):
     vcpus = models.PositiveIntegerField(default=2, help_text="CPU for the container")
     disk_gib = models.PositiveIntegerField(default=10, help_text="disk in gb")
 
-    desired_state = models.CharField(
-        max_length=16,
-        default="running",
-        choices=DESIRABLE_STATUS,
-        help_text="Desired state for reconciliation",
-    )
-
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(
         max_length=32,
-        default="created",
-        choices=CONTAINER_STATUS,
+        default=Status.CREATED,
+        choices=Status.choices,
         help_text="Current status",
+    )
+
+    desired_state = models.CharField(
+        max_length=16,
+        default=DesirableStatus.RUNNING,
+        choices=DesirableStatus.choices,
+        help_text="Desired state for reconciliation",
     )
 
     def save(self, *args, **kwargs):
@@ -254,6 +271,36 @@ class Container(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.name}"
+
+    @staticmethod
+    def visible_containers_for(user):
+        return (
+            Container.objects.filter(
+                Q(user=user)
+                | Q(
+                    user__team_memberships__team__memberships__user=user,
+                    user__team_memberships__active=True,
+                    user__team_memberships__team__memberships__active=True,
+                )
+            )
+            .select_related("user", "resource_quota")
+            .distinct()
+        )
+
+    @staticmethod
+    def can_view_container(
+        user, container: "Container" | None = None, pk: int | None = None
+    ) -> bool:
+        if container:
+            return (
+                Container.visible_containers_for(user).filter(pk=container.pk).exists()
+            )
+
+        if pk:
+            return Container.visible_containers_for(user).filter(pk=pk).exists()
+
+        print("No container o PK provided...")
+        return False
 
     def get_machine_logs(self):
         AuditLogModel = apps.get_model("internal_config", "AuditLog")
@@ -297,3 +344,66 @@ class Container(models.Model):
             )
 
         return response
+
+
+class Team(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    slug = models.SlugField(max_length=140, unique=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    owner = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="owned_teams"
+    )
+    active = models.BooleanField(default=True)
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)[:120]
+
+        super().save(*args, **kwargs)
+
+        TeamMembership.objects.update_or_create(
+            user=self.owner,
+            team=self,
+            defaults={
+                "role": TeamMembership.Role.ADMIN,
+                "active": True,
+            },
+        )
+
+        # If team is deactivate shut down all the memberships
+        if self.active is False:
+            TeamMembership.objects.filter(team=self).exclude(active=False).update(
+                active=False
+            )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class TeamMembership(models.Model):
+    class Role(models.TextChoices):
+        MEMBER = "member", "Member"
+        ADMIN = "admin", "Admin"
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="team_memberships",
+    )
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="memberships")
+    role = models.CharField(max_length=12, choices=Role.choices, default=Role.MEMBER)
+    joined_at = models.DateTimeField(auto_now_add=True)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("user", "team")
+        indexes = [
+            models.Index(fields=["user", "team"]),
+            models.Index(fields=["team", "active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user} in {self.team} ({self.role})"

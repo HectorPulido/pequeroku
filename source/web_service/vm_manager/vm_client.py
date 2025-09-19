@@ -3,7 +3,7 @@ from __future__ import annotations
 import requests
 from django.utils import timezone
 from dataclasses import dataclass, asdict
-from typing import List, Literal, Optional, Dict, Any
+from typing import Literal, Any
 
 from .models import Node
 
@@ -20,8 +20,8 @@ class VMCreate:
     vcpus: int
     mem_mib: int
     disk_gib: int
-    base_image: Optional[str] = None
-    timeout_boot_s: Optional[int] = None
+    base_image: str | None = None
+    timeout_boot_s: int | None = None
 
 
 @dataclass
@@ -29,7 +29,7 @@ class VMAction:
     """Payload para acciones sobre una VM."""
 
     action: VMActionType
-    cleanup_disks: Optional[bool] = False
+    cleanup_disks: bool | None = False
 
 
 @dataclass
@@ -50,17 +50,17 @@ class VMFile:
 
     mode: int = 0o644
     path: str = "/"
-    text: Optional[str] = ""
-    content_b64: Optional[str] = ""
+    text: str | None = ""
+    content_b64: str | None = ""
 
 
 @dataclass
 class VMUploadFiles:
     """Payload para subir múltiples archivos a la VM."""
 
-    files: List[VMFile]
-    dest_path: Optional[str] = "/app"
-    clean: Optional[bool] = False
+    files: list[VMFile]
+    dest_path: str | None = "/app"
+    clean: bool | None = False
 
 
 class VMServiceClient:
@@ -72,16 +72,16 @@ class VMServiceClient:
         self,
         node: Node,
         timeout: float = 30.0,
-        session: Optional[requests.Session] = None,
-        extra_headers: Optional[Dict[str, str]] = None,
+        session: requests.Session | None = None,
+        extra_headers: dict[str, str] | None = None,
         blocking: bool = False,
     ) -> None:
-        self.blocking = blocking
-        self.node = node
-        self.base_url = str(node.node_host).rstrip("/")
-        self.timeout = timeout
-        self.session = session or requests.Session()
-        self.headers = {
+        self.blocking: bool = blocking
+        self.node: Node = node
+        self.base_url: str = str(node.node_host).rstrip("/")
+        self.timeout: float = timeout
+        self.session: requests.Session = session or requests.Session()
+        self.headers: dict[str, str] = {
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
@@ -140,14 +140,14 @@ class VMServiceClient:
         )
         return resp
 
-    def list_vms(self) -> List[Dict[str, Any]]:
+    def list_vms(self) -> list[dict[str, Any]]:
         """GET /vms — Lista todas las VMs."""
         resp = self.session.get(
             self._url("/vms"), headers=self.headers, timeout=self.timeout
         )
         return self._handle(resp)
 
-    def create_vm(self, payload: VMCreate) -> Dict[str, Any]:
+    def create_vm(self, payload: VMCreate) -> dict[str, Any]:
         """POST /vms — Crea una VM."""
         data = {k: v for k, v in asdict(payload).items() if v is not None}
         resp = self.session.post(
@@ -155,7 +155,7 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def get_vms(self, vm_ids: list[str]) -> Dict[str, Any]:
+    def get_vms(self, vm_ids: list[str]) -> dict[str, Any]:
         """GET /vms/list/{vm_ids}"""
         query = ",".join(vm_ids)
         resp = self.session.get(
@@ -163,21 +163,21 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def get_vm(self, vm_id: str) -> Dict[str, Any]:
+    def get_vm(self, vm_id: str) -> dict[str, Any]:
         """GET /vms/{vm_id} — Obtiene una VM por id."""
         resp = self.session.get(
             self._url(f"/vms/{vm_id}"), headers=self.headers, timeout=self.timeout
         )
         return self._handle(resp)
 
-    def delete_vm(self, vm_id: str) -> Dict[str, Any]:
+    def delete_vm(self, vm_id: str) -> dict[str, Any]:
         """DELETE /vms/{vm_id} — Elimina (o apaga y borra) una VM."""
         resp = self.session.delete(
             self._url(f"/vms/{vm_id}"), headers=self.headers, timeout=self.timeout
         )
         return self._handle(resp)
 
-    def action_vm(self, vm_id: str, action: VMAction) -> Dict[str, Any]:
+    def action_vm(self, vm_id: str, action: VMAction) -> dict[str, Any]:
         """POST /vms/{vm_id}/actions — Ejecuta acción (start/stop/reboot)."""
         data = {k: v for k, v in asdict(action).items() if v is not None}
         resp = self.session.post(
@@ -188,7 +188,7 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def upload_files(self, vm_id: str, payload: VMUploadFiles) -> Dict[str, Any]:
+    def upload_files(self, vm_id: str, payload: VMUploadFiles) -> dict[str, Any]:
         """POST /vms/{vm_id}/upload-files — Sube archivos de texto a la VM."""
 
         data = asdict(payload)
@@ -200,7 +200,7 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def upload_files_blob(self, vm_id: str, payload: dict) -> Dict[str, Any]:
+    def upload_files_blob(self, vm_id: str, payload: dict) -> dict[str, Any]:
         """POST /vms/{vm_id}/upload-files — Sube archivos de texto a la VM."""
 
         resp = self.session.post(
@@ -211,7 +211,7 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def list_dir(self, vm_id: str, path: VMPath | str = "/") -> List[Dict[str, Any]]:
+    def list_dir(self, vm_id: str, path: VMPath | str = "/") -> list[dict[str, Any]]:
         """POST /vms/{vm_id}/list-dir — Lista archivos/directorios en 'path'."""
         p = {"path": path} if isinstance(path, str) else asdict(path)
         resp = self.session.post(
@@ -222,7 +222,7 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def read_file(self, vm_id: str, path: VMPath | str) -> Dict[str, Any]:
+    def read_file(self, vm_id: str, path: VMPath | str) -> dict[str, Any]:
         """POST /vms/{vm_id}/read-file — Lee un archivo y devuelve su contenido."""
         p = {"path": path} if isinstance(path, str) else asdict(path)
         resp = self.session.post(
@@ -233,7 +233,7 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def create_dir(self, vm_id: str, path: VMPath | str) -> Dict[str, Any]:
+    def create_dir(self, vm_id: str, path: VMPath | str) -> dict[str, Any]:
         """POST /vms/{vm_id}/create-dir — Crea un directorio."""
         p = {"path": path} if isinstance(path, str) else asdict(path)
         resp = self.session.post(
@@ -264,7 +264,7 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def execute_sh(self, vm_id: str, vm_command: str) -> Dict[str, Any]:
+    def execute_sh(self, vm_id: str, vm_command: str) -> dict[str, Any]:
         """POST /vms/{vm_id}/execute-sh"""
         p = {"command": vm_command}
         resp = self.session.post(

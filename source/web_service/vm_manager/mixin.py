@@ -1,18 +1,18 @@
 from collections import defaultdict
-from typing import Dict, Iterable, List, Any, Optional
+from typing import Iterable, Any
 
 from datetime import timedelta
 from django.utils import timezone
 
-from .models import Container, Node
+from .models import Container, Node, ResourceQuota
 from .vm_client import VMServiceClient
 
 
 class VMSyncMixin:
-    BATCH_SIZE = 100
+    BATCH_SIZE: int = 100
 
     # Scheduler helpers
-    def _candidate_nodes(self, heartbeat_ttl_s: int = 60) -> List[Node]:
+    def _candidate_nodes(self, heartbeat_ttl_s: int = 60) -> list[Node]:
         """
         Return active nodes with a recent heartbeat.
         """
@@ -25,13 +25,13 @@ class VMSyncMixin:
         self,
         needed_vcpus: int,
         needed_mem_mb: int,
-        heartbeat_ttl_s: int = 60,
-    ) -> Optional[Node]:
+        heartbeat_ttl_s: int = 3600,
+    ) -> Node | None:
         """
         Choose the best node by capacity and recent heartbeat. Returns None if no feasible node.
         """
         candidates = self._candidate_nodes(heartbeat_ttl_s)
-        best: Optional[Node] = None
+        best: Node | None = None
         best_score = float("-inf")
         for n in candidates:
             free_v, free_m = n.get_free_resources()
@@ -43,13 +43,13 @@ class VMSyncMixin:
                 best_score = score
         return best
 
-    def _group_by_node(self, objs: Iterable) -> Dict[Node, List]:
-        groups: Dict[Node, List] = defaultdict(list)
+    def _group_by_node(self, objs: Iterable) -> dict[Node, list]:
+        groups: dict[Node, list] = defaultdict(list)
         for obj in objs:
             groups[obj.node].append(obj)
         return groups
 
-    def _index_vms_by_id(self, payload: Any) -> Dict[str, Dict[str, Any]]:
+    def _index_vms_by_id(self, payload: Any) -> dict[str, dict[str, Any]]:
         if isinstance(payload, dict):
             if payload and all(isinstance(k, str) for k in payload.keys()):
                 return payload
@@ -61,17 +61,17 @@ class VMSyncMixin:
             return {str(vm.get("id") or vm.get("vm_id")): vm for vm in payload}
         return {}
 
-    def _batched(self, seq: List[str], size: int) -> Iterable[List[str]]:
+    def _batched(self, seq: list[str], size: int) -> Iterable[list[str]]:
         for i in range(0, len(seq), size):
             yield seq[i : i + size]
 
     def _fetch_states(
-        self, service: VMServiceClient, vm_ids: List[str], batch_size: int
-    ) -> Dict[str, str]:
+        self, service: VMServiceClient, vm_ids: list[str], batch_size: int
+    ) -> dict[str, str]:
         """
         Return {vm_id: state}; if a batch fails, mark that as "error"
         """
-        states: Dict[str, str] = {}
+        states: dict[str, str] = {}
         for chunk in self._batched(vm_ids, batch_size):
             try:
                 resp = service.get_vms(chunk)
@@ -83,14 +83,14 @@ class VMSyncMixin:
                     states[vm_id] = "error"
         return states
 
-    def _sync_statuses(self, objs: List) -> List:
+    def _sync_statuses(self, objs: list) -> list:
         """
         Sync states and return modified objects
         """
-        changed: List = []
+        changed: list = []
         groups = self._group_by_node(objs)
 
-        clients: Dict[Node, VMServiceClient] = {
+        clients: dict[Node, VMServiceClient] = {
             creds: self._get_service_by_node(creds) for creds in groups.keys()
         }
 
@@ -110,6 +110,16 @@ class VMSyncMixin:
                     changed.append(o)
 
         return changed
+
+    def _check_quota(self, request) -> ResourceQuota | None:
+        quota = getattr(request.user, "quota", None)
+        if not quota:
+            return None
+
+        if not quota.active:
+            return None
+
+        return quota
 
     def _get_service_by_node(self, node: Node) -> VMServiceClient:
         return VMServiceClient(node, blocking=True)
