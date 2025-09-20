@@ -49,7 +49,7 @@ branch = true
 source = ["vm_manager", "ai_services", "internal_config", "pequeroku"]
 
 [tool.coverage.report]
-fail_under = 45
+fail_under = 55
 show_missing = true
 skip_covered = true
 exclude_lines = [

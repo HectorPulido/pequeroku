@@ -1,14 +1,8 @@
 import pytest
-from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from vm_manager.models import (
-    Node,
-    Container,
-    FileTemplate,
-    FileTemplateItem,
-)
+from vm_manager.models import FileTemplate, FileTemplateItem
 
 from vm_manager.test_utils import create_user, create_node, create_container
 

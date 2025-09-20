@@ -1,5 +1,4 @@
 import io
-from datetime import timedelta
 from unittest.mock import Mock
 
 import pytest

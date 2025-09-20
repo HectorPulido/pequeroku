@@ -1,7 +1,5 @@
 import pytest
 import requests
-from django.utils import timezone
-from django.contrib.auth import get_user_model
 
 from vm_manager.vm_client import (
     VMServiceClient,
@@ -10,12 +8,9 @@ from vm_manager.vm_client import (
     VMUploadFiles,
     VMFile,
 )
-from vm_manager.models import Node
 from vm_manager.test_utils import create_node
 
 pytestmark = pytest.mark.django_db
-
-User = get_user_model()
 
 
 class FakeResponse:

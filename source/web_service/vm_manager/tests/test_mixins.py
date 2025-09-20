@@ -7,7 +7,6 @@ from vm_manager.models import Node, Container
 
 from vm_manager.test_utils import create_quota, create_user
 
-
 pytestmark = pytest.mark.django_db
 
 call_recorder = []

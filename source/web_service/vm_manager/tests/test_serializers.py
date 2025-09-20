@@ -1,7 +1,6 @@
 import pytest
 
 from vm_manager.models import (
-    Node,
     Container,
     ResourceQuota,
     FileTemplate,
