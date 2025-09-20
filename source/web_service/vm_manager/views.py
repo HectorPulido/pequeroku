@@ -419,6 +419,7 @@ class UserViewSet(viewsets.ViewSet):
         detail=False,
         methods=["post"],
         url_path="login",
+        url_name="login",
         authentication_classes=[],
         permission_classes=[],
     )
@@ -454,6 +455,7 @@ class UserViewSet(viewsets.ViewSet):
         detail=False,
         methods=["post"],
         url_path="logout",
+        url_name="logout",
         permission_classes=[permissions.IsAuthenticated],
     )
     def logout_(self, request):

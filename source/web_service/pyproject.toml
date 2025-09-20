@@ -33,6 +33,41 @@ project-excludes = [
 [tool.poetry.group.dev.dependencies]
 pyrefly = "^0.32.0"
 black = "^25.1.0"
+pytest = "^8.3.0"
+pytest-django = "^4.9.0"
+pytest-cov = "^5.0.0"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "pequeroku.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+testpaths = ["vm_manager", "ai_services", "internal_config"]
+addopts = "--maxfail=10 -q --disable-warnings --cov=. --ds=pequeroku.settings_test"
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = true
+source = ["vm_manager", "ai_services", "internal_config", "pequeroku"]
+
+[tool.coverage.report]
+fail_under = 45
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == '__main__':",
+]
+omit = [
+    "conftest.py",
+    "namesgenerator.py",
+    "manage.py",
+    "pequeroku/asgi.py",
+    "pequeroku/wsgi.py",
+    "*/urls.py",
+    "test_*.py",
+]
 
 [build-system]
 requires = ["poetry-core"]
