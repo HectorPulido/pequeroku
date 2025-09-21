@@ -98,7 +98,7 @@ export async function setupHiddableDragabble(containerId, callback) {
 				consoleArea.style.height = `${h}px`;
 			}
 		} else {
-			consoleArea.style.height = "50px";
+			consoleArea.style.height = "80px";
 		}
 	}
 
