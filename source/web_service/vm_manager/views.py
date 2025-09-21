@@ -179,15 +179,15 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         service = self._get_service(obj)
         response = service.execute_sh(str(obj.container_id), cmd)
 
-        # audit_log_http(
-        #     request,
-        #     action="container.send_command",
-        #     target_type="container",
-        #     target_id=obj.pk,
-        #     message=cmd,
-        #     metadata={"response": Response},
-        #     success=False,
-        # )
+        audit_log_http(
+            request,
+            action="container.send_command",
+            target_type="container",
+            target_id=obj.pk,
+            message=cmd,
+            metadata={"response": response},
+            success=False,
+        )
 
         return Response(response)
 
