@@ -87,7 +87,7 @@ class EditorConsumer(
 
         await self.channel_layer.group_add(self._group_name(self.pk), self.channel_name)
         await self.send_json({"event": "connected"})
-        self._start_fs_watcher()
+        # self._start_fs_watcher()
 
     async def disconnect(self, code):
         try:
@@ -96,7 +96,7 @@ class EditorConsumer(
             )
         except Exception:
             pass
-        await self._stop_fs_watcher()
+        # await self._stop_fs_watcher()
 
     async def receive_json(self, content, **kwargs):
         req_id = content.get("req_id")
