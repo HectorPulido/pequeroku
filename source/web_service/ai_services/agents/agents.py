@@ -51,7 +51,7 @@ class DevAgent:
             elif name == "exec_command":
                 result = exec_command(dedup_policy, container, **args)
             elif name == "search":
-                result =  search(dedup_policy, container, **args)
+                result = search(dedup_policy, container, **args)
             else:
                 result = {"error": f"Unknown tool: {name}"}
         except ToolError as te:

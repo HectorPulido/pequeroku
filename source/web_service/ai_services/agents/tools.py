@@ -166,9 +166,6 @@ def search(
             case_insensitive=False,
             max_results_total=250,
             timeout_seconds=5,
-        )
+        ),
     )
-    return {
-        "response": resp,
-        "finished": True
-    }
+    return {"response": resp, "finished": True}

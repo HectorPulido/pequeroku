@@ -186,7 +186,7 @@ class EditorConsumer(
                 case_insensitive=False,
                 max_results_total=250,
                 timeout_seconds=5,
-            )
+            ),
         )
         await self.send_json({"event": "ok", "req_id": req_id, "data": search})
         await self.audit_ws(

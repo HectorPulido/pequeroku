@@ -204,7 +204,10 @@ async def search_in_vm(vm_id: str, req: SearchRequest) -> list[SearchHit]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"SSH error: {e}")
 
-    cmd_parts = ["grep", "-RInI"]  # -R recursive, -I ignore binaries, -n show line numbers
+    cmd_parts = [
+        "grep",
+        "-RInI",
+    ]  # -R recursive, -I ignore binaries, -n show line numbers
     if req.case_insensitive:
         cmd_parts.append("-i")
 
