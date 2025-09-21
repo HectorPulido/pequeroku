@@ -20,6 +20,7 @@ openai = "^1.107.0"
 gunicorn = "^23.0.0"
 uvicorn = "^0.35.0"
 redis = "^6.4.0"
+channels-redis = "^4.3.0"
 
 [tool.pyrefly]
 project-includes = ["**/*"]
@@ -40,7 +41,7 @@ pytest-cov = "^5.0.0"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "pequeroku.settings"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
-testpaths = ["vm_manager", "ai_services", "internal_config"]
+testpaths = ["vm_manager", "ai_services", "internal_config", "pequeroku"]
 addopts = "--maxfail=10 -q --disable-warnings --cov=. --ds=pequeroku.settings_test"
 asyncio_mode = "auto"
 
@@ -67,6 +68,8 @@ omit = [
     "pequeroku/wsgi.py",
     "*/urls.py",
     "test_*.py",
+    "pequeroku/routing.py",
+    "*/admin.py"
 ]
 
 [build-system]

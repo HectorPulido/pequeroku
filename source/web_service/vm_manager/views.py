@@ -170,6 +170,27 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         self.perform_destroy(obj)
         return Response({"status": "stopped"})
 
+    @action(detail=True, methods=["post"])
+    def exec_command(self, request, pk=None):
+        cmd = request.data.get("cmd")
+        if not cmd:
+            return Response("No command", status=status.HTTP_400_BAD_REQUEST)
+        obj: Container = self.get_object()
+        service = self._get_service(obj)
+        response = service.execute_sh(str(obj.container_id), cmd)
+
+        # audit_log_http(
+        #     request,
+        #     action="container.send_command",
+        #     target_type="container",
+        #     target_id=obj.pk,
+        #     message=cmd,
+        #     metadata={"response": Response},
+        #     success=False,
+        # )
+
+        return Response(response)
+
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
     def upload_file(self, request, pk=None):
         quota = self._check_quota(request)

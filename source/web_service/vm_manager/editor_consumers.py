@@ -241,7 +241,7 @@ class EditorConsumer(
     async def _handle_move_path(self, content, req_id):
         path_src = self._check_path(content["src"])
         path_dst = self._check_path(content["dst"])
-        cmd = f"set -e; mv -f {shlex.quote(path_src)} {shlex.quote(path_dst)}"
+        cmd = f"set -e; mv -f '{shlex.quote(path_src)}' '{shlex.quote(path_dst)}'"
         resp = self.client.execute_sh(self.container_id, cmd)
         r = await self._bump_rev(self.container_id, path_dst)
         await self.channel_layer.group_send(
@@ -271,7 +271,7 @@ class EditorConsumer(
     async def _handle_delete_path(self, content, req_id):
         path = self._check_path(content["path"])
         recursive = bool(content.get("recursive"))
-        cmd = f"set -e; rm {'-rf' if recursive else ''} {shlex.quote(path)}"
+        cmd = f"set -e; rm -rf {shlex.quote(path)}"
         resp = self.client.execute_sh(self.container_id, cmd)
         r = await self._bump_rev(self.container_id, path)
         await self.channel_layer.group_send(

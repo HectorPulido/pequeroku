@@ -157,7 +157,8 @@ wc-monaco-editor#editor {
 
 /* The current path should not push the buttons: … when it doesn’t fit */
 #current_path_label {
-	display: inline-block;
+	/*display: inline-block;*/
+	display: none;
 	max-width: 60vw;
 	/* tweak as needed */
 	overflow: hidden;
@@ -376,4 +377,116 @@ body {
 
 .resizer {
 	background: #252529;
+}
+
+/* Console tabs */
+.console-tabs {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow-x: auto;
+	max-height: 2em;
+	scrollbar-width: thin;
+}
+
+.console-tab {
+	background: #3e3e3e;
+	color: #eee;
+	border: 1px solid #555;
+	border-radius: 6px;
+	padding: 2px 8px;
+	cursor: pointer;
+	user-select: none;
+	white-space: nowrap;
+}
+
+.console-tab:hover {
+	background: #303030;
+}
+
+.console-tab[aria-selected="true"] {
+	background: #11161c;
+	border-color: #777;
+	color: #d1d5db;
+}
+
+.console-tab:focus {
+	outline: 2px solid #6aa3ff;
+	outline-offset: 1px;
+}
+
+.console-tab .icon {
+	margin-left: 6px;
+	opacity: 0.8;
+}
+
+/* Smooth scrollbar for Chromium/WebKit */
+.console-tabs::-webkit-scrollbar {
+	height: 6px;
+}
+.console-tabs::-webkit-scrollbar-thumb {
+	background: #555;
+	border-radius: 3px;
+}
+.console-tabs::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* File tabs */
+.file-tabs {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: 8px;
+	min-width: 0;
+	max-width: 50vw;
+	overflow-x: auto;
+	scrollbar-width: thin;
+}
+
+.file-tab {
+	background: #3e3e3e;
+	color: #eee;
+	border: 1px solid #555;
+	border-radius: 6px;
+	padding: 1px 8px;
+	font-size: 0.9em;
+	line-height: 1.8em;
+	cursor: pointer;
+	user-select: none;
+	white-space: nowrap;
+}
+
+.file-tab:hover {
+	background: #303030;
+}
+
+.file-tab[aria-selected="true"] {
+	background: #11161c;
+	border-color: #777;
+	color: #d1d5db;
+}
+
+.file-tab:focus {
+	outline: 2px solid #6aa3ff;
+	outline-offset: 1px;
+}
+
+.file-tab .icon {
+	margin-left: 6px;
+	opacity: 0.8;
+}
+
+/* Smooth scrollbar for Chromium/WebKit (file tabs) */
+.file-tabs::-webkit-scrollbar {
+	height: 4px;
+}
+.file-tabs::-webkit-scrollbar-thumb {
+	background: #555;
+	border-radius: 3px;
+}
+.file-tabs::-webkit-scrollbar-track {
+	background: transparent;
 }

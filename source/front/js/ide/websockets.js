@@ -9,12 +9,45 @@ export function createWS(
 	const wsUrl = `${proto}://${location.host}/ws/containers/${containerId}/`;
 	const queue = [];
 
+	function encodePayload(payload) {
+		if (payload == null) return "";
+		if (payload instanceof ArrayBuffer) return payload;
+		// TypedArray / DataView
+		if (ArrayBuffer.isView?.(payload)) {
+			const view = payload;
+			try {
+				return view.buffer.slice(
+					view.byteOffset,
+					view.byteOffset + view.byteLength,
+				);
+			} catch {
+				return view.buffer;
+			}
+		}
+		if (typeof payload === "object") {
+			try {
+				return JSON.stringify(payload);
+			} catch {
+				return String(payload);
+			}
+		}
+		if (typeof payload === "string") return payload;
+		return String(payload);
+	}
+
 	function flush(socket) {
-		while (queue.length) socket.send(queue.shift());
+		while (queue.length) {
+			const p = queue.shift();
+			const data = encodePayload(p);
+			try {
+				socket.send(data);
+			} catch {}
+		}
 	}
 
 	function connect() {
 		ws = new WebSocket(wsUrl);
+		ws.binaryType = "arraybuffer";
 		ws.onopen = () => {
 			attempts = 0;
 			flush(ws);
@@ -31,9 +64,9 @@ export function createWS(
 	connect();
 
 	function send(payload) {
-		const msg = payload;
-		if (ws && ws.readyState === 1) ws.send(msg);
-		else queue.push(msg);
+		const data = encodePayload(payload);
+		if (ws && ws.readyState === 1) ws.send(data);
+		else queue.push(payload);
 	}
 	function close() {
 		try {

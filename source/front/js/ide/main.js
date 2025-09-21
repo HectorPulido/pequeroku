@@ -48,6 +48,10 @@ const consoleEl = $("#console-log");
 const newFolderBtn = $("#new-folder");
 const newFileBtn = $("#new-file");
 const btnDownloadBtn = $("#btn-download");
+const btnOpenSession = $("#btn-open-session");
+const btnCloseSession = $("#btn-close-session");
+const consoleTabsEl = $("#console-tabs");
+const fileTabsEl = $("#file-tabs");
 
 const btnOpenUpload = $("#btn-open-upload-modal");
 const uploadModal = $("#upload-modal");
@@ -72,10 +76,124 @@ await setupHiddableDragabble(containerId, async (isMobile) => {
 
 if (themeToggleBtn) setupThemeToggle(themeToggleBtn);
 
+let apiReadFileWrapper = null;
 let consoleApi = null;
 let currentFilePath = null;
 let runCommand = null;
 let ws = null;
+window._sessionList = [];
+window._activeSid = null;
+window._openFiles = [];
+window._activeFile = null;
+
+function updateTabs() {
+	const el = consoleTabsEl;
+	if (!el) return;
+	const list = window._sessionList || [];
+	const active = window._activeSid || null;
+	if (!list.length) {
+		el.innerHTML = "";
+		return;
+	}
+	el.innerHTML = list
+		.map(
+			(sid) =>
+				`<button class="console-tab" role="tab" aria-selected="${
+					sid === active
+				}" data-sid="${sid}" title="${sid}">${sid}<span class="icon" data-close="${sid}">×</span></button>`,
+		)
+		.join("");
+}
+
+if (consoleTabsEl) {
+	consoleTabsEl.addEventListener("click", (e) => {
+		const closeEl = e.target.closest("[data-close]");
+		if (closeEl) {
+			const sid = closeEl.getAttribute("data-close");
+			try {
+				ws?.send({ control: "close", sid });
+			} catch {}
+			e.stopPropagation();
+			return;
+		}
+		const tab = e.target.closest("[data-sid]");
+		if (tab) {
+			const sid = tab.getAttribute("data-sid");
+			if (sid && sid !== window._activeSid) {
+				try {
+					ws?.send({ control: "focus", sid });
+				} catch {}
+			}
+		}
+	});
+}
+function baseName(p) {
+	try {
+		return String(p).split("/").filter(Boolean).pop() || String(p);
+	} catch {
+		return String(p || "");
+	}
+}
+function updateFileTabs() {
+	const el = fileTabsEl;
+	if (!el) return;
+	const files = window._openFiles || [];
+	const active = window._activeFile || currentFilePath || null;
+	if (!files.length) {
+		el.innerHTML = "";
+		return;
+	}
+	el.innerHTML = files
+		.map((fp) => {
+      const name = fp.replace("/app/", "");
+			return `<button class="file-tab" role="tab" aria-selected="${
+				fp === active
+			}" data-path="${fp}" title="${fp}">${name}<span class="icon" data-close-file="${fp}">×</span></button>`;
+		})
+		.join("");
+}
+if (fileTabsEl) {
+	fileTabsEl.addEventListener("click", async (e) => {
+		const closeEl = e.target.closest("[data-close-file]");
+		if (closeEl) {
+			const path = closeEl.getAttribute("data-close-file");
+			const files = window._openFiles || [];
+			const idx = Math.max(0, files.indexOf(path));
+			window._openFiles = files.filter((x) => x !== path);
+			if ((window._activeFile || currentFilePath) === path) {
+				window._activeFile = null;
+				const remaining = window._openFiles || [];
+				const nextIdx = idx < remaining.length ? idx : idx - 1;
+				const next = nextIdx >= 0 ? remaining[nextIdx] : null;
+				if (next) {
+					try {
+						await openFileIntoEditor(apiReadFileWrapper, next, setPath);
+					} catch {}
+				} else {
+					try {
+						clearEditor();
+					} catch {}
+					currentFilePath = null;
+					pathLabel.innerText = "";
+					localStorage.removeItem(`last:${containerId}`);
+					updateFileTabs();
+				}
+			} else {
+				updateFileTabs();
+			}
+			e.stopPropagation();
+			return;
+		}
+		const tab = e.target.closest("[data-path]");
+		if (tab) {
+			const path = tab.getAttribute("data-path");
+			if (path) {
+				await openFileIntoEditor(apiReadFileWrapper, path, setPath);
+			}
+		}
+	});
+}
+let lastBytesSid = null;
 let ft;
 
 const fsws = createFSWS({
@@ -84,40 +202,128 @@ const fsws = createFSWS({
 	onBroadcast: async (_evt) => {
 		try {
 			await ft.refresh();
+			updateFileTabs();
 		} catch {}
 	},
 });
+
+// === "API-like" wrapper so editor.js remains unchanged but reads via WS ===
+apiReadFileWrapper = async (url) => {
+	const qs = new URLSearchParams(url.split("?")[1] || "");
+	const path = qs.get("path");
+	const data = await fsws.call("read_file", { path });
+	if (typeof data.rev === "number") fsws.revs.set(path, data.rev);
+	return { content: data.content ?? "" };
+};
 
 function setPath(p) {
 	currentFilePath = p;
 	pathLabel.innerText = p;
 	localStorage.setItem(`last:${containerId}`, p);
+	// Update file tabs (stable order: append only when new)
+	try {
+		const cur = window._openFiles || [];
+		if (!cur.includes(p)) {
+			window._openFiles = [...cur, p];
+		}
+		window._activeFile = p;
+		updateFileTabs();
+	} catch {}
 }
 
 function connectWs() {
 	ws = createWS(containerId, {
 		onOpen: () => {
-			consoleApi.write("[connected]\n");
+			// Reset local sessions; the server will resend session list
+			const sids = consoleApi.listSessions?.() || [];
+			// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
+			sids.forEach((sid) => consoleApi.closeSession?.(sid));
+			window._sessionList = [];
+			window._activeSid = null;
+			updateTabs();
+			consoleApi.addLine?.("[connected]");
 		},
 		onMessage: (ev) => {
+			// Multi-console protocol:
+			// - JSON: {type:"stream"| "stream-bytes" | "info" | "error", sid?, ...}
+			// - After "stream-bytes", a binary frame follows for that sid
 			try {
 				const msg = JSON.parse(ev.data);
-				if (msg.type === "output") {
-					consoleApi.write(msg.data);
-				} else if (msg.type === "clear") {
-					consoleApi.clear();
-				} else if (msg.type === "info") {
-					consoleApi.write(`[info] ${msg.message}`);
-				} else if (msg.type === "error") {
-					parent.addAlert(msg.message, "error");
-				} else if (msg.type === "log") {
-					let chunk = String(msg.line ?? "");
-					chunk = chunk.replace(/\r(?!\n)/g, "\r\n");
-					consoleApi.write(chunk);
+				if (msg && typeof msg === "object") {
+					if (msg.type === "stream") {
+						const sid = msg.sid || consoleApi.getActive?.();
+						const payload = typeof msg.payload === "string" ? msg.payload : "";
+						consoleApi.write(payload, sid);
+						return;
+					}
+					if (msg.type === "stream-bytes") {
+						lastBytesSid = msg.sid || consoleApi.getActive?.();
+						return;
+					}
+					if (msg.type === "info") {
+						// Bootstrap connected info or session events
+						if (msg.message === "Connected") {
+							const sessions = Array.isArray(msg.sessions) ? msg.sessions : [];
+							const active = msg.active || sessions[0] || "s1";
+							// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
+							sessions.forEach((sid) => consoleApi.openSession?.(sid, false));
+							consoleApi.focusSession?.(active);
+							window._sessionList = sessions.slice();
+							window._activeSid = active;
+							consoleApi.addLine?.(
+								`[info] Connected. Sessions: ${sessions.join(", ") || "none"}, active: ${active}`,
+								active,
+							);
+							updateTabs();
+							return;
+						}
+						if (msg.message === "session-opened") {
+							const makeActive = msg.active ? msg.active === msg.sid : true;
+							consoleApi.openSession?.(msg.sid, !!makeActive);
+							window._sessionList = Array.from(
+								new Set([...(window._sessionList || []), msg.sid]),
+							);
+							if (makeActive) {
+								window._activeSid = msg.sid;
+								consoleApi.focusSession?.(msg.sid);
+							}
+							updateTabs();
+							return;
+						}
+						if (msg.message === "session-closed") {
+							consoleApi.closeSession?.(msg.sid);
+							window._sessionList = (window._sessionList || []).filter(
+								(x) => x !== msg.sid,
+							);
+							if (window._activeSid === msg.sid) {
+								window._activeSid = window._sessionList[0] || null;
+							}
+							return;
+						}
+						if (msg.message === "session-focused") {
+							consoleApi.focusSession?.(msg.sid);
+							window._activeSid = msg.sid;
+							return;
+						}
+						// Generic info, route to sid if provided
+						const sid = msg.sid || consoleApi.getActive?.();
+						consoleApi.addLine?.(`[info] ${msg.message ?? ""}`, sid);
+						return;
+					}
+					if (msg.type === "error") {
+						parent.addAlert(msg.message || "Unknown error", "error");
+						return;
+					}
 				}
+				// Fallback: treat as text line
+				let text = String(ev.data || "");
+				text = text.replace(/\r(?!\n)/g, "\r\n");
+				consoleApi.write(text);
 			} catch {
 				if (ev.data instanceof ArrayBuffer) {
-					consoleApi.write(new Uint8Array(ev.data));
+					const targetSid = lastBytesSid || consoleApi.getActive?.();
+					lastBytesSid = null;
+					consoleApi.write(new Uint8Array(ev.data), targetSid);
 				} else {
 					let text = String(ev.data || "");
 					text = text.replace(/\r(?!\n)/g, "\r\n");
@@ -140,12 +346,94 @@ function connectWs() {
 		ctrlButtons: $$(".btn-send"),
 		onSend: (data) => {
 			if (!ws) return;
-			ws.send(data);
+			const active = consoleApi.getActive?.() || null;
+			if (data === "clear") {
+				consoleApi.clear(active);
+				return;
+			}
+			if (data === "ctrlc") data = "\u0003";
+			else if (data === "ctrld") data = "\u0004";
+			const payload = active ? { sid: active, data } : { data };
+			ws.send(payload);
 		},
 	});
-	consoleApi.setTheme(getCurrentTheme() === "dark");
+	// Hook to sync tabs with console sessions lifecycle
+	const __open = consoleApi.openSession?.bind(consoleApi);
+	if (__open) {
+		consoleApi.openSession = (sid, makeActive) => {
+			__open(sid, makeActive);
+			if (sid && !(window._sessionList || []).includes(sid)) {
+				window._sessionList = Array.from(
+					new Set([...(window._sessionList || []), sid]),
+				);
+			}
+			if (makeActive) window._activeSid = sid;
+			updateTabs();
+
+			setTimeout(() => {
+				consoleApi.setTheme(getCurrentTheme() === "dark");
+			}, 50);
+		};
+	}
+	const __close = consoleApi.closeSession?.bind(consoleApi);
+	if (__close) {
+		consoleApi.closeSession = (sid) => {
+			__close(sid);
+			window._sessionList = (window._sessionList || []).filter(
+				(x) => x !== sid,
+			);
+			if (window._activeSid === sid)
+				window._activeSid = (window._sessionList || [])[0] || null;
+			updateTabs();
+		};
+	}
+	const __focus = consoleApi.focusSession?.bind(consoleApi);
+	if (__focus) {
+		consoleApi.focusSession = (sid) => {
+			__focus(sid);
+			window._activeSid = sid;
+			updateTabs();
+		};
+	}
 
 	connectWs();
+
+	// Wire up multi-console session controls
+	if (btnOpenSession) {
+		btnOpenSession.addEventListener("click", () => {
+			const list = window._sessionList || [];
+			let i = 1;
+			while (list.includes(`s${i}`)) i++;
+			const sid = `s${i}`;
+			try {
+				ws?.send({ control: "open", sid });
+			} catch {}
+			// Optimistically update local state
+			window._sessionList = Array.from(
+				new Set([...(window._sessionList || []), sid]),
+			);
+			window._activeSid = sid;
+			updateTabs();
+		});
+	}
+	if (btnCloseSession) {
+		btnCloseSession.addEventListener("click", () => {
+			const sid = window._activeSid || null;
+			if (sid) {
+				try {
+					ws?.send({ control: "close", sid });
+				} catch {}
+				// Optimistically update local state
+				window._sessionList = (window._sessionList || []).filter(
+					(x) => x !== sid,
+				);
+				if (window._activeSid === sid)
+					window._activeSid = (window._sessionList || [])[0] || null;
+				updateTabs();
+			}
+		});
+	}
+	// Prev/Next session buttons removed in favor of tab UI (console tabs)
 
 	restartContainerBtn.addEventListener("click", () => {
 		try {
@@ -153,6 +441,7 @@ function connectWs() {
 		} catch {}
 		consoleApi.clear();
 		connectWs();
+		updateFileTabs();
 	});
 
 	ft = setupFileTree({
@@ -164,6 +453,7 @@ function connectWs() {
 	refreshTreeBtn.addEventListener("click", async () => {
 		await ft.refresh();
 		await hydrateRun();
+		updateFileTabs();
 	});
 
 	setupUploads({
@@ -209,7 +499,7 @@ function connectWs() {
 	saveFileBtn.addEventListener("click", saveCurrentFile);
 	runCodeBtn.addEventListener("click", async () => {
 		await saveCurrentFile();
-		if (runCommand) ws.send(runCommand);
+		if (runCommand) ws.send({ data: runCommand });
 		else
 			parent.addAlert(
 				"There is no 'run' command in config.json. The button is disabled.",
@@ -218,20 +508,40 @@ function connectWs() {
 	});
 
 	window.addEventListener("keydown", (e) => {
-		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+		const mod = e.ctrlKey || e.metaKey;
+		if (mod && e.key.toLowerCase() === "s") {
 			e.preventDefault();
 			saveCurrentFile();
 		}
-		if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+		if (mod && e.key === "Enter") {
 			e.preventDefault();
 			runCodeBtn.click();
+		}
+		// Multi-console shortcuts:
+		// - Ctrl/Cmd+Shift+N: open new session (sN)
+		if (mod && e.shiftKey && e.key.toLowerCase() === "n") {
+			e.preventDefault();
+			const list = consoleApi.listSessions?.() || [];
+			let i = 1;
+			while (list.includes(`s${i}`)) i++;
+			const sid = `s${i}`;
+			ws?.send({ control: "open", sid });
+		}
+		// - Ctrl/Cmd+Shift+W: close active session
+		if (mod && e.shiftKey && e.key.toLowerCase() === "w") {
+			e.preventDefault();
+			const sid = consoleApi.getActive?.();
+			if (sid) ws?.send({ control: "close", sid });
 		}
 	});
 
 	fileTreeEl.addEventListener("finder-action", async (e) =>
 		ft.finderAction(
 			e,
-			async (path) => openFileIntoEditor(apiReadFileWrapper, path, setPath),
+			async (path) => {
+				await openFileIntoEditor(apiReadFileWrapper, path, setPath);
+				updateFileTabs();
+			},
 			setPath,
 			clearEditor,
 			saveCurrentFile,
@@ -242,7 +552,10 @@ function connectWs() {
 	fileTreeEl.addEventListener("dragover", (e) => e.preventDefault());
 
 	await hydrateRun();
-	await tryOpen("/app/readme.txt");
+	const lastPath = localStorage.getItem(`last:${containerId}`);
+	if (lastPath) await tryOpen(lastPath);
+	else await tryOpen("/app/readme.txt");
+	updateFileTabs();
 	refreshTreeBtn.click();
 
 	async function tryOpen(p) {
@@ -258,14 +571,7 @@ function connectWs() {
 		runCodeBtn.disabled = !runCommand;
 	}
 
-	// === "API-like" wrapper so editor.js remains unchanged but reads via WS ===
-	async function apiReadFileWrapper(url) {
-		const qs = new URLSearchParams(url.split("?")[1] || "");
-		const path = qs.get("path");
-		const data = await fsws.call("read_file", { path });
-		if (typeof data.rev === "number") fsws.revs.set(path, data.rev);
-		return { content: data.content ?? "" };
-	}
+	// moved: apiReadFileWrapper initialized earlier to avoid race
 
 	async function saveCurrentFile() {
 		if (!currentFilePath) {
@@ -307,6 +613,7 @@ function connectWs() {
 	window.addEventListener("themechange", (ev) => {
 		const isDark = ev.detail?.theme === "dark";
 		changeTheme(isDark, consoleApi);
+		updateFileTabs();
 	});
 
 	btnCloneRepo.addEventListener("click", () => {
@@ -321,7 +628,7 @@ function connectWs() {
 		const cmd = `bash -lc 'set -euo pipefail; REPO="${repo}"; X="${base_path}"; TMP="$(mktemp -d)"; git clone "$REPO" "$TMP/repo"; sudo mkdir -p /app; find /app -mindepth 1 -not -name "readme.txt" -not -name "config.json" -exec rm -rf {} +; SRC="$TMP/repo"; [ "\${X:-/}" != "/" ] && SRC="$TMP/repo/\${X#/}"; shopt -s dotglob nullglob; mv "$SRC"/* /app/; rm -rf "$TMP"'`;
 
 		if (ws != null) {
-			ws.send(cmd);
+			ws.send({ data: cmd });
 			await sleep(5000);
 			await ft.refresh();
 			await hydrateRun();

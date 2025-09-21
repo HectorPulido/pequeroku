@@ -197,9 +197,6 @@ async def execute_sh(vm_id: str, vm_command: VMSh) -> ElementResponse:
         return ElementResponse(ok=False, reason="VM is not running")
 
     command = vm_command.command
-    if not command.endswith(" /"):
-        command += " /"
-
     output = ""
     try:
         val = cache_ssh_and_sftp(vm)
@@ -215,7 +212,7 @@ async def execute_sh(vm_id: str, vm_command: VMSh) -> ElementResponse:
         if len(err.strip()) > 0:
             output += f"Error: {err}\n"
 
-        output.strip()
+        output = output.strip()
 
     except Exception as e:
         print("Error sending data", e)
