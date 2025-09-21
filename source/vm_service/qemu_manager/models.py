@@ -24,7 +24,6 @@ class VMProc:
     pidfile: Optional[str] = None
 
 
-# ===== Modelos API =====
 class VMState(str, Enum):
     provisioning = "provisioning"
     running = "running"
@@ -34,11 +33,11 @@ class VMState(str, Enum):
 
 class VMCreate(BaseModel):
     # pyrefly: ignore  # no-matching-overload
-    vcpus: int = Field(ge=1, le=os.cpu_count() or 64, example=2)
+    vcpus: int = Field(..., ge=1, le=os.cpu_count() or 64, example=2)
     # pyrefly: ignore  # no-matching-overload
-    mem_mib: int = Field(ge=256, example=2048)
+    mem_mib: int = Field(..., ge=256, example=2048)
     # pyrefly: ignore  # no-matching-overload
-    disk_gib: int = Field(ge=5, example=10)
+    disk_gib: int = Field(..., ge=5, example=10)
     base_image: Optional[str] = Field(None, description="VM_BASE_IMAGE Override")
     timeout_boot_s: Optional[int] = Field(
         None, description="VM_TIMEOUT_BOOT_S Override"
@@ -61,7 +60,7 @@ class VMPath(BaseModel):
 
 class VMUploadFiles(BaseModel):
     dest_path: Optional[str] = Field("/app", description="Base path for the files")
-    files: list[VMFile] = Field(description="List of fields to send")
+    files: list[VMFile] = Field(..., description="List of fields to send")
     clean: Optional[bool] = Field(False, description="Clean the dest path dir")
 
 
@@ -150,3 +149,27 @@ class MachineMetrics(BaseModel):
     rss_mib: float | int | None
     num_threads: int | None
     io: dict | None
+
+
+class SearchRequest(BaseModel):
+    pattern: str = Field(..., description="Text/regex pattern to search with grep.")
+    root: str = Field("/app", description="Root directory where the search starts.")
+    case_insensitive: bool = Field(False, description="Use -i flag in grep.")
+    include_globs: list[str] = Field(
+        default_factory=list, description="Patterns for --include=*.ext"
+    )
+    exclude_dirs: list[str] = Field(
+        default_factory=lambda: [".git"],
+        description="Directories to exclude with --exclude-dir=",
+    )
+    max_results_total: Optional[int] = Field(
+        None, description="Hard cap for the total number of matches."
+    )
+    timeout_seconds: int = Field(
+        10, description="Timeout for the SSH channel in seconds."
+    )
+
+
+class SearchHit(BaseModel):
+    path: str
+    matchs: list[str]

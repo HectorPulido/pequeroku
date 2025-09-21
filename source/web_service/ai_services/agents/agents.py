@@ -14,6 +14,7 @@ from .tools import (
     read_file,
     create_full_project,
     exec_command,
+    search,
 )
 
 
@@ -49,6 +50,8 @@ class DevAgent:
                 result = create_full_project(dedup_policy, container, **args)
             elif name == "exec_command":
                 result = exec_command(dedup_policy, container, **args)
+            elif name == "search":
+                result =  search(dedup_policy, container, **args)
             else:
                 result = {"error": f"Unknown tool: {name}"}
         except ToolError as te:

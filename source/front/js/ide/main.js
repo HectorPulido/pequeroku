@@ -127,13 +127,6 @@ if (consoleTabsEl) {
 		}
 	});
 }
-function baseName(p) {
-	try {
-		return String(p).split("/").filter(Boolean).pop() || String(p);
-	} catch {
-		return String(p || "");
-	}
-}
 function updateFileTabs() {
 	const el = fileTabsEl;
 	if (!el) return;
@@ -145,7 +138,7 @@ function updateFileTabs() {
 	}
 	el.innerHTML = files
 		.map((fp) => {
-      const name = fp.replace("/app/", "");
+			const name = fp.replace("/app/", "");
 			return `<button class="file-tab" role="tab" aria-selected="${
 				fp === active
 			}" data-path="${fp}" title="${fp}">${name}<span class="icon" data-close-file="${fp}">×</span></button>`;

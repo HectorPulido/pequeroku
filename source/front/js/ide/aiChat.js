@@ -37,6 +37,10 @@ const containerId = urlParams.get("containerId");
 
 let ws = null;
 
+function cleanText(str) {
+	return /^\.{3}(?!$)/.test(str) ? str.replace(/^\.{3}/, "") : str;
+}
+
 function connect() {
 	ws = new WebSocket(`/ws/ai/${containerId}/`);
 
@@ -61,10 +65,11 @@ function connect() {
 				}
 			} else if (data.event === "text" && bubble != null) {
 				buffer += data.content;
+				const textToSet = cleanText(buffer);
 				if (bubbleType === "user") {
-					bubble.innerText = buffer;
+					bubble.innerText = textToSet;
 				} else {
-					bubble.innerHTML = mdParse(buffer);
+					bubble.innerHTML = mdParse(textToSet);
 				}
 			} else if (data.event === "finish_text") {
 				bubble = null;

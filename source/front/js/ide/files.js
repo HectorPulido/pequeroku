@@ -6,6 +6,19 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 	const menu = document.getElementById("finder-menu");
 	let menuTarget = null;
 
+	// Persist expanded folders per container
+	const EXP_KEY = `ui:ft:exp:${containerId}`;
+	let expandedPaths = new Set();
+	try {
+		const saved = JSON.parse(localStorage.getItem(EXP_KEY) || "[]");
+		if (Array.isArray(saved)) expandedPaths = new Set(saved);
+	} catch {}
+	function persistExpanded() {
+		try {
+			localStorage.setItem(EXP_KEY, JSON.stringify(Array.from(expandedPaths)));
+		} catch {}
+	}
+
 	// === WS: list_dir ===
 	async function listDir(path = "/app") {
 		const r = await fsws.call("list_dir", { path });
@@ -13,12 +26,6 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 	}
 
 	async function loadDir(path, ul) {
-		if (refreshing) {
-			console.log("Refresing dedup...");
-			return;
-		}
-
-		refreshing = true;
 		ul.innerHTML = "";
 		const items = await listDir(path);
 		const prefix = `${path.replace(/\/$/, "")}/`;
@@ -35,21 +42,32 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 					? -1
 					: 1,
 		);
-		direct.forEach((item) => {
+
+		for (const item of direct) {
 			const li = document.createElement("li");
 			li.classList.add(item.path_type);
 			li.textContent = item.name;
 			li.dataset.path = item.path;
 			li.dataset.type = item.path_type;
+
 			if (item.path_type === "directory") {
 				li.addEventListener("click", async (e) => {
 					e.stopPropagation();
-					const isExp = li.classList.toggle("expanded");
-					if (isExp) {
-						const sub = document.createElement("ul");
-						li.appendChild(sub);
+					const willExpand = !li.classList.contains("expanded");
+					if (willExpand) {
+						li.classList.add("expanded");
+						expandedPaths.add(item.path);
+						persistExpanded();
+						let sub = li.querySelector("ul");
+						if (!sub) {
+							sub = document.createElement("ul");
+							li.appendChild(sub);
+						}
 						await loadDir(item.path, sub);
 					} else {
+						li.classList.remove("expanded");
+						expandedPaths.delete(item.path);
+						persistExpanded();
 						const sub = li.querySelector("ul");
 						if (sub) li.removeChild(sub);
 					}
@@ -65,9 +83,17 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 				e.stopPropagation();
 				openContextMenu(e, li);
 			});
+
 			ul.appendChild(li);
-		});
-		refreshing = false;
+
+			// Auto-restore expansion state for this directory
+			if (item.path_type === "directory" && expandedPaths.has(item.path)) {
+				li.classList.add("expanded");
+				const sub = document.createElement("ul");
+				li.appendChild(sub);
+				await loadDir(item.path, sub);
+			}
+		}
 	}
 
 	function openContextMenu(e, li) {
@@ -104,8 +130,15 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 	});
 
 	async function refresh() {
-		console.log("Refreshing...");
+		if (refreshing) {
+			console.log("Refreshing dedup...");
+			return;
+		}
+		refreshing = true;
+		const prevScroll = fileTreeEl.scrollTop;
 		await loadDir("/app", fileTreeEl);
+		fileTreeEl.scrollTop = prevScroll;
+		refreshing = false;
 	}
 
 	// === WS: create_dir ===

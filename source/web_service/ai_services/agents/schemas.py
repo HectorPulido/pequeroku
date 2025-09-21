@@ -169,6 +169,29 @@ TOOLS_SPEC = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "strict": True,
+            "name": "search",
+            "description": "Search inside a folder for matches on filenames and content",
+            "parameters": {
+                "additionalProperties": False,
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Pattern to search, can be something simple like 'agent' or something complex like 'TODO:.*'",
+                    },
+                    "root": {
+                        "type": "string",
+                        "description": "Root folder to search, normally /app",
+                    },
+                },
+                "required": ["pattern", "root"],
+            },
+        },
+    },
 ]
 
 PROJECT_GENERATION_PROMPT = """

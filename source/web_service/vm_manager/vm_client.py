@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import requests
 from django.utils import timezone
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Literal, Any
 
 from .models import Node
@@ -14,8 +14,21 @@ PathType = Literal["directory", "file"]
 
 
 @dataclass
+class SearchRequest:
+    pattern: str
+    root: str
+    case_insensitive: bool = False
+    include_globs: list[str] = field(default_factory=list)
+    exclude_dirs: list[str] = field(
+        default_factory=lambda: [".git"],
+    )
+    max_results_total: int | None = None
+    timeout_seconds: int = 10
+
+
+@dataclass
 class VMCreate:
-    """Payload para crear una VM."""
+    """Payload for create the vm."""
 
     vcpus: int
     mem_mib: int
@@ -26,7 +39,7 @@ class VMCreate:
 
 @dataclass
 class VMAction:
-    """Payload para acciones sobre una VM."""
+    """Payload of actions on the vm."""
 
     action: VMActionType
     cleanup_disks: bool | None = False
@@ -34,7 +47,7 @@ class VMAction:
 
 @dataclass
 class VMPath:
-    """Ruta dentro de la VM (por defecto raíz)."""
+    """Route inside the VM"""
 
     path: str = "/"
 
@@ -42,10 +55,7 @@ class VMPath:
 @dataclass
 class VMFile:
     """
-    Archivo para subir a la VM.
-    - path: ruta destino (incluye nombre de archivo o directorio base)
-    - content: contenido del archivo (texto)
-    - mode: permisos numéricos (p.ej. 420 decimal = 0644 octal)
+    File to upload
     """
 
     mode: int = 0o644
@@ -56,7 +66,7 @@ class VMFile:
 
 @dataclass
 class VMUploadFiles:
-    """Payload para subir múltiples archivos a la VM."""
+    """Payload to upload multiple files"""
 
     files: list[VMFile]
     dest_path: str | None = "/app"
@@ -148,7 +158,7 @@ class VMServiceClient:
         return self._handle(resp)
 
     def create_vm(self, payload: VMCreate) -> dict[str, Any]:
-        """POST /vms — Crea una VM."""
+        """POST /vms — Create a VM."""
         data = {k: v for k, v in asdict(payload).items() if v is not None}
         resp = self.session.post(
             self._url("/vms"), json=data, headers=self.headers, timeout=self.timeout
@@ -292,3 +302,14 @@ class VMServiceClient:
             headers=self.headers,
             timeout=None,
         )
+
+    def search(self, vm_id: str, payload: SearchRequest) -> dict[str, Any]:
+        """POST /vms/{vm_id}/search — Search for files."""
+        data = asdict(payload)
+        resp = self.session.post(
+            self._url(f"/vms/{vm_id}/search"),
+            json=data,
+            headers=self.headers,
+            timeout=self.timeout,
+        )
+        return self._handle(resp)

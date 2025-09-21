@@ -4,6 +4,7 @@ import asyncio
 import os
 import threading
 import uuid
+import shlex
 
 from fastapi import HTTPException, Depends, APIRouter, Query
 from fastapi.responses import JSONResponse, Response
@@ -22,6 +23,8 @@ from qemu_manager.models import (
     VMPath,
     FileContent,
     VMSh,
+    SearchHit,
+    SearchRequest,
 )
 
 from implementations import (
@@ -186,9 +189,71 @@ async def tail_console(vm_id: str, lines: int = 120) -> JSONResponse:
     return JSONResponse({"vm_id": vm_id, "lines": lines, "console": out})
 
 
+@vms_router.post("/{vm_id}/search", response_model=list[SearchHit])
+async def search_in_vm(vm_id: str, req: SearchRequest) -> list[SearchHit]:
+    try:
+        vm: "VMRecord" = store.get(vm_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="VM doesn't exist")
+    if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
+        raise HTTPException(status_code=400, detail="VM is not running")
+
+    try:
+        val = cache_ssh_and_sftp(vm)
+        cli = val["cli"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SSH error: {e}")
+
+    cmd_parts = ["grep", "-RInI"]  # -R recursive, -I ignore binaries, -n show line numbers
+    if req.case_insensitive:
+        cmd_parts.append("-i")
+
+    for d in req.exclude_dirs:
+        cmd_parts.append(f"--exclude-dir={d}")
+
+    for g in req.include_globs:
+        if g.strip() == "*" or g.strip() == "":
+            continue
+        cmd_parts.append(f"--include={g}")
+
+    cmd_parts.extend(["-e", req.pattern, req.root])
+    command = " ".join(shlex.quote(p) for p in cmd_parts)
+    try:
+        stdin, stdout, stderr = cli.exec_command(command)
+        stdout.channel.settimeout(req.timeout_seconds)
+        err = stderr.read().decode("utf-8", errors="replace")
+        out_bytes = stdout.read()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Remote exec error: {e}")
+
+    results: dict[str, list[str]] = {}
+    total = 0
+
+    for raw_line in out_bytes.splitlines():
+        try:
+            decoded = raw_line.decode("utf-8", errors="replace")
+            parts = decoded.split(":", 2)
+            if len(parts) < 3:
+                continue
+            file_path, line_num_txt, content_txt = parts[0], parts[1], parts[2]
+            match_str = f"L{line_num_txt}: {content_txt}"
+            results.setdefault(file_path, []).append(match_str)
+
+            total += 1
+            if req.max_results_total and total >= req.max_results_total:
+                break
+        except Exception:
+            continue
+
+    response: list[SearchHit] = [
+        SearchHit(path=path, matchs=lines) for path, lines in results.items()
+    ]
+
+    return response
+
+
 @vms_router.post("/{vm_id}/execute-sh", response_model=ElementResponse)
 async def execute_sh(vm_id: str, vm_command: VMSh) -> ElementResponse:
-    print("Initiating bridge...")
     try:
         vm: "VMRecord" = store.get(vm_id)
     except KeyError:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Any
 from vm_manager.models import Container
-from vm_manager.vm_client import VMServiceClient, VMUploadFiles, VMFile
+from vm_manager.vm_client import VMServiceClient, VMUploadFiles, VMFile, SearchRequest
 
 
 class DedupPolicy:
@@ -152,3 +152,23 @@ def exec_command(_: DedupPolicy, container: Container, command: str) -> Dict[str
     resp = service.execute_sh(str(container.container_id), command)
     resp["finished"] = True
     return resp
+
+
+def search(
+    _: DedupPolicy, container: Container, pattern: str, root: str
+) -> Dict[str, Any]:
+    service = _get_service(container)
+    resp = service.search(
+        str(container.container_id),
+        SearchRequest(
+            pattern=pattern,
+            root=root,
+            case_insensitive=False,
+            max_results_total=250,
+            timeout_seconds=5,
+        )
+    )
+    return {
+        "response": resp,
+        "finished": True
+    }

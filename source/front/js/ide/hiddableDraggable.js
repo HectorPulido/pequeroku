@@ -18,7 +18,7 @@ export async function setupHiddableDragabble(containerId, callback) {
 	const LS_CONSOLE_SIZE_KEY = `ide:${containerId}:console:px`;
 	const LS_SIDEBAR_SIZE_KEY = `ide:${containerId}:sidebar:px`;
 
-  const MIN_HEIGHT = 50;
+	const MIN_HEIGHT = 50;
 
 	const savedW = parseInt(
 		localStorage.getItem(LS_SIDEBAR_SIZE_KEY) || "280",
@@ -46,6 +46,10 @@ export async function setupHiddableDragabble(containerId, callback) {
 		const onMove = (ev) => {
 			const w = Math.max(20, Math.min(600, startW + (ev.clientX - startX)));
 			editorModal.style.gridTemplateColumns = `${w}px 6px 1fr`;
+
+			try {
+				window?._fitAddon?.fit();
+			} catch {}
 		};
 		const onUp = () => {
 			const w = sidebarEl.getBoundingClientRect().width;
