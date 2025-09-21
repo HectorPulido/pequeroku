@@ -18,12 +18,14 @@ export async function setupHiddableDragabble(containerId, callback) {
 	const LS_CONSOLE_SIZE_KEY = `ide:${containerId}:console:px`;
 	const LS_SIDEBAR_SIZE_KEY = `ide:${containerId}:sidebar:px`;
 
+  const MIN_HEIGHT = 50;
+
 	const savedW = parseInt(
 		localStorage.getItem(LS_SIDEBAR_SIZE_KEY) || "280",
 		10,
 	);
 	const savedH = parseInt(
-		localStorage.getItem(LS_CONSOLE_SIZE_KEY) || "260",
+		localStorage.getItem(LS_CONSOLE_SIZE_KEY) || "400",
 		10,
 	);
 
@@ -64,7 +66,8 @@ export async function setupHiddableDragabble(containerId, callback) {
 
 		const onMove = (ev) => {
 			const raw = containerBottom - ev.clientY - resizerHeight;
-			h = clamp(raw, 90, window.innerHeight);
+			h = clamp(raw, MIN_HEIGHT, window.innerHeight);
+
 			consoleArea.style.height = `${h}px`;
 			try {
 				window?._fitAddon?.fit();
@@ -98,7 +101,7 @@ export async function setupHiddableDragabble(containerId, callback) {
 				consoleArea.style.height = `${h}px`;
 			}
 		} else {
-			consoleArea.style.height = "80px";
+			consoleArea.style.height = `${MIN_HEIGHT}px`;
 		}
 	}
 
