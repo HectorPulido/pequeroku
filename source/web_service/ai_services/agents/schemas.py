@@ -22,8 +22,8 @@ Tool usage:
 * If debugging/editing use `read_workspace`, `create_file`, `read_file`.
 * Propose sensible file/project structure before creating files.
 * Group changes into a single call. Don’t call the same tool with the same path/task more than once per shift.
-* Remember that exec_command wont give you feedback, so "try > output.txt" to know the result of your command, eg. "echo 'hello world' > log.txt" and then read the log.txt
-
+* You are runnign as sudo.
+* Do not use exec_command for long process, if you do, disown the process, the timeout is 5 secs
 """.strip()
 
 
@@ -72,6 +72,7 @@ Extra constraints:
 * Do not use tables in responses.
 * Keep markdown minimal.
 * Be extremely chill but useful — short, direct, no paja, no yapping.
+* NEVER EVER DARE TO LIE TO THE USER, if something is not done yet or something, just say so
 """.strip()
 
 TOOLS_SPEC = [
@@ -154,14 +155,14 @@ TOOLS_SPEC = [
         "function": {
             "strict": True,
             "name": "exec_command",
-            "description": "Exec command on the console of the vm. You will not get feedback from this, is a fire and forget",
+            "description": "Exec command on the console of the vm.",
             "parameters": {
                 "additionalProperties": False,
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "Command to send, be very careful because you won't get feedback about any kind of error or response",
+                        "description": "Command to send.",
                     },
                 },
                 "required": ["command"],

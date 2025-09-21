@@ -61,10 +61,6 @@ function connect() {
 				}
 			} else if (data.event === "text" && bubble != null) {
 				buffer += data.content;
-				if (bubble.innerHTML === mdParse("...")) {
-					bubble.innerHTML = "";
-				}
-
 				if (bubbleType === "user") {
 					bubble.innerText = buffer;
 				} else {

@@ -34,9 +34,12 @@ def _generate_ssh_and_sftp_by_id(
 
     sftp = cli.open_sftp()
 
-    cache_data[container_id] = {"cli": cli, "sftp": sftp}
+    chan = cli.invoke_shell(width=120, height=32)
+    chan.settimeout(0.0)
 
-    return cli, sftp
+    cache_data[container_id] = {"cli": cli, "sftp": sftp, "chan": chan}
+
+    return cli, sftp, chan
 
 
 def _generate_ssh_and_sftp(container: VMRecord):
@@ -95,3 +98,13 @@ def open_ssh_and_sftp(container: VMRecord, open_sftp=False):
         return None, cli
 
     return sftp, cli
+
+
+def generate_console(container: VMRecord):
+    val = cache_ssh_and_sftp(container)
+    cli = val["cli"]
+
+    chan = cli.invoke_shell(width=120, height=32)
+    chan.settimeout(0.0)
+
+    return cli, chan

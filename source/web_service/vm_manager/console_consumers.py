@@ -93,11 +93,7 @@ class ConsoleConsumer(
         self.reader_task = asyncio.create_task(self._pump_upstream_to_client())
 
         await asyncio.sleep(1)
-        await self.upstream.send("cd /app\n")
-        await asyncio.sleep(0.25)
-        await self.upstream.send("clear\n")
-        await asyncio.sleep(0.25)
-        await self.upstream.send("ls -la\n")
+        await self.upstream.send("cd /app && clear && ls -la\n")
 
     async def receive(self, text_data=None, bytes_data=None):
         if not hasattr(self, "upstream"):

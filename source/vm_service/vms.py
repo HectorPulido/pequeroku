@@ -27,7 +27,6 @@ from qemu_manager.models import (
 from implementations import (
     RedisStore,
     Runner,
-    generate_console,
     send_files,
     list_dir,
     read_file,
@@ -36,6 +35,7 @@ from implementations import (
     download_folder,
 )
 
+from implementations.ssh_cache import cache_ssh_and_sftp
 from security import verify_bearer_token
 
 
@@ -197,18 +197,30 @@ async def execute_sh(vm_id: str, vm_command: VMSh) -> ElementResponse:
         return ElementResponse(ok=False, reason="VM is not running")
 
     command = vm_command.command
-    if not command.endswith("\n"):
-        command += "\n"
+    if not command.endswith(" /"):
+        command += " /"
 
+    output = ""
     try:
-        _, chan = generate_console(vm)
-        await asyncio.sleep(1)
-        chan.send(command)
-        await asyncio.sleep(1)
+        val = cache_ssh_and_sftp(vm)
+        cli = val["cli"]
+        stdin, stdout, stderr = cli.exec_command(command)
+        stdout.channel.settimeout(5)
+        out: str = stdout.read().decode()
+        err: str = stderr.read().decode()
+
+        if len(out.strip()) > 0:
+            output += f"Result: {out}\n"
+
+        if len(err.strip()) > 0:
+            output += f"Error: {err}\n"
+
+        output.strip()
+
     except Exception as e:
         print("Error sending data", e)
 
-    return ElementResponse(ok=True, reason="")
+    return ElementResponse(ok=True, reason=output)
 
 
 @vms_router.get("/{vm_id}/download-file")

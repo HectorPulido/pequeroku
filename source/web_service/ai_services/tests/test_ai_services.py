@@ -9,7 +9,12 @@ from django.urls import re_path
 from channels.testing import WebsocketCommunicator
 from channels.routing import URLRouter
 
-from web_service.vm_manager.test_utils import create_user, create_quota, create_node, create_container
+from web_service.vm_manager.test_utils import (
+    create_user,
+    create_quota,
+    create_node,
+    create_container,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -128,7 +133,9 @@ def test_ai_consumer_connect_and_receive_flow(monkeypatch):
     )
 
     # Fake OpenAI client that will stream two chunks
-    fake_client = FakeOpenAI(stream_chunks=["Hello", " world"], static_message="irrelevant")
+    fake_client = FakeOpenAI(
+        stream_chunks=["Hello", " world"], static_message="irrelevant"
+    )
     monkeypatch.setattr(ai_consumers, "_get_openai_client", lambda cfg: fake_client)
 
     # Use a lightweight fake agent to skip tool-calls complexity
@@ -166,13 +173,33 @@ def test_ai_consumer_connect_and_receive_flow(monkeypatch):
             "openai_api_url": "http://fake",
         }
 
-    monkeypatch.setattr(ai_consumers.AIConsumer, "_get_quota", staticmethod(fake_get_quota))
-    monkeypatch.setattr(ai_consumers.AIConsumer, "_set_quota", staticmethod(fake_set_quota))
-    monkeypatch.setattr(ai_consumers.AIConsumer, "_set_memory", staticmethod(fake_set_memory))
-    monkeypatch.setattr(ai_consumers.AIConsumer, "_get_memory", staticmethod(fake_get_memory))
-    monkeypatch.setattr(ai_consumers.AIConsumer, "_get_container_simple", staticmethod(fake_get_container_simple))
-    monkeypatch.setattr(ai_consumers.AIConsumer, "_user_owns_container", staticmethod(fake_user_owns_container))
-    monkeypatch.setattr(ai_consumers.AIConsumer, "_get_config_values", staticmethod(fake_get_config_values))
+    monkeypatch.setattr(
+        ai_consumers.AIConsumer, "_get_quota", staticmethod(fake_get_quota)
+    )
+    monkeypatch.setattr(
+        ai_consumers.AIConsumer, "_set_quota", staticmethod(fake_set_quota)
+    )
+    monkeypatch.setattr(
+        ai_consumers.AIConsumer, "_set_memory", staticmethod(fake_set_memory)
+    )
+    monkeypatch.setattr(
+        ai_consumers.AIConsumer, "_get_memory", staticmethod(fake_get_memory)
+    )
+    monkeypatch.setattr(
+        ai_consumers.AIConsumer,
+        "_get_container_simple",
+        staticmethod(fake_get_container_simple),
+    )
+    monkeypatch.setattr(
+        ai_consumers.AIConsumer,
+        "_user_owns_container",
+        staticmethod(fake_user_owns_container),
+    )
+    monkeypatch.setattr(
+        ai_consumers.AIConsumer,
+        "_get_config_values",
+        staticmethod(fake_get_config_values),
+    )
 
     # Build ASGI app with URLRouter so url_route.kwargs are available
     route = [re_path(r"^ws/ai/(?P<pk>\d+)/$", ai_consumers.AIConsumer.as_asgi())]
@@ -193,35 +220,46 @@ def test_ai_consumer_connect_and_receive_flow(monkeypatch):
         await communicator.send_json_to({"text": "hola"})
 
         # It should first emit start_text + "..." placeholder
-        start_evt = await drain_until(communicator, lambda e: e.get("event") == "start_text")
+        start_evt = await drain_until(
+            communicator, lambda e: e.get("event") == "start_text"
+        )
         assert start_evt and start_evt.get("event") == "start_text"
 
         placeholder = await drain_until(
-            communicator, lambda e: e.get("event") == "text" and e.get("content") == "..."
+            communicator,
+            lambda e: e.get("event") == "text" and e.get("content") == "...",
         )
         assert placeholder and placeholder.get("content") == "..."
 
         # Then we should receive the streamed chunks from FakeOpenAI
         chunk1 = await drain_until(
-            communicator, lambda e: e.get("event") == "text" and "Hello" in e.get("content", "")
+            communicator,
+            lambda e: e.get("event") == "text" and "Hello" in e.get("content", ""),
         )
         assert chunk1 and "Hello" in (chunk1.get("content") or "")
 
         chunk2 = await drain_until(
-            communicator, lambda e: e.get("event") == "text" and "world" in e.get("content", "")
+            communicator,
+            lambda e: e.get("event") == "text" and "world" in e.get("content", ""),
         )
         assert chunk2 and "world" in (chunk2.get("content") or "")
 
         # The assistant should finish, send memory and updated quota
-        finish_evt = await drain_until(communicator, lambda e: e.get("event") == "finish_text")
+        finish_evt = await drain_until(
+            communicator, lambda e: e.get("event") == "finish_text"
+        )
         assert finish_evt and finish_evt.get("event") == "finish_text"
 
-        memory_evt = await drain_until(communicator, lambda e: e.get("event") == "memory_data")
+        memory_evt = await drain_until(
+            communicator, lambda e: e.get("event") == "memory_data"
+        )
         assert memory_evt and memory_evt.get("event") == "memory_data"
         assert isinstance(memory_evt.get("memory"), list)
         assert any(m.get("role") == "assistant" for m in memory_evt["memory"])
 
-        connected_evt2 = await drain_until(communicator, lambda e: e.get("event") == "connected")
+        connected_evt2 = await drain_until(
+            communicator, lambda e: e.get("event") == "connected"
+        )
         assert connected_evt2 and connected_evt2.get("event") == "connected"
         assert connected_evt2["ai_uses_left_today"] <= evt["ai_uses_left_today"]
 
@@ -272,15 +310,23 @@ files: []
 """
     fake_openai = FakeOpenAI(static_message=generated_body)
     import web_service.ai_services.utils as utils
+
     monkeypatch.setattr(utils, "_get_openai_client", lambda cfg: fake_openai)
 
     # Config fetch: patch actual app model via importlib to avoid app_label issues
     import importlib
+
     ic_models = importlib.import_module("internal_config.models")
     monkeypatch.setattr(
         ic_models.Config,
         "get_config_values",
-        staticmethod(lambda keys: {"openai_api_key": "k", "openai_model": "m", "openai_api_url": "u"}),
+        staticmethod(
+            lambda keys: {
+                "openai_api_key": "k",
+                "openai_model": "m",
+                "openai_api_url": "u",
+            }
+        ),
     )
 
     # Fake VM service to capture calls

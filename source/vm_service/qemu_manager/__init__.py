@@ -10,7 +10,6 @@ from .seed import _make_overlay, _make_seed_iso
 from .ssh_ready import _wait_ssh
 from .qemu_args import _vm_qemu_arm64_args, _vm_qemu_x86_args
 from .vm import _start_vm
-from .session import QemuSession
 
 __all__ = [
     "VMProc",
@@ -23,5 +22,4 @@ __all__ = [
     "_vm_qemu_arm64_args",
     "_vm_qemu_x86_args",
     "_start_vm",
-    "QemuSession",
 ]

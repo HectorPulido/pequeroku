@@ -7,17 +7,7 @@ from fastapi import WebSocket
 import paramiko
 
 from qemu_manager.models import VMRecord
-from .ssh_cache import cache_ssh_and_sftp
-
-
-def generate_console(container: VMRecord):
-    val = cache_ssh_and_sftp(container)
-    cli = val["cli"]
-
-    chan = cli.invoke_shell(width=120, height=32)
-    chan.settimeout(0.0)
-
-    return cli, chan
+from .ssh_cache import cache_ssh_and_sftp, generate_console
 
 
 class TTYBridge:

@@ -150,7 +150,6 @@ class RedisStore:
         status: VMState,
         error_reason: Optional[str] = None,
     ):
-        print(f"Setting {vm} to status: {status}, with error_reason={error_reason}")
         vm.state = status
         vm.error_reason = error_reason
         self.put(vm)
