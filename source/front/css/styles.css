@@ -6,12 +6,12 @@
 }
 
 body {
-	background: #f4f4f4;
-	color: #333;
+	background: var(--bg);
+	color: var(--fg);
 }
 
 button {
-	background: #28a745;
+	background: var(--brand);
 	border: none;
 	padding: 0.5rem 1rem;
 	color: white;
@@ -20,7 +20,7 @@ button {
 }
 
 button:disabled {
-	background: #4d554f;
+	background: var(--button-bg);
 	cursor: auto;
 }
 
@@ -51,7 +51,7 @@ main {
 }
 
 .container-card small {
-	color: #666;
+	color: var(--muted);
 }
 
 .container-card button {
@@ -71,7 +71,7 @@ main {
 }
 
 .login-box {
-	background: #fff;
+	background: var(--card);
 	padding: 2rem;
 	border-radius: 8px;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -88,14 +88,14 @@ main {
 	width: 100%;
 	padding: 0.75rem;
 	margin-bottom: 0.5rem;
-	border: 1px solid #ccc;
+	border: 1px solid var(--button-border);
 	border-radius: 4px;
 }
 
 .login-box button {
 	width: 100%;
 	padding: 0.75rem;
-	background: #28a745;
+	background: var(--brand);
 	color: #fff;
 	border: none;
 	border-radius: 4px;
@@ -103,11 +103,11 @@ main {
 }
 
 .login-box button:hover {
-	background: #218838;
+	background: var(--brand);
 }
 
 .error-message {
-	color: #c0392b;
+	color: var(--danger);
 	margin-top: 0.5rem;
 }
 
@@ -126,8 +126,8 @@ main {
 }
 
 .console-header {
-	background: #333;
-	color: #fff;
+	background: var(--header-bg);
+	color: var(--header-fg);
 	padding: 0.5rem 1rem;
 	display: flex;
 	justify-content: space-between;
@@ -139,8 +139,8 @@ main {
 }
 
 .console-body {
-	background: #000;
-	color: #0f0;
+	background: var(--console-bg);
+	color: var(--console-fg);
 	font-family: monospace;
 	height: 90%;
 	overflow-y: auto;
@@ -160,14 +160,14 @@ main {
 .console-input input {
 	flex: 1;
 	padding: 0.5rem;
-	border: 1px solid #ccc;
+	border: 1px solid var(--button-border);
 	border-bottom-left-radius: 6px;
 }
 
 .console-input button {
 	padding: 0.5rem 1rem;
 	border: none;
-	background: #007bff;
+	background: var(--brand-2);
 	color: white;
 	cursor: pointer;
 	border-radius: 0%;
@@ -191,7 +191,7 @@ main {
 }
 
 .dropdown-content div {
-	background-color: #222;
+	background: var(--card);
 	padding: 15px;
 }
 
@@ -208,23 +208,23 @@ main {
 .top-btn {
 	background: none;
 	border: none;
-	color: #fff;
+	color: var(--fg);
 	font-size: 1.2rem;
 	cursor: pointer;
 	padding: 0.5rem 0.25rem;
 }
 
 .status-stopped {
-	color: red;
+	color: var(--warning, #f59e0b);
+	-webkit-text-stroke: 0.5px #000000;
 }
 
 .status-running {
-	color: green;
+	color: var(--success);
 }
 
 .status-error {
-	color: yellow;
-	-webkit-text-stroke: 0.5px #000000;
+	color: var(--danger);
 }
 
 .console-btn {

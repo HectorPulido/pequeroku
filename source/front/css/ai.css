@@ -1,11 +1,11 @@
 :root {
-	--bg: #1f242b;
-	--panel: #121834;
-	--ink: #e9ecf8;
-	--muted: #9aa3c7;
+	--bg: var(--card);
+	--panel: var(--color-surface-2);
+	--ink: var(--fg);
+	--muted: var(--muted);
 	--accent: var(--brand-2);
-	--user: #0a6d7a;
-	--bot: #2c3e7a;
+	--user: var(--brand-2);
+	--bot: var(--brand);
 }
 
 .chat {
@@ -13,7 +13,7 @@
 	height: min(2000px, 90vh);
 	display: grid;
 	grid-template-rows: auto 2em 1fr auto;
-	border: 1px solid rgba(255, 255, 255, 0.08);
+	border: 1px solid var(--border);
 	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 	border-radius: 18px;
 	overflow: hidden;
@@ -35,7 +35,7 @@
 #btn-ai-chat-close {
 	background: none;
 	border: none;
-	color: #fff;
+	color: var(--fg);
 	font-size: 1.2rem;
 	cursor: pointer;
 	padding: 0.5rem 0.25rem;
@@ -46,7 +46,7 @@
 	align-items: center;
 	gap: 12px;
 	width: 100%;
-	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	border-bottom: 1px solid var(--border);
 	display: grid;
 	grid-template-columns: 1fr 50px;
 }
@@ -60,15 +60,16 @@
 	width: 10px;
 	height: 10px;
 	border-radius: 999px;
-	background: #34d399;
-	box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.15);
+	background: var(--color-success);
+	box-shadow: 0 0 0 4px
+		color-mix(in oklab, var(--color-success) 15%, transparent);
 }
 #bot-header .red-dot {
 	width: 10px;
 	height: 10px;
 	border-radius: 999px;
-	background: #d3345d;
-	box-shadow: 0 0 0 4px rgb(211 52 157 / 15%);
+	background: var(--color-error);
+	box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-error) 15%, transparent);
 }
 
 #messages {
@@ -108,8 +109,8 @@
 	padding: 10px 12px;
 	border-radius: 12px;
 	line-height: 1.5;
-	background: rgba(255, 255, 255, 0.04);
-	border: 1px solid rgba(255, 255, 255, 0.06);
+	background: color-mix(in oklab, var(--fg) 6%, transparent);
+	border: 1px solid color-mix(in oklab, var(--fg) 12%, transparent);
 	max-width: 75ch;
 	white-space: pre-wrap;
 	word-wrap: break-word;
@@ -144,9 +145,9 @@ textarea#chat-input {
 	max-height: 180px;
 	padding: 12px 14px;
 	border-radius: 12px;
-	border: 1px solid rgba(255, 255, 255, 0.12);
-	background: rgba(255, 255, 255, 0.03);
-	color: var(--ink);
+	border: 1px solid var(--button-border);
+	background: color-mix(in oklab, var(--card) 6%, transparent);
+	color: var(--fg);
 	outline: none;
 }
 textarea::placeholder#chat-input {

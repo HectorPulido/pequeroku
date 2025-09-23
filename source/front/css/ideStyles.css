@@ -31,6 +31,18 @@ body {
 .sidebar :is(#file-tree, ul#file-tree) li:hover {
 	background: var(--hover);
 }
+/* Prevent ancestor folders from highlighting when a deeper item is hovered */
+.sidebar :is(#file-tree, ul#file-tree) li:hover:has(li:hover) {
+	background: transparent;
+}
+/* Selected item style */
+.sidebar #file-tree li.selected {
+	background: color-mix(in oklab, var(--brand) 20%, transparent);
+}
+/* Keep selected style subtle when child item is hovered */
+.sidebar #file-tree li.selected:has(li:hover) {
+	background: transparent;
+}
 
 .sidebar #file-tree li:hover > ul,
 .sidebar #file-tree li ul:hover {
@@ -48,21 +60,21 @@ body {
 /* Buttons & text inputs */
 button,
 input[type="text"] {
-	background: #3e3e3e;
-	color: #eee;
-	border: 1px solid #555;
+	background: var(--button-bg);
+	color: var(--button-fg);
+	border: 1px solid var(--button-border);
 	border-radius: 4px;
 	padding: 4px 8px;
 }
 
 button:hover {
-	background: #303030;
+	background: var(--hover);
 }
 
 /* ===== Layout (editor shell) ===== */
 #editor-modal {
 	/* Full-viewport editor container */
-	color: #ddd;
+	color: var(--fg);
 	display: flex;
 	width: 100vw;
 	height: 100dvh;
@@ -99,7 +111,7 @@ wc-monaco-editor#editor {
 	flex-direction: column;
 	min-height: 0;
 	min-width: 0;
-	background: black;
+	background: var(--console-bg);
 	/* avoid width push */
 }
 
@@ -113,7 +125,7 @@ wc-monaco-editor#editor {
 
 /* ===== Sidebar (collapsible / off-canvas on mobile) ===== */
 #sidebar {
-	background: #2d2d2d;
+	background: var(--card);
 	/*padding: 8px;*/
 	box-sizing: border-box;
 	overflow-y: auto;
@@ -138,7 +150,7 @@ wc-monaco-editor#editor {
 	gap: 6px;
 	flex-wrap: wrap;
 	/* on narrow screens, wrap to a new line */
-	background: #2d2d2d;
+	background: var(--card);
 	padding: 4px;
 }
 
@@ -169,8 +181,8 @@ wc-monaco-editor#editor {
 
 /* Console */
 .console {
-	background: #2d2d2d;
-	color: #eee;
+	background: var(--console-bg);
+	color: var(--console-fg);
 	padding: 4px;
 	overflow-y: auto;
 	font-family: monospace;
@@ -198,7 +210,7 @@ wc-monaco-editor#editor {
 }
 
 .dropdown-content div {
-	background-color: #222;
+	background: var(--card);
 	padding: 15px;
 }
 
@@ -214,7 +226,7 @@ wc-monaco-editor#editor {
 /* ===== Modals ===== */
 #templates-modal,
 .upload-body {
-	color: black;
+	color: var(--fg);
 }
 
 /* ===== Responsive: phones & tablets ≤ 768px ===== */
@@ -242,7 +254,7 @@ wc-monaco-editor#editor {
 		width: 80vw;
 		/* drawer-like width */
 		max-width: 320px;
-		border-right: 1px solid #444;
+		border-right: 1px solid var(--border);
 		z-index: 50;
 	}
 
@@ -377,7 +389,7 @@ body {
 }
 
 .resizer {
-	background: #252529;
+	background: var(--border);
 }
 
 /* Console tabs */
@@ -393,9 +405,9 @@ body {
 }
 
 .console-tab {
-	background: #3e3e3e;
-	color: #eee;
-	border: 1px solid #555;
+	background: var(--button-bg);
+	color: var(--button-fg);
+	border: 1px solid var(--button-border);
 	border-radius: 6px;
 	padding: 2px 8px;
 	cursor: pointer;
@@ -404,17 +416,17 @@ body {
 }
 
 .console-tab:hover {
-	background: #303030;
+	background: var(--hover);
 }
 
 .console-tab[aria-selected="true"] {
-	background: #11161c;
-	border-color: #777;
-	color: #d1d5db;
+	background: var(--header-bg);
+	border-color: var(--border-strong);
+	color: var(--header-fg);
 }
 
 .console-tab:focus {
-	outline: 2px solid #6aa3ff;
+	outline: 2px solid color-mix(in oklab, var(--brand) 65%, white);
 	outline-offset: 1px;
 }
 
@@ -428,7 +440,7 @@ body {
 	height: 6px;
 }
 .console-tabs::-webkit-scrollbar-thumb {
-	background: #555;
+	background: var(--button-border);
 	border-radius: 3px;
 }
 .console-tabs::-webkit-scrollbar-track {
@@ -448,9 +460,9 @@ body {
 }
 
 .file-tab {
-	background: #3e3e3e;
-	color: #eee;
-	border: 1px solid #555;
+	background: var(--button-bg);
+	color: var(--button-fg);
+	border: 1px solid var(--button-border);
 	border-radius: 6px;
 	padding: 1px 8px;
 	font-size: 0.9em;
@@ -461,17 +473,17 @@ body {
 }
 
 .file-tab:hover {
-	background: #303030;
+	background: var(--hover);
 }
 
 .file-tab[aria-selected="true"] {
-	background: #11161c;
-	border-color: #777;
-	color: #d1d5db;
+	background: var(--header-bg);
+	border-color: var(--border-strong);
+	color: var(--header-fg);
 }
 
 .file-tab:focus {
-	outline: 2px solid #6aa3ff;
+	outline: 2px solid color-mix(in oklab, var(--brand) 65%, white);
 	outline-offset: 1px;
 }
 
@@ -485,7 +497,7 @@ body {
 	height: 4px;
 }
 .file-tabs::-webkit-scrollbar-thumb {
-	background: #555;
+	background: var(--button-border);
 	border-radius: 3px;
 }
 .file-tabs::-webkit-scrollbar-track {

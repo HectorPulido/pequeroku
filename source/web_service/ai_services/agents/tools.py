@@ -5,7 +5,8 @@ from vm_manager.vm_client import VMServiceClient, VMUploadFiles, VMFile, SearchR
 
 
 class DedupPolicy:
-    logs = {}
+    def __init__(self):
+        self.logs = {}
 
 
 def _get_service(obj: Container) -> VMServiceClient:

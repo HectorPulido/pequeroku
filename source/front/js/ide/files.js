@@ -19,6 +19,30 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 		} catch {}
 	}
 
+	// Persist single selection per container
+	const SEL_KEY = `ui:ft:sel:${containerId}`;
+	let selectedPath = null;
+	try {
+		const savedSel = localStorage.getItem(SEL_KEY);
+		if (typeof savedSel === "string" && savedSel) selectedPath = savedSel;
+	} catch {}
+	function setSelected(path) {
+		selectedPath = path || null;
+		try {
+			if (selectedPath) localStorage.setItem(SEL_KEY, selectedPath);
+			else localStorage.removeItem(SEL_KEY);
+		} catch {}
+		// clear previous
+		fileTreeEl
+			.querySelectorAll("li.selected")
+			.forEach((el) => el.classList.remove("selected"));
+		if (!selectedPath) return;
+		const node = Array.from(fileTreeEl.querySelectorAll("li[data-path]")).find(
+			(el) => el.dataset.path === selectedPath,
+		);
+		if (node) node.classList.add("selected");
+	}
+
 	// === WS: list_dir ===
 	async function listDir(path = "/app") {
 		const r = await fsws.call("list_dir", { path });
@@ -53,6 +77,7 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 			if (item.path_type === "directory") {
 				li.addEventListener("click", async (e) => {
 					e.stopPropagation();
+					setSelected(item.path);
 					const willExpand = !li.classList.contains("expanded");
 					if (willExpand) {
 						li.classList.add("expanded");
@@ -75,6 +100,7 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 			} else {
 				li.addEventListener("click", (e) => {
 					e.stopPropagation();
+					setSelected(item.path);
 					onOpen(item.path);
 				});
 			}
@@ -98,6 +124,8 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 
 	function openContextMenu(e, li) {
 		menuTarget = li; // li.dataset.path / li.dataset.type
+		// select the target item on context menu
+		if (li?.dataset?.path) setSelected(li.dataset.path);
 		menu.classList.remove("hidden");
 		const { innerWidth, innerHeight } = window;
 		const rectW = 200,
@@ -137,6 +165,8 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 		refreshing = true;
 		const prevScroll = fileTreeEl.scrollTop;
 		await loadDir("/app", fileTreeEl);
+		// re-apply selection after rebuilding the tree
+		if (selectedPath) setSelected(selectedPath);
 		fileTreeEl.scrollTop = prevScroll;
 		refreshing = false;
 	}

@@ -3,49 +3,24 @@
 }
 
 :root {
-	--_bg: var(--bg, #f4f4f4);
-	--_fg: var(--fg, #333);
-	--_card: var(--card, #ffffff);
-	--_muted: var(--muted, #666);
-	--_brand: var(--brand, #28a745);
-	--_brand2: var(--brand-2, #17a2b8);
-	--_header-bg: var(--header-bg, #222);
-	--_header-fg: var(--header-fg, #fff);
-	--_button-bg: var(--button-bg, #3e3e3e);
-	--_button-fg: var(--button-fg, #eee);
-	--_button-border: var(--button-border, #555);
-	--_hover: var(--hover, #303030);
-	--_ok: var(--ok, var(--brand, #28a745));
-	--_err: var(--err, var(--danger, #a1a));
+	--_bg: var(--bg);
+	--_fg: var(--fg);
+	--_card: var(--card);
+	--_muted: var(--muted);
+	--_brand: var(--brand);
+	--_brand2: var(--brand-2);
+	--_header-bg: var(--header-bg);
+	--_header-fg: var(--header-fg);
+	--_button-bg: var(--button-bg);
+	--_button-fg: var(--button-fg);
+	--_button-border: var(--button-border);
+	--_hover: var(--hover);
+	--_ok: var(--ok);
+	--_err: var(--err);
 }
 
 :root {
-	--text: var(--fg, #333);
-}
-
-html[data-theme="dark"] :root {
-	--bg: #0f1115;
-	--fg: #e6e6e6;
 	--text: var(--fg);
-
-	--card: #141820;
-	--muted: #a0aec0;
-
-	--brand: #1e6f4f;
-	--brand-2: #0e6b7a;
-
-	--header-bg: #11161c;
-	--header-fg: #e6e6e6;
-
-	--button-bg: #0e6b7a;
-	--button-fg: #e6e6e6;
-	--button-border: #2d3748;
-	--hover: #0b2866;
-
-	--danger: #8b1d1d;
-
-	--ok: #10b981;
-	--err: #ef4444;
 }
 
 body {
