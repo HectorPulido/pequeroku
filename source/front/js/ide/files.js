@@ -1,5 +1,4 @@
 import { notifyAlert } from "../core/alerts.js";
-import { detectLangFromPath } from "../shared/langMap.js";
 
 export function setupFileTree({
 	fsws,
@@ -304,7 +303,8 @@ export function setupFileTree({
 		currentFilePath,
 	) {
 		const { action, path, type } = e.detail || {};
-		console.log(action, path, type);
+		window.pequeroku?.debug &&
+			console.log("finder action:", { action, path, type });
 		if (!action || !path) return;
 		try {
 			if (action === "open") {
@@ -366,7 +366,6 @@ export function setupFileTree({
 	return {
 		refresh,
 		refreshPath,
-		detectLangFromPath,
 		finderAction,
 		newFolder,
 		newFile,

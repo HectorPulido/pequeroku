@@ -45,7 +45,7 @@ function connect() {
 	ws = new WebSocket(`/ws/ai/${containerId}/`);
 
 	ws.onopen = () => {
-		console.log("WS Open");
+		window.pequeroku?.debug && console.log("WS Open");
 		aiDot.classList.remove("red-dot");
 		aiDot.classList.add("dot");
 
@@ -84,18 +84,18 @@ function connect() {
 			}
 		} catch (error) {
 			console.error(error);
-			console.log("RX (Text):", e.data);
+			window.pequeroku?.debug && console.log("RX (Text):", e.data);
 		}
 	};
 	ws.onclose = () => {
-		console.log("WS Closed");
+		window.pequeroku?.debug && console.log("WS Closed");
 		aiDot.classList.add("red-dot");
 		aiDot.classList.remove("dot");
 		btnReconnectDiv.classList.remove("hidden");
 		form.classList.add("hidden");
 	};
 	ws.onerror = (e) => {
-		console.log("WS Error", e);
+		window.pequeroku?.debug && console.log("WS Error", e);
 		aiDot.classList.add("red-dot");
 		aiDot.classList.remove("dot");
 		btnReconnectDiv.classList.remove("hidden");
@@ -154,9 +154,9 @@ input.addEventListener("input", () => {
 });
 
 btnOpenAi.addEventListener("click", () => {
-	console.log("Click btnOpenAi");
+	window.pequeroku?.debug && console.log("Click btnOpenAi");
 	if (ws === null) {
-		console.log("Starting connection...");
+		window.pequeroku?.debug && console.log("Starting connection...");
 		connect();
 		addMessage("bot", "Hello, how can I help you today?");
 	}

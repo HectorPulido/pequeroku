@@ -1,12 +1,13 @@
+import { METRICS } from "../core/constants.js";
 import { $ } from "../core/dom.js";
 import { applyTheme } from "../core/themes.js";
 import { fetchWithTimeout, hideHeader } from "../core/utils.js";
 
 hideHeader();
 
-const DEFAULT_POLL_MS = 1000;
+const DEFAULT_POLL_MS = METRICS.pollMs;
 
-const MAX_POINTS = 300;
+const MAX_POINTS = METRICS.maxPoints;
 
 const urlParams = new URLSearchParams(window.location.search);
 const container_id = urlParams.get("container");

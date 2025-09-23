@@ -21,8 +21,8 @@
  *     closeOnEsc: true,
  *     trapFocus: true,
  *     initialFocus: () => document.getElementById("file-input"),
- *     onOpen: () => console.log("opened"),
- *     onClose: () => console.log("closed"),
+ *     onOpen: () => {},
+ *     onClose: () => {},
  *   });
  *
  *   // Programmatic control:

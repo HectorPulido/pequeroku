@@ -105,8 +105,6 @@ export function setupConsole({
 			try {
 				s.fitAddon.fit();
 			} catch {}
-			// Expose current for debugging/devtools if needed
-			window._term = s.term;
 		}
 	}
 
@@ -207,7 +205,6 @@ export function setupConsole({
 		btn.addEventListener("click", () => {
 			const p = btn.getAttribute("param");
 			onSend?.(p);
-			console.log("executing:", { action: p });
 		}),
 	);
 

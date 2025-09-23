@@ -1,23 +1,19 @@
+import { FSWS } from "../core/constants.js";
+import { createWSBase } from "../core/ws.js";
+
 export function createFSWS({ containerPk, onBroadcast, onOpen }) {
 	const proto = location.protocol === "https:" ? "wss" : "ws";
 	const url = `${proto}://${location.host}/ws/fs/${containerPk}/`;
 
-	let ws;
 	let nextId = 1;
 	const pending = new Map();
 	const revs = new Map();
-	let attempts = 0;
-	const maxBackoff = 8000;
 
-	function connect() {
-		ws = new WebSocket(url);
-
-		ws.onopen = () => {
-			attempts = 0;
+	const sock = createWSBase(url, {
+		onOpen: () => {
 			onOpen?.();
-		};
-
-		ws.onmessage = (e) => {
+		},
+		onMessage: (e) => {
 			try {
 				const msg = JSON.parse(e.data);
 
@@ -59,43 +55,35 @@ export function createFSWS({ containerPk, onBroadcast, onOpen }) {
 			} catch (err) {
 				console.error("FS WS parse error:", err);
 			}
-		};
-
-		ws.onclose = () => {
-			const wait = Math.min(maxBackoff, 500 * 2 ** attempts++);
-			setTimeout(connect, wait);
-		};
-
-		ws.onerror = (e) => {
+		},
+		onError: (e) => {
 			console.error("FS WS error:", e);
-		};
-	}
-
-	connect();
+		},
+	});
 
 	function waitOpenAndCall(action, payload) {
 		return new Promise((resolve, reject) => {
 			const id = setInterval(() => {
-				if (ws && ws.readyState === WebSocket.OPEN) {
+				if (sock.isOpen()) {
 					clearInterval(id);
 					call(action, payload).then(resolve, reject);
 				}
-			}, 100);
+			}, FSWS.waitOpenIntervalMs);
 			// failsafe in case it never opens
 			setTimeout(() => {
 				clearInterval(id);
 				reject(new Error(`timeout waiting WS open for ${action}`));
-			}, 20000);
+			}, FSWS.openTimeoutMs);
 		});
 	}
 
 	function call(action, payload = {}) {
-		if (!ws || ws.readyState !== WebSocket.OPEN) {
+		if (!sock.isOpen()) {
 			return waitOpenAndCall(action, payload);
 		}
 		const req_id = nextId++;
 		const msg = { action, req_id, ...payload };
-		ws.send(JSON.stringify(msg));
+		sock.send(msg);
 		return new Promise((resolve, reject) => {
 			pending.set(req_id, { resolve, reject });
 			setTimeout(() => {
@@ -103,7 +91,7 @@ export function createFSWS({ containerPk, onBroadcast, onOpen }) {
 					pending.delete(req_id);
 					reject(new Error(`timeout calling ${action}`));
 				}
-			}, 20000);
+			}, FSWS.callTimeoutMs);
 		});
 	}
 

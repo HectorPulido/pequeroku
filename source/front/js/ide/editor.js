@@ -78,9 +78,10 @@ async function waitForMonaco(callback) {
 			callback();
 			return;
 		} catch (error) {
-			console.warn("Error opening File, Try number:", i, error);
+			window.pequeroku?.debug &&
+				console.warn("Error opening File, Try number:", i, error);
 		}
-		console.log("Waiting for monaco...");
+		window.pequeroku?.debug && console.log("Waiting for monaco...");
 		await sleep(500 * i);
 	}
 	throw new Error("Monaco not ready");
@@ -89,7 +90,7 @@ async function waitForMonaco(callback) {
 export async function mobileConfig(isMobile) {
 	await waitForMonaco(() => {
 		if (isMobile) {
-			window._editor.updateOptions({
+			getEditor().updateOptions({
 				minimap: { enabled: false },
 				wordWrap: "on",
 				fontSize: 16,
@@ -104,7 +105,7 @@ export async function mobileConfig(isMobile) {
 				},
 			});
 		} else {
-			window._editor.updateOptions({
+			getEditor().updateOptions({
 				minimap: { enabled: true },
 				wordWrap: "off",
 				fontSize: 14,
@@ -114,17 +115,21 @@ export async function mobileConfig(isMobile) {
 }
 
 export function clearEditor() {
-	const model = window._editor.getModel();
+	const model = getEditor().getModel();
 	model.setValue("");
 }
 
 export function getEditorValue() {
-	return window._editor.getValue();
+	return getEditor().getValue();
+}
+
+export function getEditor() {
+	return window._editor;
 }
 
 export function changeTheme(isDark, consoleApi) {
 	try {
-		window._editor._themeService.setTheme(isDark ? THEME_DARK : THEME_LIGHT);
+		getEditor()._themeService.setTheme(isDark ? THEME_DARK : THEME_LIGHT);
 		consoleApi?.setTheme?.(isDark);
 	} catch (error) {
 		console.error("Could not change the theme", error);
@@ -134,7 +139,7 @@ export function changeTheme(isDark, consoleApi) {
 export async function openFile(api, path, setPathLabel) {
 	await waitForMonaco(async () => {
 		const lang = detectLangFromPath(path);
-		const model = window._editor.getModel();
+		const model = getEditor().getModel();
 		monaco.editor.setModelLanguage(model, lang);
 		const { content } = await api(
 			`/read_file/?path=${encodeURIComponent(path)}`,

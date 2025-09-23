@@ -1,4 +1,5 @@
 import { addAlert } from "../core/alerts.js";
+import { makeApi } from "../core/api.js";
 import { $ } from "../core/dom.js";
 
 export function setupLogin({ onSuccess }) {
@@ -20,11 +21,9 @@ export function setupLogin({ onSuccess }) {
 
 	(async () => {
 		try {
-			const res = await fetch("/api/containers/", {
-				credentials: "same-origin",
-			});
-			if (!res.ok) showLogin();
-			else showApp();
+			const api = makeApi("/api/containers");
+			await api("/", { credentials: "same-origin" });
+			showApp();
 		} catch {
 			showLogin();
 		}
@@ -36,16 +35,11 @@ export function setupLogin({ onSuccess }) {
 		const username = usernameEl.value.trim();
 		const password = passwordEl.value.trim();
 		try {
-			const res = await fetch("/api/user/login/", {
+			await makeApi("/api")("/user/login/", {
 				method: "POST",
 				credentials: "same-origin",
-				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ username, password }),
 			});
-			if (!res.ok) {
-				const err = await res.json();
-				throw new Error(err.error || "Autenticación fallida");
-			}
 			showApp();
 		} catch (err) {
 			loginError.textContent = err.message;

@@ -1,5 +1,5 @@
 import { notifyAlert } from "../core/alerts.js";
-import { getCSRF } from "../core/csrf.js";
+import { makeApi } from "../core/api.js";
 import { escapeHtml } from "../core/dom.js";
 import { bindModal } from "../core/modals.js";
 
@@ -28,9 +28,9 @@ export function setupTemplates({
 	});
 
 	async function load() {
-		const res = await fetch("/api/templates/", { credentials: "same-origin" });
-		if (!res.ok) throw new Error(await res.text());
-		render(await res.json());
+		const api = makeApi("/api");
+		const templates = await api("/templates/", { credentials: "same-origin" });
+		render(templates);
 	}
 
 	function render(templates) {
@@ -59,21 +59,15 @@ export function setupTemplates({
 		const dest = destInput?.value || "/app";
 		const clean = !!cleanInput?.checked;
 		try {
-			const res = await fetch(`/api/templates/${templateId}/apply/`, {
+			const j = await makeApi("/api/templates")(`/${templateId}/apply/`, {
 				method: "POST",
 				credentials: "same-origin",
-				headers: {
-					"Content-Type": "application/json",
-					"X-CSRFToken": getCSRF(),
-				},
 				body: JSON.stringify({
 					container_id: parseInt(containerId, 10),
 					dest_path: dest,
 					clean,
 				}),
 			});
-			const j = await res.json();
-			if (!res.ok) throw new Error(j.error || "Could not open the templates");
 			notifyAlert(
 				`Template applied on (${j.files_count} files/s) en ${dest}`,
 				"success",

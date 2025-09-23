@@ -1,3 +1,4 @@
+import { BREAKPOINTS, NETWORK } from "./constants.js";
 export function signatureFrom(data) {
 	const norm = (data || [])
 		.map((c) => ({
@@ -10,7 +11,7 @@ export function signatureFrom(data) {
 	return JSON.stringify(norm);
 }
 export function isSmallScreen() {
-	return matchMedia("(max-width: 768px)").matches;
+	return matchMedia(`(max-width: ${BREAKPOINTS.mobileMaxWidth}px)`).matches;
 }
 
 export function hideHeader() {
@@ -33,7 +34,11 @@ export function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function fetchWithTimeout(url, init = {}, timeoutMs = 8000) {
+export async function fetchWithTimeout(
+	url,
+	init = {},
+	timeoutMs = NETWORK.fetchTimeoutMs,
+) {
 	const controller = new AbortController();
 	const id = setTimeout(() => controller.abort(), timeoutMs);
 	try {

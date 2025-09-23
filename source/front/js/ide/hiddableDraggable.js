@@ -1,3 +1,4 @@
+import { BREAKPOINTS, UI_SIZES } from "../core/constants.js";
 import { $, $$ } from "../core/dom.js";
 export async function setupHiddableDragabble(containerId, callback) {
 	const toggleSidebarBtn = $("#toggle-sidebar");
@@ -10,7 +11,9 @@ export async function setupHiddableDragabble(containerId, callback) {
 	const splitterV = $("#splitter-v");
 	const splitterH = $("#splitter-h");
 
-	const IS_MOBILE = matchMedia("(max-width: 768px)").matches;
+	const IS_MOBILE = matchMedia(
+		`(max-width: ${BREAKPOINTS.mobileMaxWidth}px)`,
+	).matches;
 	const LS_SIDEBAR_KEY = `ide:${containerId}:sidebar`;
 	const LS_CONSOLE_KEY = `ide:${containerId}:console`;
 
@@ -18,14 +21,16 @@ export async function setupHiddableDragabble(containerId, callback) {
 	const LS_CONSOLE_SIZE_KEY = `ide:${containerId}:console:px`;
 	const LS_SIDEBAR_SIZE_KEY = `ide:${containerId}:sidebar:px`;
 
-	const MIN_HEIGHT = 50;
+	const MIN_HEIGHT = UI_SIZES.consoleMinHeight;
 
 	const savedW = parseInt(
-		localStorage.getItem(LS_SIDEBAR_SIZE_KEY) || "280",
+		localStorage.getItem(LS_SIDEBAR_SIZE_KEY) ||
+			String(UI_SIZES.sidebarDefaultWidth),
 		10,
 	);
 	const savedH = parseInt(
-		localStorage.getItem(LS_CONSOLE_SIZE_KEY) || "400",
+		localStorage.getItem(LS_CONSOLE_SIZE_KEY) ||
+			String(UI_SIZES.consoleDefaultHeight),
 		10,
 	);
 
@@ -96,10 +101,10 @@ export async function setupHiddableDragabble(containerId, callback) {
 		consoleHiddable.forEach((a) => {
 			a.classList.toggle("collapsed", state !== "open");
 		});
-		console.log("state: ", state);
+		window.pequeroku?.debug && console.log("state: ", state);
 		if (state === "open") {
 			if (IS_MOBILE) {
-				console.log("MOBILE");
+				window.pequeroku?.debug && console.log("MOBILE");
 				consoleArea.style.height = `185dvh`;
 			} else {
 				consoleArea.style.height = `${h}px`;
