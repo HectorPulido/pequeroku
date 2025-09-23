@@ -19,6 +19,10 @@ body {
 	margin: 0;
 }
 
+#file-tree {
+   	margin-bottom: 10em;
+}
+
 .sidebar ul ul {
 	padding-left: 12px;
 }
@@ -152,6 +156,12 @@ wc-monaco-editor#editor {
 	/* on narrow screens, wrap to a new line */
 	background: var(--card);
 	padding: 4px;
+}
+
+#tree-toolbar {
+    justify-content: normal;
+    position: sticky;
+    top: 0;
 }
 
 .toolbar > div {
