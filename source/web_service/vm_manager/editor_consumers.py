@@ -87,7 +87,7 @@ class EditorConsumer(
 
         await self.channel_layer.group_add(self._group_name(self.pk), self.channel_name)
         await self.send_json({"event": "connected"})
-        # self._start_fs_watcher()
+        self._start_fs_watcher()
 
     async def disconnect(self, code):
         try:
@@ -96,7 +96,7 @@ class EditorConsumer(
             )
         except Exception:
             pass
-        # await self._stop_fs_watcher()
+        await self._stop_fs_watcher()
 
     async def receive_json(self, content, **kwargs):
         req_id = content.get("req_id")
@@ -343,7 +343,7 @@ class EditorConsumer(
         root = self._check_path(root)
         cmd = (
             f"set -e; dir={shlex.quote(root)}; "
-            r"find $dir -not -path '*/.git/*' -printf '%y|%P|%s|%T@\n' "
+            r"find \"$dir\" \( -path '*/.git/*' -o -path '*/.cache/*' -o -path '*/node_modules/*' \) -prune -o -printf '%y|%P|%s|%T@\n' "
             r"| sort | sha256sum | cut -d' ' -f1"
         )
         if not self.client:
@@ -401,7 +401,7 @@ class EditorConsumer(
     def _start_fs_watcher(self):
         if self._watcher_task is None or self._watcher_task.done():
             self._watcher_task = asyncio.create_task(
-                self._watch_fs_loop(SAFE_ROOT, 2.0)
+                self._watch_fs_loop(SAFE_ROOT, 5.0)
             )
 
     async def _stop_fs_watcher(self):
