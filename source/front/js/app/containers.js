@@ -1,11 +1,8 @@
 import { addAlert } from "../core/alerts.js";
-import { getCSRF } from "../core/csrf.js";
-import { $ } from "../core/dom.js";
 import { makeApi } from "../core/api.js";
-import { signatureFrom, isSmallScreen } from "../core/utils.js";
+import { $ } from "../core/dom.js";
 import { bindModal } from "../core/modals.js";
-
-
+import { isSmallScreen, signatureFrom } from "../core/utils.js";
 
 function show_alert() {
 	addAlert(

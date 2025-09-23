@@ -14,7 +14,7 @@ export function setupTemplates({
 	refreshIDE,
 }) {
 	const titleEl = modalEl.querySelector(".upload-header > span");
-	const modalCtrl = bindModal(modalEl, openBtn, closeBtn, {
+	bindModal(modalEl, openBtn, closeBtn, {
 		titleEl,
 		defaultTitle: titleEl?.textContent || "Templates",
 		initialFocus: () => listEl,

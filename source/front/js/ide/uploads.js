@@ -33,21 +33,21 @@ export function setupUploads({
 		}
 	}
 
-	    const modalCtrl = bindModal(modalEl, openBtn, closeBtn, {
-	        defaultTitle: "Upload file",
-	        initialFocus: () => inputEl,
-	        onOpen: () => {
-	            try {
-	                inputEl.value = "";
-	            } catch {}
-	        },
-	    });
-	    uploadBtn.addEventListener("click", async () => {
-	        const file = inputEl.files?.[0];
-	        if (!file) return notifyAlert("Select a file first.", "warning");
-	        await upload(file);
-	        modalCtrl.close();
-	    });
+	const modalCtrl = bindModal(modalEl, openBtn, closeBtn, {
+		defaultTitle: "Upload file",
+		initialFocus: () => inputEl,
+		onOpen: () => {
+			try {
+				inputEl.value = "";
+			} catch {}
+		},
+	});
+	uploadBtn.addEventListener("click", async () => {
+		const file = inputEl.files?.[0];
+		if (!file) return notifyAlert("Select a file first.", "warning");
+		await upload(file);
+		modalCtrl.close();
+	});
 	fileTreeEl.addEventListener("drop", async (e) => {
 		e.preventDefault();
 		const file = e.dataTransfer.files?.[0];

@@ -119,12 +119,15 @@ export function createModalController({
 	onClose,
 } = {}) {
 	if (!modal || !(modal instanceof HTMLElement)) {
-		throw new Error("createModalController requires a valid `modal` HTMLElement");
+		throw new Error(
+			"createModalController requires a valid `modal` HTMLElement",
+		);
 	}
 
 	ensureAria(modal, titleEl);
 
-	let isOpen = !modal.classList.contains("hidden") && modal.offsetParent !== null;
+	let isOpen =
+		!modal.classList.contains("hidden") && modal.offsetParent !== null;
 	let previouslyFocused = null;
 
 	// Internal handlers to remove on destroy
@@ -223,7 +226,10 @@ export function createModalController({
 
 	function open(params = {}) {
 		if (isOpen) return;
-		previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		previouslyFocused =
+			document.activeElement instanceof HTMLElement
+				? document.activeElement
+				: null;
 
 		if (params.title != null) setTitle(params.title);
 		else setTitle(defaultTitle);

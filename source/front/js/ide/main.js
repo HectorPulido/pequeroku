@@ -1,14 +1,14 @@
+import { notifyAlert } from "../core/alerts.js";
 import { makeApi } from "../core/api.js";
 import { $, $$ } from "../core/dom.js";
 import { installGlobalLoader } from "../core/loader.js";
+import { bindModal } from "../core/modals.js";
 import {
 	applyTheme,
 	getCurrentTheme,
 	setupThemeToggle,
 } from "../core/themes.js";
 import { hideHeader, sleep } from "../core/utils.js";
-import { notifyAlert } from "../core/alerts.js";
-import { bindModal } from "../core/modals.js";
 import { setupConsole } from "./console.js";
 import {
 	changeTheme,
@@ -645,11 +645,16 @@ function connectWs() {
 
 	const githubModal = $("#github-modal");
 	const githubTitleEl = githubModal?.querySelector(".upload-header > span");
-	const githubModalCtrl = bindModal(githubModal, btnCloneRepo, btnCloseCloneRepo, {
-		titleEl: githubTitleEl,
-		defaultTitle: githubTitleEl?.textContent || "Clone from Github",
-		initialFocus: () => $("#url_git"),
-	});
+	const githubModalCtrl = bindModal(
+		githubModal,
+		btnCloneRepo,
+		btnCloseCloneRepo,
+		{
+			titleEl: githubTitleEl,
+			defaultTitle: githubTitleEl?.textContent || "Clone from Github",
+			initialFocus: () => $("#url_git"),
+		},
+	);
 	btnSubmitCloneRepo.addEventListener("click", async () => {
 		const repo = $("#url_git").value;
 		const base_path = $("#base_path").value;

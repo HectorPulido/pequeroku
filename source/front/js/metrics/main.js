@@ -1,6 +1,6 @@
 import { $ } from "../core/dom.js";
 import { applyTheme } from "../core/themes.js";
-import { hideHeader, fetchWithTimeout } from "../core/utils.js";
+import { fetchWithTimeout, hideHeader } from "../core/utils.js";
 
 hideHeader();
 
@@ -94,8 +94,6 @@ function updateCharts() {
 	memChart.update();
 	thrChart.update();
 }
-
-
 
 async function pollOnce() {
 	try {

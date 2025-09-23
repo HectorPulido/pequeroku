@@ -1,7 +1,13 @@
-import { detectLangFromPath } from "../shared/langMap.js";
 import { notifyAlert } from "../core/alerts.js";
+import { detectLangFromPath } from "../shared/langMap.js";
 
-export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId, onClearCurrent }) {
+export function setupFileTree({
+	fsws,
+	fileTreeEl,
+	onOpen,
+	containerId,
+	onClearCurrent,
+}) {
 	const menu = document.getElementById("finder-menu");
 	let menuTarget = null;
 
