@@ -20,7 +20,7 @@ body {
 }
 
 #file-tree {
-   	margin-bottom: 10em;
+	margin-bottom: 10em;
 }
 
 .sidebar ul ul {
@@ -159,9 +159,9 @@ wc-monaco-editor#editor {
 }
 
 #tree-toolbar {
-    justify-content: normal;
-    position: sticky;
-    top: 0;
+	justify-content: normal;
+	position: sticky;
+	top: 0;
 }
 
 .toolbar > div {

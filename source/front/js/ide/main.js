@@ -192,9 +192,36 @@ let ft;
 const fsws = createFSWS({
 	containerPk,
 	onOpen: async () => {},
-	onBroadcast: async (_evt) => {
+	onBroadcast: async (evt) => {
 		try {
-			await ft.refresh();
+			const dirs = new Set();
+			const t = evt?.event || evt?.type;
+			const p1 = typeof evt?.path === "string" ? evt.path : null;
+			const p2 = typeof evt?.dst === "string" ? evt.dst : null;
+			const parentOf = (p) => (p ? p.replace(/\/[^/]+$/, "") || "/app" : null);
+
+			if (
+				t === "path_deleted" ||
+				t === "path_moved" ||
+				t === "path_created" ||
+				t === "path_added" ||
+				t === "dir_created" ||
+				t === "file_created"
+			) {
+				const d1 = parentOf(p1);
+				const d2 = parentOf(p2);
+				if (d1) dirs.add(d1);
+				if (d2) dirs.add(d2);
+			} else if (t === "file_changed" || t === "changed") {
+				// content change: no tree refresh
+			} else {
+				// Unknown: conservative refresh root
+				dirs.add("/app");
+			}
+
+			if (dirs.size > 0) {
+				await Promise.all(Array.from(dirs).map((d) => ft.refreshPath(d)));
+			}
 			updateFileTabs();
 		} catch {}
 	},
