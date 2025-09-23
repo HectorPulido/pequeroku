@@ -106,7 +106,7 @@ export async function mobileConfig(isMobile) {
 		} else {
 			window._editor.updateOptions({
 				minimap: { enabled: true },
-				wordWrap: "false",
+				wordWrap: "off",
 				fontSize: 14,
 			});
 		}

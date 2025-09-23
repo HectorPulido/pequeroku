@@ -1,6 +1,7 @@
 import { detectLangFromPath } from "../shared/langMap.js";
+import { notifyAlert } from "../core/alerts.js";
 
-export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
+export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId, onClearCurrent }) {
 	const menu = document.getElementById("finder-menu");
 	let menuTarget = null;
 
@@ -307,14 +308,14 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 			if (action === "delete") {
 				if (!confirm(`Delete "${path}"?`)) return;
 				await fsws.call("delete_path", { path });
-				parent.addAlert(`Deleted: ${path}`, "success");
+				notifyAlert(`Deleted: ${path}`, "success");
 				const parentDir = path.replace(/\/[^/]+$/, "");
 				invalidateDirCache(parentDir);
 				await refreshPath(parentDir);
 				if (currentFilePath === path) {
 					currentFilePath = null;
 					clearEditor();
-					pathLabel.innerText = "";
+					onClearCurrent?.();
 				}
 			}
 			if (action === "rename") {
@@ -323,7 +324,7 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 				if (!name || name === base) return;
 				const new_path = path.replace(/\/[^/]+$/, `/${name}`);
 				await fsws.call("move_path", { src: path, dst: new_path });
-				parent.addAlert(`Renamed to: ${new_path}`, "success");
+				notifyAlert(`Renamed to: ${new_path}`, "success");
 				const oldParent = path.replace(/\/[^/]+$/, "");
 				const newParent = new_path.replace(/\/[^/]+$/, "");
 				invalidateDirCache(oldParent);
@@ -352,7 +353,7 @@ export function setupFileTree({ fsws, fileTreeEl, onOpen, containerId }) {
 				}
 			}
 		} catch (err) {
-			parent.addAlert(err.message || String(err), "error");
+			notifyAlert(err.message || String(err), "error");
 		}
 	}
 

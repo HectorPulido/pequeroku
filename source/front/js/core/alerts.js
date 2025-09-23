@@ -49,4 +49,13 @@ ${message}
 	startTimer();
 }
 
+export function notifyAlert(message, type = "info", kill_automatically = true) {
+	if (window.parent && typeof window.parent.addAlert === "function") {
+		window.parent.addAlert(message, type, kill_automatically);
+	} else {
+		addAlert(message, type, kill_automatically);
+	}
+}
+
 if (!window.addAlert) window.addAlert = addAlert;
+if (!window.notifyAlert) window.notifyAlert = notifyAlert;

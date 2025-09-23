@@ -1,6 +1,7 @@
-import { addAlert } from "../core/alerts.js";
+import { notifyAlert } from "../core/alerts.js";
 import { getCSRF } from "../core/csrf.js";
 import { escapeHtml } from "../core/dom.js";
+import { bindModal } from "../core/modals.js";
 
 export function setupTemplates({
 	openBtn,
@@ -12,19 +13,19 @@ export function setupTemplates({
 	containerId,
 	refreshIDE,
 }) {
-	openBtn.addEventListener("click", async () => {
-		try {
-			openModal();
-			await load();
-		} catch (e) {
-			addAlert(e.message || String(e), "error");
-		}
+	const titleEl = modalEl.querySelector(".upload-header > span");
+	const modalCtrl = bindModal(modalEl, openBtn, closeBtn, {
+		titleEl,
+		defaultTitle: titleEl?.textContent || "Templates",
+		initialFocus: () => listEl,
+		onOpen: async () => {
+			try {
+				await load();
+			} catch (e) {
+				notifyAlert(e.message || String(e), "error");
+			}
+		},
 	});
-	closeBtn.addEventListener("click", () => modalEl.classList.add("hidden"));
-
-	function openModal() {
-		modalEl.classList.remove("hidden");
-	}
 
 	async function load() {
 		const res = await fetch("/api/templates/", { credentials: "same-origin" });
@@ -73,13 +74,13 @@ export function setupTemplates({
 			});
 			const j = await res.json();
 			if (!res.ok) throw new Error(j.error || "Could not open the templates");
-			addAlert(
+			notifyAlert(
 				`Template applied on (${j.files_count} files/s) en ${dest}`,
 				"success",
 			);
 			if (dest === "/app") await refreshIDE?.();
 		} catch (e) {
-			addAlert(e.message || String(e), "error");
+			notifyAlert(e.message || String(e), "error");
 		}
 	}
 }

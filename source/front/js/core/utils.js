@@ -9,8 +9,9 @@ export function signatureFrom(data) {
 		.sort((a, b) => String(a.id).localeCompare(String(b.id)));
 	return JSON.stringify(norm);
 }
-export const capitalizeFirstLetter = (s) =>
-	s ? s[0].toUpperCase() + s.slice(1) : s;
+export function isSmallScreen() {
+	return matchMedia("(max-width: 768px)").matches;
+}
 
 export function hideHeader() {
 	const queryString = window.location.search;
@@ -30,4 +31,17 @@ export function hideHeader() {
 
 export function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function fetchWithTimeout(url, init = {}, timeoutMs = 8000) {
+	const controller = new AbortController();
+	const id = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		const res = await fetch(url, { ...init, signal: controller.signal });
+		clearTimeout(id);
+		return res;
+	} catch (e) {
+		clearTimeout(id);
+		throw e;
+	}
 }

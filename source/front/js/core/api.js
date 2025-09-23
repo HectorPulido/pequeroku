@@ -1,4 +1,4 @@
-import { addAlert } from "./alerts.js";
+import { notifyAlert } from "./alerts.js";
 import { getCSRF } from "./csrf.js";
 
 export function makeApi(base) {
@@ -13,12 +13,12 @@ export function makeApi(base) {
 		const text = await res.text();
 
 		if (res.status === 401 || res.status === 403) {
-			addAlert("Sesión expirada", "warning");
+			notifyAlert("Sesión expirada", "warning");
 			location.href = "/";
 			return; // corta
 		}
 		if (!res.ok) {
-			addAlert(text || res.statusText, "error");
+			notifyAlert(text || res.statusText, "error");
 			throw new Error(text || res.statusText);
 		}
 		try {

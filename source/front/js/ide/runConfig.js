@@ -1,4 +1,4 @@
-import { addAlert } from "../core/alerts.js";
+import { notifyAlert } from "../core/alerts.js";
 
 export async function loadRunConfig(api) {
 	let runCommand = null;
@@ -13,7 +13,7 @@ export async function loadRunConfig(api) {
 				runCommand = cfg.run.trim();
 			}
 		} catch {
-			addAlert("config.json is not valid", "warning");
+			notifyAlert("config.json is not valid", "warning");
 		}
 	} catch {}
 	return runCommand;

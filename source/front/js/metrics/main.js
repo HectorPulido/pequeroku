@@ -1,11 +1,11 @@
 import { $ } from "../core/dom.js";
 import { applyTheme } from "../core/themes.js";
-import { hideHeader } from "../core/utils.js";
+import { hideHeader, fetchWithTimeout } from "../core/utils.js";
 
 hideHeader();
 
 const DEFAULT_POLL_MS = 1000;
-const TIMEOUT_MS = 8000;
+
 const MAX_POINTS = 300;
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -95,21 +95,7 @@ function updateCharts() {
 	thrChart.update();
 }
 
-async function fetchWithTimeout(url, init = {}, timeoutMs = TIMEOUT_MS) {
-	const controller = new AbortController();
-	const id = setTimeout(() => controller.abort(), timeoutMs);
-	try {
-		const res = await fetch(url, {
-			...init,
-			signal: controller.signal,
-		});
-		clearTimeout(id);
-		return res;
-	} catch (e) {
-		clearTimeout(id);
-		throw e;
-	}
-}
+
 
 async function pollOnce() {
 	try {

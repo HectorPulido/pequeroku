@@ -1,4 +1,4 @@
-import { addAlert } from "../core/alerts.js";
+import { notifyAlert } from "../core/alerts.js";
 import { getCSRF } from "../core/csrf.js";
 
 const DEFAULT_PROMPT = `Example:
@@ -6,14 +6,7 @@ const DEFAULT_PROMPT = `Example:
 2) There must be a map and a character; the player can move the character on the map and, when facing something, can interact with that thing.
 3) Each object has a short dialog that can sometimes change other objects; for example, a key that later lets you open a door.`;
 
-function notify(message, type = "info") {
-	// Prefer the parent app's alert if available (when IDE is embedded), otherwise local
-	if (window.parent && typeof window.parent.addAlert === "function") {
-		window.parent.addAlert(message, type);
-	} else {
-		addAlert(message, type);
-	}
-}
+
 
 export function setupAi({
 	openBtn,
@@ -37,7 +30,7 @@ export function setupAi({
 	generateBtn.addEventListener("click", async () => {
 		const prompt = (inputEl.value || "").trim();
 		if (!prompt) {
-			notify("Please write a prompt first.", "warning");
+			notifyAlert("Please write a prompt first.", "warning");
 			return;
 		}
 
@@ -102,11 +95,11 @@ export function setupAi({
 				);
 			}
 
-			notify("AI code applied to /app.", "success");
+			notifyAlert("AI code applied to /app.", "success");
 			modalEl.classList.add("hidden");
 			await onApplied?.();
 		} catch (err) {
-			notify(err.message || String(err), "error");
+			notifyAlert(err.message || String(err), "error");
 		} finally {
 			restore();
 		}

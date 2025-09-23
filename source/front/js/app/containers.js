@@ -1,11 +1,11 @@
 import { addAlert } from "../core/alerts.js";
 import { getCSRF } from "../core/csrf.js";
 import { $ } from "../core/dom.js";
-import { signatureFrom } from "../core/utils.js";
+import { makeApi } from "../core/api.js";
+import { signatureFrom, isSmallScreen } from "../core/utils.js";
+import { bindModal } from "../core/modals.js";
 
-function isSmallScreen() {
-	return matchMedia("(max-width: 768px)").matches;
-}
+
 
 function show_alert() {
 	addAlert(
@@ -84,12 +84,10 @@ export function setupContainers() {
 
 	async function fetchUserData() {
 		try {
-			const res = await fetch("/api/user/me/", {
+			const data = await makeApi("/api")("/user/me/", {
 				credentials: "same-origin",
 				noLoader: true,
 			});
-			if (!res.ok) throw new Error(await res.text());
-			const data = await res.json();
 
 			if (!data.is_superuser && !alert_showed) {
 				alert_showed = true;
@@ -138,21 +136,16 @@ export function setupContainers() {
 			deleteContainer(c.id);
 		};
 		card.querySelector(".btn-start").onclick = async () => {
-			await fetch(`/api/containers/${c.id}/power_on/`, {
+			await makeApi(`/api/containers/${c.id}`)("/power_on/", {
 				method: "POST",
 				credentials: "same-origin",
-				headers: { "X-CSRFToken": getCSRF() },
 			});
 			await fetchContainers({ lazy: false });
 		};
 		card.querySelector(".btn-stop").onclick = async () => {
-			await fetch(`/api/containers/${c.id}/power_off/`, {
+			await makeApi(`/api/containers/${c.id}`)("/power_off/", {
 				method: "POST",
 				credentials: "same-origin",
-				headers: {
-					"X-CSRFToken": getCSRF(),
-					"Content-Type": "application/json",
-				},
 				body: JSON.stringify({ force: false }),
 			});
 			await fetchContainers({ lazy: false });
@@ -164,13 +157,10 @@ export function setupContainers() {
 		try {
 			if (!currentUsername) await fetchUserData();
 
-			const res = await fetch("/api/containers/", {
+			const data = await makeApi("/api/containers")("/", {
 				credentials: "same-origin",
 				noLoader: true,
 			});
-			if (!res.ok) throw new Error(await res.text());
-
-			const data = await res.json();
 			const sig = signatureFrom(data);
 
 			if (opts.lazy && sig === lastSig) return;
@@ -198,12 +188,10 @@ export function setupContainers() {
 
 	async function createContainer() {
 		try {
-			const res = await fetch("/api/containers/", {
+			await makeApi("/api/containers")("/", {
 				method: "POST",
 				credentials: "same-origin",
-				headers: { "X-CSRFToken": getCSRF() },
 			});
-			if (!res.ok) throw new Error(await res.text());
 			await fetchContainers();
 		} catch (e) {
 			addAlert(e.message, "error");
@@ -212,12 +200,10 @@ export function setupContainers() {
 
 	async function deleteContainer(id) {
 		try {
-			const res = await fetch(`/api/containers/${id}/`, {
+			await makeApi(`/api/containers/${id}`)("/", {
 				method: "DELETE",
 				credentials: "same-origin",
-				headers: { "X-CSRFToken": getCSRF() },
 			});
-			if (!res.ok) throw new Error(await res.text());
 			await fetchContainers();
 		} catch (e) {
 			addAlert(e.message, "error");
@@ -225,34 +211,44 @@ export function setupContainers() {
 	}
 
 	function openStats(name, id) {
-		metricsTitle.innerHTML = name;
 		current_id = id;
 		if (isSmallScreen()) {
 			open(`/metrics/?container=${id}`, "_blank", "noopener,noreferrer");
 			return;
 		}
-		metricsModal.classList.remove("hidden");
+		if (!openStats._ctrl) {
+			openStats._ctrl = bindModal(metricsModal, null, btnCloseMetrics, {
+				titleEl: metricsTitle,
+				defaultTitle: metricsTitle?.textContent || "Metrics",
+			});
+		}
+		openStats._ctrl.open({ title: name });
 		metricsModalBody.innerHTML = `<iframe src="/metrics/?container=${id}&showHeader" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
 	}
 
 	function openConsole(name, id) {
-		consoleTitle.innerHTML = name;
 		current_id = id;
 		if (isSmallScreen()) {
 			open(`/ide/?containerId=${id}`, "_blank", "noopener,noreferrer");
 			return;
 		}
-		modal.classList.remove("hidden");
+		if (!openConsole._ctrl) {
+			openConsole._ctrl = bindModal(modal, null, btnClose, {
+				titleEl: consoleTitle,
+				defaultTitle: consoleTitle?.textContent || "Console",
+			});
+		}
+		openConsole._ctrl.open({ title: name });
 		modalBody.innerHTML = `<iframe src="/ide/?containerId=${id}&showHeader" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
 	}
 
 	function closeConsole() {
-		modal.classList.add("hidden");
+		if (openConsole._ctrl) openConsole._ctrl.close();
 		modalBody.innerHTML = "";
 	}
 
 	function closeMetrics() {
-		metricsModal.classList.add("hidden");
+		if (openStats._ctrl) openStats._ctrl.close();
 		metricsModalBody.innerHTML = "";
 	}
 

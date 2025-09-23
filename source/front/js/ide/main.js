@@ -7,6 +7,8 @@ import {
 	setupThemeToggle,
 } from "../core/themes.js";
 import { hideHeader, sleep } from "../core/utils.js";
+import { notifyAlert } from "../core/alerts.js";
+import { bindModal } from "../core/modals.js";
 import { setupConsole } from "./console.js";
 import {
 	changeTheme,
@@ -331,7 +333,7 @@ function connectWs() {
 						return;
 					}
 					if (msg.type === "error") {
-						parent.addAlert(msg.message || "Unknown error", "error");
+						notifyAlert(msg.message || "Unknown error", "error");
 						return;
 					}
 				}
@@ -354,7 +356,7 @@ function connectWs() {
 		onClose: () => {
 			consoleApi.write("[disconnected]\n");
 		},
-		onError: () => parent.addAlert("WebSocket error", "error"),
+		onError: () => notifyAlert("WebSocket error", "error"),
 	});
 }
 
@@ -469,6 +471,11 @@ function connectWs() {
 		fileTreeEl,
 		containerId,
 		onOpen: (p) => openFileIntoEditor(apiReadFileWrapper, p, setPath),
+		onClearCurrent: () => {
+			pathLabel.innerText = "";
+			localStorage.removeItem(`last:${containerId}`);
+			updateFileTabs();
+		},
 	});
 	refreshTreeBtn.addEventListener("click", async () => {
 		await ft.refresh();
@@ -521,7 +528,7 @@ function connectWs() {
 		await saveCurrentFile();
 		if (runCommand) ws.send({ data: runCommand });
 		else
-			parent.addAlert(
+			notifyAlert(
 				"There is no 'run' command in config.json. The button is disabled.",
 				"warning",
 			);
@@ -595,7 +602,7 @@ function connectWs() {
 
 	async function saveCurrentFile() {
 		if (!currentFilePath) {
-			parent.addAlert("Open a file first", "error");
+			notifyAlert("Open a file first", "error");
 			return;
 		}
 		const content = getEditorValue();
@@ -608,18 +615,18 @@ function connectWs() {
 			});
 			const nextRev = typeof res?.rev === "number" ? res.rev : prev + 1;
 			fsws.revs.set(currentFilePath, nextRev);
-			parent.addAlert(`File ${currentFilePath} saved`, "success");
+			notifyAlert(`File ${currentFilePath} saved`, "success");
 			if (currentFilePath === "/app/config.json") await hydrateRun();
 		} catch (e) {
 			if (String(e.message).includes("conflict")) {
 				const cur = fsws.revs.get(currentFilePath) || 0;
-				parent.addAlert(
+				notifyAlert(
 					`Conflict saving saving current Rev ${cur}. Reload...`,
 					"error",
 				);
 				await openFileIntoEditor(apiReadFileWrapper, currentFilePath, setPath);
 			} else {
-				parent.addAlert(e.message || String(e), "error");
+				notifyAlert(e.message || String(e), "error");
 			}
 		}
 	}
@@ -636,11 +643,12 @@ function connectWs() {
 		updateFileTabs();
 	});
 
-	btnCloneRepo.addEventListener("click", () => {
-		$("#github-modal").classList.remove("hidden");
-	});
-	btnCloseCloneRepo.addEventListener("click", () => {
-		$("#github-modal").classList.add("hidden");
+	const githubModal = $("#github-modal");
+	const githubTitleEl = githubModal?.querySelector(".upload-header > span");
+	const githubModalCtrl = bindModal(githubModal, btnCloneRepo, btnCloseCloneRepo, {
+		titleEl: githubTitleEl,
+		defaultTitle: githubTitleEl?.textContent || "Clone from Github",
+		initialFocus: () => $("#url_git"),
 	});
 	btnSubmitCloneRepo.addEventListener("click", async () => {
 		const repo = $("#url_git").value;
@@ -652,7 +660,7 @@ function connectWs() {
 			await sleep(5000);
 			await ft.refresh();
 			await hydrateRun();
-			btnCloseCloneRepo.click();
+			githubModalCtrl.close();
 		}
 	});
 })();

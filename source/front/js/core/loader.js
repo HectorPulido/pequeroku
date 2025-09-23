@@ -11,7 +11,7 @@ export function installGlobalLoader() {
 	window.fetch = async (input, init = {}) => {
 		const noLoader = init?.noLoader;
 		if (noLoader) {
-			const { _noLoader, ...cleanInit } = init;
+			const { noLoader: _noLoader, ...cleanInit } = init;
 			return base(input, cleanInit);
 		}
 
