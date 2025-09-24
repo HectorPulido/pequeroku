@@ -84,6 +84,8 @@ export function setupContainers() {
 			const data = await makeApi("/api")("/user/me/", {
 				credentials: "same-origin",
 				noLoader: true,
+				noAuthRedirect: true,
+				noAuthAlert: true,
 			});
 
 			if (!data.is_superuser && !alert_showed) {
@@ -157,6 +159,8 @@ export function setupContainers() {
 			const data = await makeApi("/api/containers")("/", {
 				credentials: "same-origin",
 				noLoader: true,
+				noAuthRedirect: true,
+				noAuthAlert: true,
 			});
 			const sig = signatureFrom(data);
 

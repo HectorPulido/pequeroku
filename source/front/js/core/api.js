@@ -13,9 +13,25 @@ export function makeApi(base) {
 		const text = await res.text();
 
 		if (res.status === 401 || res.status === 403) {
-			notifyAlert("Sesión expirada", "warning");
+			const suppressRedirect = !!(
+				opts &&
+				(opts.noAuthRedirect || opts.suppressAuthRedirect)
+			);
+			const suppressAlert = !!(opts && (opts.noAuthAlert || suppressRedirect));
+			if (!suppressAlert) notifyAlert("Sesión expirada", "warning");
+			if (suppressRedirect) {
+				// Dispatch a global event to let the app react (e.g., show login and hide app)
+				window.dispatchEvent(
+					new CustomEvent("auth:unauthorized", {
+						detail: { status: res.status },
+					}),
+				);
+				const err = new Error(text || res.statusText || "Unauthorized");
+				err.status = res.status;
+				throw err;
+			}
 			location.href = "/";
-			return; // corta
+			return;
 		}
 		if (!res.ok) {
 			notifyAlert(text || res.statusText, "error");

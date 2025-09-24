@@ -22,7 +22,11 @@ export function setupLogin({ onSuccess }) {
 	(async () => {
 		try {
 			const api = makeApi("/api/containers");
-			await api("/", { credentials: "same-origin" });
+			await api("/", {
+				credentials: "same-origin",
+				noAuthRedirect: true,
+				noAuthAlert: true,
+			});
 			showApp();
 		} catch {
 			showLogin();
@@ -38,6 +42,8 @@ export function setupLogin({ onSuccess }) {
 			await makeApi("/api")("/user/login/", {
 				method: "POST",
 				credentials: "same-origin",
+				noAuthRedirect: true,
+				noAuthAlert: true,
 				body: JSON.stringify({ username, password }),
 			});
 			showApp();
