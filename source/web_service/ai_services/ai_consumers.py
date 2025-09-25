@@ -207,7 +207,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
         # Process LLM
         self.messages.append({"role": "user", "content": user_text})
 
-        loop = await self.agent.run_tool_loop(self.messages, self.container_obj)
+        loop = self.agent.run_tool_loop(self.messages, self.container_obj)
         async for finish, t in loop:
             if finish:
                 self.messages = t

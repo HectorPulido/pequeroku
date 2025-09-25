@@ -1,4 +1,5 @@
 from __future__ import annotations
+import time
 from typing import Dict, Any
 from vm_manager.models import Container
 from vm_manager.vm_client import VMServiceClient, VMUploadFiles, VMFile, SearchRequest
@@ -23,17 +24,19 @@ def read_workspace(
     container: Container,
     subdir: str | None = None,
 ) -> Dict[str, Any]:
+    start = time.monotonic()
     path = f"/app/{subdir}".replace("//", "/").replace("/app/app/", "/app/")
     if subdir is None or len(subdir.strip()) == 0:
         path = "/app"
     service = _get_service(container)
     resp = service.list_dir(str(container.container_id), path)
+    duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
         action="agent_tool.read_workspace",
         target_type="container",
         target_id=str(container.container_id),
         message="List directory",
-        metadata={"path": path},
+        metadata={"path": path, "duration_ms": duration_ms},
         success=True,
     )
     return {"path": path, "entries": resp, "finished": True}
@@ -45,6 +48,7 @@ def create_file(
     path: str,
     content: str,
 ) -> Dict[str, Any]:
+    start = time.monotonic()
     subdir = f"/app/{path}".replace("//", "/").replace("/app/app/", "/app/")
     if path is None or len(path.strip()) == 0:
         subdir = "/app"
@@ -52,12 +56,13 @@ def create_file(
     if f"create_file_{subdir}" in dedup.logs:
         print("Redup policy applied")
         dedup.logs[f"create_file_{subdir}"]["dedup"] = True
+        duration_ms = int((time.monotonic() - start) * 1000)
         audit_agent_tool(
             action="agent_tool.create_file",
             target_type="container",
             target_id=str(container.container_id),
             message="Create file (dedup hit)",
-            metadata={"path": subdir},
+            metadata={"path": subdir, "duration_ms": duration_ms},
             success=True,
         )
         return dedup.logs[f"create_file_{subdir}"]
@@ -72,12 +77,13 @@ def create_file(
         ),
     )
     resp["finished"] = True
+    duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
         action="agent_tool.create_file",
         target_type="container",
         target_id=str(container.container_id),
         message="File created",
-        metadata={"path": subdir},
+        metadata={"path": subdir, "duration_ms": duration_ms},
         success=True,
     )
 
@@ -86,18 +92,20 @@ def create_file(
 
 
 def read_file(_: DedupPolicy, container: Container, path: str) -> Dict[str, Any]:
+    start = time.monotonic()
     subdir = f"/app/{path}".replace("//", "/").replace("/app/app/", "/app/")
     if path is None or len(path.strip()) == 0:
         subdir = "/app"
     service = _get_service(container)
     resp = service.read_file(str(container.container_id), subdir)
     resp["finished"] = True
+    duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
         action="agent_tool.read_file",
         target_type="container",
         target_id=str(container.container_id),
         message="Read file",
-        metadata={"path": subdir},
+        metadata={"path": subdir, "duration_ms": duration_ms},
         success=True,
     )
     return resp
@@ -113,15 +121,18 @@ def create_full_project(
     from .schemas import PROJECT_GENERATION_PROMPT
     from ..utils import _get_openai_client
 
+    start = time.monotonic()
+
     if "create_full_project" in dedup.logs:
         print("Redup policy applied")
         dedup.logs["create_full_project"]["dedup"] = True
+        duration_ms = int((time.monotonic() - start) * 1000)
         audit_agent_tool(
             action="agent_tool.create_full_project",
             target_type="container",
             target_id=str(container.container_id),
             message="Create full project (dedup hit)",
-            metadata={},
+            metadata={"duration_ms": duration_ms},
             success=True,
         )
         return dedup.logs["create_full_project"]
@@ -184,29 +195,64 @@ def create_full_project(
     response["finished"] = True
     response["workspace"] = read_workspace(None, container)
 
-    dedup.logs["create_file"] = response
+    dedup.logs["create_full_project"] = response
 
+    duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
         action="agent_tool.create_full_project",
         target_type="container",
         target_id=str(container.container_id),
         message="Full project created",
-        metadata={},
+        metadata={"duration_ms": duration_ms},
         success=True,
     )
     return response
 
 
+def _classify_risk(command: str) -> str:
+    if not command:
+        return "LOW"
+    high_markers = [
+        "docker push",
+        "kubectl",
+        "helm ",
+        " rm -rf /",
+        "curl ",
+        "| sh",
+        "systemctl",
+        "iptables",
+        "shutdown",
+        "reboot",
+    ]
+    if any(m in command for m in high_markers):
+        return "HIGH"
+    medium_markers = [
+        "apt-get ",
+        "pip install",
+        "npm install",
+        "docker build",
+        "docker compose up",
+        "pytest",
+        "make ",
+    ]
+    if any(m in command for m in medium_markers):
+        return "MEDIUM"
+    return "LOW"
+
+
 def exec_command(_: DedupPolicy, container: Container, command: str) -> Dict[str, Any]:
+    start = time.monotonic()
+    risk_level = _classify_risk(command)
     service = _get_service(container)
     resp = service.execute_sh(str(container.container_id), command)
     resp["finished"] = True
+    duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
         action="agent_tool.exec_command",
         target_type="container",
         target_id=str(container.container_id),
         message="Exec command",
-        metadata={"command": command},
+        metadata={"command": command, "risk_level": risk_level, "duration_ms": duration_ms},
         success=True,
     )
     return resp
@@ -215,6 +261,7 @@ def exec_command(_: DedupPolicy, container: Container, command: str) -> Dict[str
 def search(
     _: DedupPolicy, container: Container, pattern: str, root: str
 ) -> Dict[str, Any]:
+    start = time.monotonic()
     service = _get_service(container)
     resp = service.search(
         str(container.container_id),
@@ -226,12 +273,13 @@ def search(
             timeout_seconds=5,
         ),
     )
+    duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
         action="agent_tool.search",
         target_type="container",
         target_id=str(container.container_id),
         message="Search in workspace",
-        metadata={"pattern": pattern, "root": root},
+        metadata={"pattern": pattern, "root": root, "duration_ms": duration_ms},
         success=True,
     )
     return {"response": resp, "finished": True}
@@ -240,15 +288,17 @@ def search(
 def search_on_internet(
     _: DedupPolicy, container: Container, search_query: str
 ) -> Dict[str, Any]:
+    start = time.monotonic()
     from ddgs import DDGS
 
-    results = DDGS().text(search_query, max_results=5, timeout=5)
+    results = list(DDGS().text(search_query, max_results=5, timeout=5))
+    duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
         target_type="container",
         target_id=str(container.container_id),
         action="agent_tool.search_on_internet",
         message="Web search",
-        metadata={"query": search_query},
+        metadata={"query": search_query, "duration_ms": duration_ms},
         success=True,
     )
     return {"response": results, "finished": True}
@@ -257,22 +307,44 @@ def search_on_internet(
 def read_from_internet(
     _: DedupPolicy, container: Container, url: str
 ) -> Dict[str, Any]:
+    start = time.monotonic()
     from newspaper import Article
 
-    article = Article(url)
-    article.download()
-    article.parse()
+    ok = True
+    title = None
+    text = ""
+    error = None
+    try:
+        article = Article(url)
+        article.download()
+        article.parse()
+        title = article.title or ""
+        text = article.text or ""
+    except Exception as e:
+        ok = False
+        error = f"{e.__class__.__name__}: {e}"
+        title = title or ""
+        text = text or ""
+    duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
         target_type="container",
         target_id=str(container.container_id),
         action="agent_tool.read_from_internet",
         message="Read from internet",
-        metadata={"url": url, "title": article.title},
-        success=True,
+        metadata=({"url": url, "title": title, "error": error, "duration_ms": duration_ms} if not ok else {"url": url, "title": title, "duration_ms": duration_ms}),
+        success=ok,
     )
 
-    return {
+    # Truncate very long content to avoid overwhelming the caller
+    max_len = 8000
+    if len(text) > max_len:
+        text = text[:max_len]
+
+    result = {
         "finished": True,
-        "text": article.text,
-        "title": article.title,
+        "text": text,
+        "title": title,
     }
+    if not ok:
+        result["error"] = error
+    return result
