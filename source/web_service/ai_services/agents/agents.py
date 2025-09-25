@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+from datetime import datetime
 from typing import List, Dict, Any
 from asgiref.sync import sync_to_async
 
@@ -15,6 +16,8 @@ from .tools import (
     create_full_project,
     exec_command,
     search,
+    search_on_internet,
+    read_from_internet,
 )
 
 
@@ -29,7 +32,12 @@ class DevAgent:
 
     @staticmethod
     def bootstrap_messages() -> List[Dict[str, Any]]:
-        return [{"role": "system", "content": SYSTEM_PROMPT_EN}]
+        return [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT_EN.replace("{time}", datetime.now()),
+            }
+        ]
 
     @sync_to_async
     def exec_and_select_tool(
@@ -52,6 +60,10 @@ class DevAgent:
                 result = exec_command(dedup_policy, container, **args)
             elif name == "search":
                 result = search(dedup_policy, container, **args)
+            elif name == "search_on_internet":
+                result = search_on_internet(dedup_policy, container, **args)
+            elif name == "read_from_internet":
+                result = read_from_internet(dedup_policy, container, **args)
             else:
                 result = {"error": f"Unknown tool: {name}"}
         except ToolError as te:
@@ -99,7 +111,10 @@ class DevAgent:
         """
 
         new_messages = messages.copy()
-        new_messages[0] = {"role": "system", "content": SYSTEM_TOOLS_PROMPT_EN}
+        new_messages[0] = {
+            "role": "system",
+            "content": SYSTEM_TOOLS_PROMPT_EN.replace("{time}", datetime.now()),
+        }
 
         dedup_policy = DedupPolicy()
 

@@ -24,6 +24,30 @@ def _get_ua_from_request(request: Optional[HttpRequest]) -> str:
     return request.META.get("HTTP_USER_AGENT", "")
 
 
+def audit_agent_tool(
+    *,
+    action: str,
+    target_type: str = "",
+    target_id: str = "",
+    message: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+    success: bool = True,
+) -> None:
+    """
+    Register audit for HTTP/DRF
+    """
+
+    AuditLog.objects.create(
+        action=action,
+        target_type=target_type,
+        target_id=str(target_id) if target_id else "",
+        message=message,
+        metadata=metadata or {},
+        success=success,
+        created_at=timezone.now(),
+    )
+
+
 def audit_log_http(
     request: Optional[HttpRequest],
     *,

@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Dict, Any
 from vm_manager.models import Container
 from vm_manager.vm_client import VMServiceClient, VMUploadFiles, VMFile, SearchRequest
+from internal_config.audit import audit_agent_tool
 
 
 class DedupPolicy:
@@ -27,6 +28,14 @@ def read_workspace(
         path = "/app"
     service = _get_service(container)
     resp = service.list_dir(str(container.container_id), path)
+    audit_agent_tool(
+        action="agent_tool.read_workspace",
+        target_type="container",
+        target_id=str(container.container_id),
+        message="List directory",
+        metadata={"path": path},
+        success=True,
+    )
     return {"path": path, "entries": resp, "finished": True}
 
 
@@ -43,6 +52,14 @@ def create_file(
     if f"create_file_{subdir}" in dedup.logs:
         print("Redup policy applied")
         dedup.logs[f"create_file_{subdir}"]["dedup"] = True
+        audit_agent_tool(
+            action="agent_tool.create_file",
+            target_type="container",
+            target_id=str(container.container_id),
+            message="Create file (dedup hit)",
+            metadata={"path": subdir},
+            success=True,
+        )
         return dedup.logs[f"create_file_{subdir}"]
 
     service = _get_service(container)
@@ -55,6 +72,14 @@ def create_file(
         ),
     )
     resp["finished"] = True
+    audit_agent_tool(
+        action="agent_tool.create_file",
+        target_type="container",
+        target_id=str(container.container_id),
+        message="File created",
+        metadata={"path": subdir},
+        success=True,
+    )
 
     dedup.logs[f"create_file_{subdir}"] = resp
     return resp
@@ -67,6 +92,14 @@ def read_file(_: DedupPolicy, container: Container, path: str) -> Dict[str, Any]
     service = _get_service(container)
     resp = service.read_file(str(container.container_id), subdir)
     resp["finished"] = True
+    audit_agent_tool(
+        action="agent_tool.read_file",
+        target_type="container",
+        target_id=str(container.container_id),
+        message="Read file",
+        metadata={"path": subdir},
+        success=True,
+    )
     return resp
 
 
@@ -83,6 +116,14 @@ def create_full_project(
     if "create_full_project" in dedup.logs:
         print("Redup policy applied")
         dedup.logs["create_full_project"]["dedup"] = True
+        audit_agent_tool(
+            action="agent_tool.create_full_project",
+            target_type="container",
+            target_id=str(container.container_id),
+            message="Create full project (dedup hit)",
+            metadata={},
+            success=True,
+        )
         return dedup.logs["create_full_project"]
 
     open_ai_data = Config.get_config_values(
@@ -145,6 +186,14 @@ def create_full_project(
 
     dedup.logs["create_file"] = response
 
+    audit_agent_tool(
+        action="agent_tool.create_full_project",
+        target_type="container",
+        target_id=str(container.container_id),
+        message="Full project created",
+        metadata={},
+        success=True,
+    )
     return response
 
 
@@ -152,6 +201,14 @@ def exec_command(_: DedupPolicy, container: Container, command: str) -> Dict[str
     service = _get_service(container)
     resp = service.execute_sh(str(container.container_id), command)
     resp["finished"] = True
+    audit_agent_tool(
+        action="agent_tool.exec_command",
+        target_type="container",
+        target_id=str(container.container_id),
+        message="Exec command",
+        metadata={"command": command},
+        success=True,
+    )
     return resp
 
 
@@ -169,4 +226,53 @@ def search(
             timeout_seconds=5,
         ),
     )
+    audit_agent_tool(
+        action="agent_tool.search",
+        target_type="container",
+        target_id=str(container.container_id),
+        message="Search in workspace",
+        metadata={"pattern": pattern, "root": root},
+        success=True,
+    )
     return {"response": resp, "finished": True}
+
+
+def search_on_internet(
+    _: DedupPolicy, container: Container, search_query: str
+) -> Dict[str, Any]:
+    from ddgs import DDGS
+
+    results = DDGS().text(search_query, max_results=5, timeout=5)
+    audit_agent_tool(
+        target_type="container",
+        target_id=str(container.container_id),
+        action="agent_tool.search_on_internet",
+        message="Web search",
+        metadata={"query": search_query},
+        success=True,
+    )
+    return {"response": results, "finished": True}
+
+
+def read_from_internet(
+    _: DedupPolicy, container: Container, url: str
+) -> Dict[str, Any]:
+    from newspaper import Article
+
+    article = Article(url)
+    article.download()
+    article.parse()
+    audit_agent_tool(
+        target_type="container",
+        target_id=str(container.container_id),
+        action="agent_tool.read_from_internet",
+        message="Read from internet",
+        metadata={"url": url, "title": article.title},
+        success=True,
+    )
+
+    return {
+        "finished": True,
+        "text": article.text,
+        "title": article.title,
+    }

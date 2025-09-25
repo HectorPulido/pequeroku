@@ -62,6 +62,14 @@ class AuditLog(models.Model):
         ("ws.ctrld", "WS Ctrld"),
         ("ws.clear", "WS Clear"),
         ("ws.unknown", "WS Unknown"),
+        ("agent_tool.read_workspace", "Agent tool read_workspace"),
+        ("agent_tool.create_file", "Agent tool create_file"),
+        ("agent_tool.read_file", "Agent tool read_file"),
+        ("agent_tool.create_full_project", "Agent tool create_full_project"),
+        ("agent_tool.exec_command", "Agent tool exec_command"),
+        ("agent_tool.search", "Agent tool search"),
+        ("agent_tool.search_on_internet", "Agent tool search_on_internet"),
+        ("agent_tool.read_from_internet", "Agent tool read_from_internet"),
     ]
 
     user = models.ForeignKey(

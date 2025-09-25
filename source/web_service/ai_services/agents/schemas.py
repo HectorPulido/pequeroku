@@ -14,6 +14,7 @@ Environment matters:
     Change the "run" value if you want to modify the way it runs, try always to not be blocking, like docker compose up --d or "python3 main.py&"
 * The target SO is debian, so be careful with details like "python" instad "python3", for example.
 * If you need help to understand how a project works, start with the "readme.txt" always must be a readme.txt, if not, create it.
+* Current time {time}
 
 Tool usage:
 
@@ -23,7 +24,7 @@ Tool usage:
 * Propose sensible file/project structure before creating files.
 * Group changes into a single call. Don’t call the same tool with the same path/task more than once per shift.
 * You are runnign as sudo.
-* Do not use exec_command for long process, if you do, disown the process, the timeout is 5 secs
+* Do not use exec_command for long process, if you do, disown the process, eg. " setsid -f bash -lc 'exec /app/install_dotnet.sh >>/app/dotnet_install.log 2>&1' "
 """.strip()
 
 
@@ -42,6 +43,7 @@ Environment matters:
     Change the "run" value if you want to modify the way it runs, try always to not be blocking, like "docker compose up --d" or "python3 main.py&"
 * The target SO is debian, so be careful with details like "python" instad "python3", for example.
 * If you need help to understand how a project works, start with the "readme.txt" always must be a readme.txt, if not, create it.
+* Current time {time}
 
 Behavior rules:
 
@@ -189,6 +191,48 @@ TOOLS_SPEC = [
                     },
                 },
                 "required": ["pattern", "root"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "strict": True,
+            "name": "search_on_internet",
+            "description": "Search on internet, use some googlefu here, what ever it takes to get the bests results",
+            "parameters": {
+                "additionalProperties": False,
+                "type": "object",
+                "properties": {
+                    "search_query": {
+                        "type": "string",
+                        "description": "Pattern to search, on web searchers",
+                    },
+                },
+                "required": [
+                    "search_query",
+                ],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "strict": True,
+            "name": "read_from_internet",
+            "description": "Open a url and returns the title and the text of the link",
+            "parameters": {
+                "additionalProperties": False,
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Url to open, be careful on what you open.",
+                    },
+                },
+                "required": [
+                    "url",
+                ],
             },
         },
     },
