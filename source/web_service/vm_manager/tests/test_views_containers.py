@@ -278,7 +278,7 @@ def test_statistics_success(monkeypatch):
     "action_name, expected_status_key",
     [
         ("container-power-on", "starting..."),
-        ("container-power-off", "stoping..."),
+        ("container-power-off", "stopping..."),
         ("container-restart-container", "restarted"),
     ],
 )
@@ -353,3 +353,108 @@ def test_download_folder_success(monkeypatch):
     # the view should set a default one based on root and fmt
     assert "attachment; filename=" in res["Content-Disposition"]
     assert res.content == b"ZIPDATA"
+
+
+def test_create_container_fallback_when_insufficient_capacity(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("u12")
+    # Quota larger than node capacity to force scheduler to return None
+    create_quota(user=user, vcpus=8, max_memory_mb=16384)
+    # Candidate node exists but with insufficient capacity
+    node = create_node(capacity_vcpus=2, capacity_mem_mb=2048)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-list")
+    res = client.post(url, data={})
+    assert res.status_code == 201
+
+    data = res.json()
+    assert "warning" in data
+    assert "No available nodes with enough capacity" in data["warning"]
+    assert "X-Warning" in res
+    assert "No available nodes with enough capacity" in res["X-Warning"]
+
+    obj = Container.objects.get(pk=data["id"])
+    assert obj.node == node
+
+
+def test_create_container_fallback_when_no_candidates(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("u13")
+    create_quota(user=user, vcpus=1, max_memory_mb=256)
+    # No candidates due to unhealthy node (still present for random fallback)
+    node = create_node(healthy=False)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-list")
+    res = client.post(url, data={})
+    assert res.status_code == 201
+
+    data = res.json()
+    assert "warning" in data
+    assert "No available nodes with enough capacity" in data["warning"]
+    assert "X-Warning" in res
+
+    obj = Container.objects.get(pk=data["id"])
+    # Should still assign the only node via random fallback
+    assert obj.node is not None
+
+
+def test_power_off_sets_desired_state_stopped(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("u14")
+    create_quota(user=user)
+    node = create_node()
+    c = create_container(
+        user=user,
+        node=node,
+        status=Container.Status.RUNNING,
+        desired_state=Container.DesirableStatus.RUNNING,
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-power-off", kwargs={"pk": c.pk})
+    res = client.post(url)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "stopping..."
+    assert body["desired_state"] == Container.DesirableStatus.STOPPED
+
+    c.refresh_from_db()
+    assert c.desired_state == Container.DesirableStatus.STOPPED
+
+
+def test_power_on_sets_desired_state_running(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("u15")
+    create_quota(user=user)
+    node = create_node()
+    c = create_container(
+        user=user,
+        node=node,
+        status=Container.Status.STOPPED,
+        desired_state=Container.DesirableStatus.STOPPED,
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-power-on", kwargs={"pk": c.pk})
+    res = client.post(url)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "starting..."
+    assert body["desired_state"] == Container.DesirableStatus.RUNNING
+
+    c.refresh_from_db()
+    assert c.desired_state == Container.DesirableStatus.RUNNING

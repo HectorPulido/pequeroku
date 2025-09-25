@@ -22,7 +22,7 @@ from .serializers import (
     ApplyTemplateRequestSerializer,
     ApplyTemplateResponseSerializer,
 )
-from .models import Container, FileTemplate
+from .models import Container, FileTemplate, Node
 from .vm_client import VMServiceClient, VMCreate, VMAction, VMUploadFiles, VMFile
 
 from .templates import (
@@ -103,14 +103,18 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
         node = self.choose_node(quota.vcpus, quota.max_memory_mb)
 
+        warn_msg = None
         if not node:
             print(
                 f"quota.vcpus: {quota.vcpus}, quota.max_memory_mb: {quota.max_memory_mb}"
             )
-            return Response(
-                {"error": "No available nodes with enough capacity"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+            # Best-effort fallback: pick a node even if capacity appears full
+            candidates = self._candidate_nodes(heartbeat_ttl_s=3600)
+            if candidates:
+                node = max(candidates, key=lambda n: n.get_node_score())
+            else:
+                node = Node.get_random_node()
+            warn_msg = "No available nodes with enough capacity; proceeding on best-effort node"
 
         service = VMServiceClient(node)
 
@@ -144,7 +148,13 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         )
 
         ser = self.get_serializer(c)
-        return Response(ser.data, status=status.HTTP_201_CREATED)
+        data = dict(ser.data)
+        if warn_msg:
+            data["warning"] = warn_msg
+        resp = Response(data, status=status.HTTP_201_CREATED)
+        if warn_msg:
+            resp["X-Warning"] = warn_msg
+        return resp
 
     def destroy(self, request, *args, **kwargs):
         quota = self._check_quota(request)
@@ -271,6 +281,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         service.action_vm(
             str(obj.container_id), action=VMAction(action="start", cleanup_disks=False)
         )
+
+        obj.desired_state = Container.DesirableStatus.RUNNING
+        obj.save(update_fields=["desired_state"])
+
         audit_log_http(
             request,
             action="container.power_on",
@@ -280,7 +294,7 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             metadata={"container_id": obj.container_id},
             success=True,
         )
-        return Response({"status": "starting..."})
+        return Response({"status": "starting...", "desired_state": obj.desired_state})
 
     @action(detail=True, methods=["post"])
     def power_off(self, request, pk=None):
@@ -293,6 +307,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         service.action_vm(
             str(obj.container_id), action=VMAction(action="stop", cleanup_disks=False)
         )
+
+        obj.desired_state = Container.DesirableStatus.STOPPED
+        obj.save(update_fields=["desired_state"])
+
         audit_log_http(
             request,
             action="container.power_off",
@@ -302,7 +320,7 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             metadata={"container_id": obj.container_id},
             success=True,
         )
-        return Response({"status": "stoping..."})
+        return Response({"status": "stopping...", "desired_state": obj.desired_state})
 
     @action(detail=True, methods=["post"])
     def restart_container(self, request, pk=None):
