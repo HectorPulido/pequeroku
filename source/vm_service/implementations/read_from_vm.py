@@ -1,21 +1,16 @@
 import os
 import shlex
 import mimetypes
-from typing import Iterator, Literal
+import paramiko
 
 from qemu_manager.models import VMRecord, ListDirItem, FileContent
-from .ssh_cache import open_ssh_and_sftp
+from .ssh_cache import open_ssh, open_sftp
 
 
-def list_dir(container: VMRecord, root: str = "/app") -> list[ListDirItem]:
-    (
-        _,
-        cli,
-    ) = open_ssh_and_sftp(container, open_sftp=False)
-
+def _execute_list(root: str, cli: paramiko.SSHClient, depth: int = 1):
     items: list[ListDirItem] = []
     try:
-        cmd = f"find {shlex.quote(root)} -maxdepth 2 -printf '%p||%y\\n' 2>/dev/null || true"
+        cmd = f"find {shlex.quote(root)} -maxdepth {depth} -printf '%p||%y\\n' 2>/dev/null || true"
         _, stdout, _ = cli.exec_command(cmd)
         lines = (stdout.read().decode() or "").strip().splitlines()
 
@@ -37,8 +32,18 @@ def list_dir(container: VMRecord, root: str = "/app") -> list[ListDirItem]:
     return items
 
 
+def list_dirs(container: VMRecord, paths: list[str], depth: int) -> list[ListDirItem]:
+    cli = open_ssh(container)
+
+    items: list[ListDirItem] = []
+    for root in paths:
+        items.extend(_execute_list(root, cli, depth))
+
+    return list(set(items))
+
+
 def read_file(container: VMRecord, path: str):
-    sftp, _ = open_ssh_and_sftp(container, True)
+    sftp = open_sftp(container)
 
     data = ""
     if not sftp:
@@ -61,7 +66,7 @@ def read_file(container: VMRecord, path: str):
 
 
 def download_file(vm: VMRecord, path: str):
-    sftp, _ = open_ssh_and_sftp(vm, True)
+    sftp = open_sftp(vm)
     if not sftp:
         print("Issue downloading...", "issue with sftp")
         return None
@@ -93,14 +98,14 @@ def download_file(vm: VMRecord, path: str):
     }
 
 
-def _zip_available(cli) -> bool:
+def _zip_available(cli: paramiko.SSHClient) -> bool:
     check_cmd = "sh -lc 'command -v zip >/dev/null 2>&1 && echo OK || echo NO'"
     _, out, _ = cli.exec_command(check_cmd)
     return out.read().decode().strip() == "OK"
 
 
 def download_folder(vm: VMRecord, root: str, prefer_fmt: str = "zip"):
-    _, cli = open_ssh_and_sftp(vm, open_sftp=False)
+    cli = open_ssh(vm)
     if not cli:
         print("Error generating zip folder", "SSH unavailable")
         return None
@@ -108,12 +113,12 @@ def download_folder(vm: VMRecord, root: str, prefer_fmt: str = "zip"):
     safe_root = shlex.quote(root)
     base = os.path.basename(root.rstrip("/")) or "archive"
 
-    sftp, _ = open_ssh_and_sftp(vm, True)
+    sftp = open_sftp(vm)
     if not sftp:
         print("Error generating zip folder", "SFTP unavailable")
         return None
     try:
-        sftp.stat(root)
+        _ = sftp.stat(root)
     except Exception as e:
         print("Error generating zip folder", f"Directory not found: {root}", e)
         return None

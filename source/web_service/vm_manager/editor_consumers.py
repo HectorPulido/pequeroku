@@ -2,6 +2,7 @@ from __future__ import annotations
 import shlex
 import re
 import asyncio
+from typing import cast
 from datetime import datetime
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.db import DatabaseError
@@ -10,11 +11,15 @@ from asgiref.sync import sync_to_async
 from pequeroku.mixins import ContainerAccessMixin, AuditMixin
 from pequeroku.redis import VersionStore
 from .vm_client import VMServiceClient, VMUploadFiles, VMFile, SearchRequest
-from .models import Container
 from .templates import first_start_of_container
+from .models import Container, Node
+
 
 SAFE_ROOT = "/app"
-_path_norm = lambda p: re.sub(r"/+", "/", p or "").rstrip("/") or "/"
+
+
+def _path_norm(p: str):
+    return re.sub(r"/+", "/", p or "").rstrip("/") or "/"
 
 
 class EditorConsumer(
@@ -30,6 +35,9 @@ class EditorConsumer(
 
     @sync_to_async
     def _first_start_of_container(self):
+        if not self.container:
+            return None
+
         first_start_of_container(self.container)
 
     def _check_path(self, p: str) -> str:
@@ -40,7 +48,7 @@ class EditorConsumer(
 
     @sync_to_async
     def _service(self, container: Container) -> VMServiceClient:
-        return VMServiceClient(container.node)
+        return VMServiceClient(cast(Node, container.node))
 
     def _group_name(self, pk: int) -> str:
         return f"container-fs-{pk}"
@@ -48,21 +56,23 @@ class EditorConsumer(
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.pk: int = -1
-        self.user = None
-        self.container = None
-        self.node = None
-        self.client = None
-        self.container_id = ""
+        self.user: object | None = None
+        self.container: Container | None = None
+        self.node: Node | None = None
+        self.client: VMServiceClient | None = None
+        self.container_id: str = ""
         self._watcher_task = None
         self._last_digest = None
 
     async def connect(self):
-        self.user = self.scope["user"]
-        if self.user.is_anonymous:
+        self.user = self.scope.get("user", None)
+        if not self.user or self.user.is_anonymous:
             await self.close(code=4401)
             return
 
-        self.pk = int(self.scope["url_route"]["kwargs"]["pk"])
+        self.pk = int(
+            cast(str, self.scope.get("url_route", {}).get("kwargs", {}).get("pk", "-1"))
+        )
         try:
             allowed = await self._user_owns_container(self.pk, self.user.pk)
             if not allowed:
@@ -87,7 +97,7 @@ class EditorConsumer(
 
         await self.channel_layer.group_add(self._group_name(self.pk), self.channel_name)
         await self.send_json({"event": "connected"})
-        self._start_fs_watcher()
+        # self._start_fs_watcher()
 
     async def disconnect(self, code):
         try:
@@ -96,14 +106,14 @@ class EditorConsumer(
             )
         except Exception:
             pass
-        await self._stop_fs_watcher()
+        # await self._stop_fs_watcher()
 
-    async def receive_json(self, content, **kwargs):
-        req_id = content.get("req_id")
+    async def receive_json(self, content: dict[str, str], **kwargs):
+        req_id = int(content.get("req_id", "-1"))
         action = (content.get("action") or "").strip()
         try:
-            if action == "list_dir":
-                await self._handle_list_dir(content, req_id)
+            if action == "list_dirs":
+                await self._handle_list_dirs(content, req_id)
             elif action == "read_file":
                 await self._handle_read_file(content, req_id)
             elif action == "create_dir":
@@ -128,19 +138,23 @@ class EditorConsumer(
             print("Error receive_json: ", e)
             await self.send_json({"event": "error", "req_id": req_id, "error": str(e)})
 
-    async def ws_broadcast(self, event):
+    async def ws_broadcast(self, event: dict[str, list[str] | dict[str, str]]) -> None:
         await self.send_json(event["payload"])
 
-    async def _handle_list_dir(self, content, req_id):
-        path = self._check_path(content.get("path") or "/app")
+    async def _handle_list_dirs(self, content: dict[str, str], req_id: int) -> None:
+        paths: list[str] = [
+            self._check_path(path or "/app")
+            for path in content.get("path", "").split(",")
+        ]
+
         if not self.client:
             return
-        data = self.client.list_dir(self.container_id, path)
+        data = self.client.list_dirs(self.container_id, paths)
         await self.send_json(
             {
                 "event": "ok",
                 "req_id": req_id,
-                "data": {"entries": data, "path": path},
+                "data": {"entries": data, "path": paths},
             }
         )
         await self.audit_ws(
@@ -148,12 +162,12 @@ class EditorConsumer(
             action="container.list_dir",
             target_type="container",
             target_id=self.container_id,
-            message="Directory listed via find",
-            metadata={"root": path, "count": len(data)},
+            message="Multiple directory listed via list",
+            metadata={"paths": paths, "count": len(data)},
             success=True,
         )
 
-    async def _handle_read_file(self, content, req_id):
+    async def _handle_read_file(self, content: dict[str, str], req_id: int) -> None:
         path = self._check_path(content["path"])
         if not self.client:
             return
@@ -172,7 +186,7 @@ class EditorConsumer(
             success=True,
         )
 
-    async def _handle_search(self, content, req_id):
+    async def _handle_search(self, content: dict[str, str], req_id: int) -> None:
         root = self._check_path(content["root"])
         pattern = content["pattern"]
         if not self.client:
@@ -199,11 +213,11 @@ class EditorConsumer(
             success=True,
         )
 
-    async def _handle_create_dir(self, content, req_id):
-        path = self._check_path(content["path"])
+    async def _handle_create_dir(self, content: dict[str, str], req_id: int) -> None:
+        path: str = self._check_path(content["path"])
         if not self.client:
             return
-        self.client.create_dir(self.container_id, path)
+        _ = self.client.create_dir(self.container_id, path)
 
         r = await self._bump_rev(self.container_id, path)
         await self.channel_layer.group_send(
@@ -230,7 +244,7 @@ class EditorConsumer(
             success=True,
         )
 
-    async def _handle_write_file(self, content, req_id):
+    async def _handle_write_file(self, content: dict[str, str], req_id: int) -> None:
         path = self._check_path(content["path"])
         prev = int(content.get("prev_rev") or 0)
         cur = await self._get_rev(self.container_id, path)
@@ -245,7 +259,7 @@ class EditorConsumer(
             )
         if not self.client:
             return
-        self.client.upload_files(
+        _ = self.client.upload_files(
             self.container_id,
             VMUploadFiles(
                 dest_path="/",
@@ -281,7 +295,7 @@ class EditorConsumer(
             success=True,
         )
 
-    async def _handle_move_path(self, content, req_id):
+    async def _handle_move_path(self, content: dict[str, str], req_id: int) -> None:
         path_src = self._check_path(content["src"])
         path_dst = self._check_path(content["dst"])
         cmd = f"set -e; mv -f {shlex.quote(path_src)} {shlex.quote(path_dst)}"
@@ -313,7 +327,7 @@ class EditorConsumer(
             success=True,
         )
 
-    async def _handle_delete_path(self, content, req_id):
+    async def _handle_delete_path(self, content: dict[str, str], req_id: int) -> None:
         path = self._check_path(content["path"])
         cmd = f"set -e; rm -rf {shlex.quote(path)}"
         if not self.client:
@@ -349,9 +363,9 @@ class EditorConsumer(
         if not self.client:
             return ""
         out = self.client.execute_sh(self.container_id, cmd)
-        return out["reason"]
+        return cast(str, out["reason"])
 
-    async def _get_fs_digest_cached(self, path: str) -> str | None:
+    async def _get_fs_digest_cached(self, path: str) -> str | int | None:
         try:
             return await VersionStore.get_rev(
                 cid=self.container_id, path=f"__fs_digest__:{path}"
@@ -359,9 +373,9 @@ class EditorConsumer(
         except Exception:
             return None
 
-    async def _set_fs_digest_cached(self, path: str, digest: str) -> None:
+    async def _set_fs_digest_cached(self, path: str) -> None:
         try:
-            await VersionStore.bump_rev(
+            _ = await VersionStore.bump_rev(
                 cid=self.container_id, path=f"__fs_digest__:{path}"
             )
         except Exception:
@@ -388,7 +402,7 @@ class EditorConsumer(
                             },
                         )
                         self._last_digest = cur
-                        await self._set_fs_digest_cached(path, cur)
+                        await self._set_fs_digest_cached(path)
                         last = cur
                     await asyncio.sleep(interval)
                 except asyncio.CancelledError:
@@ -406,7 +420,7 @@ class EditorConsumer(
 
     async def _stop_fs_watcher(self):
         if self._watcher_task and not self._watcher_task.done():
-            self._watcher_task.cancel()
+            _ = self._watcher_task.cancel()
             try:
                 await self._watcher_task
             except asyncio.CancelledError:

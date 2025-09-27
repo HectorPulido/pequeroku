@@ -39,7 +39,9 @@ class DevAgent:
             lines = [l.strip() for l in snippet.splitlines() if l.strip()]
             self.plan = lines[:3]
 
-        def record(self, action: str, args: Dict[str, Any], result: Dict[str, Any]) -> None:
+        def record(
+            self, action: str, args: Dict[str, Any], result: Dict[str, Any]
+        ) -> None:
             preview_keys = ["path", "command", "pattern", "url"]
             arg_preview = {k: args.get(k) for k in preview_keys if k in args}
             # Risk level when available (from result or injected in args)
@@ -103,7 +105,9 @@ class DevAgent:
             return "MEDIUM"
         return "LOW"
 
-    def _condense_tool_event(self, name: str, args: Dict[str, Any], result: Dict[str, Any]) -> None:
+    def _condense_tool_event(
+        self, name: str, args: Dict[str, Any], result: Dict[str, Any]
+    ) -> None:
         if hasattr(self, "tracker") and self.tracker:
             self.tracker.record(name, args, result)
 
@@ -113,9 +117,15 @@ class DevAgent:
             if usage is None and isinstance(resp, dict):
                 usage = resp.get("usage")
             if usage:
-                pt = getattr(usage, "prompt_tokens", None) or usage.get("prompt_tokens", 0)
-                ct = getattr(usage, "completion_tokens", None) or usage.get("completion_tokens", 0)
-                tt = getattr(usage, "total_tokens", None) or usage.get("total_tokens", (pt or 0) + (ct or 0))
+                pt = getattr(usage, "prompt_tokens", None) or usage.get(
+                    "prompt_tokens", 0
+                )
+                ct = getattr(usage, "completion_tokens", None) or usage.get(
+                    "completion_tokens", 0
+                )
+                tt = getattr(usage, "total_tokens", None) or usage.get(
+                    "total_tokens", (pt or 0) + (ct or 0)
+                )
                 self.token_usage["prompt_tokens"] += int(pt or 0)
                 self.token_usage["completion_tokens"] += int(ct or 0)
                 self.token_usage["total_tokens"] += int(tt or 0)
@@ -126,14 +136,20 @@ class DevAgent:
         self.client = client
         self.model = model
         self.tracker = self.TaskTracker()
-        self.token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        self.token_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
 
     @staticmethod
     def bootstrap_messages() -> List[Dict[str, Any]]:
         return [
             {
                 "role": "system",
-                "content": SYSTEM_PROMPT_EN.replace("{time}", datetime.now().isoformat()),
+                "content": SYSTEM_PROMPT_EN.replace(
+                    "{time}", datetime.now().isoformat()
+                ),
             }
         ]
 
@@ -195,11 +211,12 @@ class DevAgent:
                 return resp
             except Exception as e:
                 last_err = e
-                print(f"[AGENTES] Error getting response: (Try {attempt}/{len(delays)}): {e}")
+                print(
+                    f"[AGENTES] Error getting response: (Try {attempt}/{len(delays)}): {e}"
+                )
                 time.sleep(delay)
         if not resp:
             return None
-
 
     async def run_tool_loop(
         self,
@@ -216,14 +233,19 @@ class DevAgent:
         new_messages = messages.copy()
         new_messages[0] = {
             "role": "system",
-            "content": SYSTEM_TOOLS_PROMPT_EN.replace("{time}", datetime.now().isoformat()),
+            "content": SYSTEM_TOOLS_PROMPT_EN.replace(
+                "{time}", datetime.now().isoformat()
+            ),
         }
         # Initialize task tracker and encourage planning/batching
         self.tracker = self.TaskTracker()
-        new_messages.insert(1, {
-            "role": "assistant",
-            "content": "Before taking actions, briefly outline a 1–3 step plan, then proceed to call tools. Group shell commands when safe, keep edits minimal, and prefer targeted searches."
-        })
+        new_messages.insert(
+            1,
+            {
+                "role": "assistant",
+                "content": "Before taking actions, briefly outline a 1–3 step plan, then proceed to call tools. Group shell commands when safe, keep edits minimal, and prefer targeted searches.",
+            },
+        )
 
         dedup_policy = DedupPolicy()
 
@@ -287,7 +309,9 @@ class DevAgent:
                     if "error" not in result:
                         if name == "exec_command":
                             args = dict(args)
-                            args["_risk_level"] = self.classify_risk_for_command(args.get("command", ""))
+                            args["_risk_level"] = self.classify_risk_for_command(
+                                args.get("command", "")
+                            )
                         self.tracker.record(name, args, result)
 
                     if "dedup" in result:
@@ -332,12 +356,13 @@ class DevAgent:
         if summary:
             usage = self.token_usage
 
-            prompt=usage.get('prompt_tokens', 0)
-            completion=usage.get('completion_tokens', 0)
-            total=usage.get('total_tokens', 0)
+            prompt = usage.get("prompt_tokens", 0)
+            completion = usage.get("completion_tokens", 0)
+            total = usage.get("total_tokens", 0)
 
-
-            print(f"Token usage: prompt: {prompt}, completion: {completion}, total: {total}")
+            print(
+                f"Token usage: prompt: {prompt}, completion: {completion}, total: {total}"
+            )
 
             messages.insert(
                 -1,

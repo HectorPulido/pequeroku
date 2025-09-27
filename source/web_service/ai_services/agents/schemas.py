@@ -92,7 +92,7 @@ TOOLS_SPEC = [
                 "properties": {
                     "subdir": {
                         "type": "string",
-                        "description": "Relative subdirectory",
+                        "description": "Relative subdirectory, normally /app, but can be other paths",
                     }
                 },
                 "required": ["subdir"],

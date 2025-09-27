@@ -1,8 +1,11 @@
+from typing import cast
 import paramiko
 import settings
 from qemu_manager.models import VMRecord
 
-cache_data = {}
+cache_data: dict[
+    str, dict[str, paramiko.SSHClient | paramiko.SFTPClient | paramiko.Channel | None]
+] = {}
 
 
 def clear_cache(vm_id: str):
@@ -10,24 +13,26 @@ def clear_cache(vm_id: str):
 
 
 def clear_all_cache():
+    global cache_data
     cache_data = {}
 
 
 def _generate_ssh_and_sftp_by_id(
-    container_id,
-    ssh_port,
-    ssh_user,
+    container_id: str,
+    ssh_port: int | None,
+    ssh_user: str | None,
 ):
     print("Generating cache for: ", container_id)
     key = paramiko.Ed25519Key.from_private_key_file(settings.VM_SSH_PRIVKEY)
     cli = paramiko.SSHClient()
     cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     port = ssh_port or 22
+    user = ssh_user or "root"
 
     cli.connect(
         "127.0.0.1",
         port=port,
-        username=ssh_user,
+        username=user,
         pkey=key,
         look_for_keys=False,
     )
@@ -48,29 +53,33 @@ def _generate_ssh_and_sftp(container: VMRecord):
     )
 
 
-def cache_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user):
+def cache_ssh_and_sftp_by_id(
+    container_id: str,
+    ssh_port: int | None,
+    ssh_user: str | None,
+):
     if container_id not in cache_data:
-        _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
+        _ = _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
         return cache_data[container_id]
 
     data = cache_data[container_id]
     if "cli" not in data:
-        _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
+        _ = _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
         return cache_data[container_id]
     if "sftp" not in data:
-        _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
+        _ = _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
         return cache_data[container_id]
 
     if data["cli"] is None or data["sftp"] is None:
-        _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
+        _ = _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
         return cache_data[container_id]
 
     try:
-        cli = data["cli"]
-        cli.exec_command("echo hello")
+        cli = cast(paramiko.SSHClient, data["cli"])
+        _ = cli.exec_command("echo hello")
     except Exception as e:
         print("Exception caching: ", e)
-        _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
+        _ = _generate_ssh_and_sftp_by_id(container_id, ssh_port, ssh_user)
         return cache_data[container_id]
 
     return data
@@ -82,20 +91,26 @@ def cache_ssh_and_sftp(container: VMRecord):
     )
 
 
-def open_ssh_and_sftp(container: VMRecord, open_sftp=False):
+def open_ssh(container: VMRecord):
     val = cache_ssh_and_sftp(container)
-    sftp = val["sftp"]
-    cli = val["cli"]
+    return cast(paramiko.SSHClient, val["cli"])
 
-    if not open_sftp:
-        return None, cli
 
+def open_sftp(container: VMRecord):
+    val = cache_ssh_and_sftp(container)
+    return cast(paramiko.SFTPClient, val["sftp"])
+
+
+def open_ssh_and_sftp(container: VMRecord):
+    val = cache_ssh_and_sftp(container)
+    sftp = cast(paramiko.SFTPClient, val["sftp"])
+    cli = cast(paramiko.SSHClient, val["cli"])
     return sftp, cli
 
 
 def generate_console(container: VMRecord):
     val = cache_ssh_and_sftp(container)
-    cli = val["cli"]
+    cli = cast(paramiko.SSHClient, val["cli"])
 
     chan = cli.invoke_shell(width=120, height=32)
     chan.settimeout(0.0)

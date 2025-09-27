@@ -56,6 +56,9 @@ function connect() {
 		try {
 			const data = JSON.parse(e.data);
 			if (data.event === "start_text") {
+				if (bubble !== null && buffer === "..." && bubbleType === data.role) {
+					return;
+				}
 				if (data.role === "user") {
 					bubble = addMessage("user", "...");
 					bubbleType = data.role;

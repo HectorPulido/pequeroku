@@ -5,7 +5,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.apps import apps
 
 from internal_config.models import Config
-from .utils import _get_openai_client
+from .utils import get_openai_client
 from .agents.agents import DevAgent
 from pequeroku.mixins import ContainerAccessMixin
 
@@ -158,7 +158,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
 
         cfg = await self._get_config_values()
         self.openai_model = cfg.get("openai_model") or "gpt-4o"
-        self.client = _get_openai_client(cfg)
+        self.client = get_openai_client(cfg)
         self.agent = DevAgent(client=self.client, model=self.openai_model)
 
         self.messages = await self._get_memory(self.user, self.container_obj)

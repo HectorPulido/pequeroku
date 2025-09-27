@@ -3,7 +3,7 @@ from __future__ import annotations
 import requests
 from django.utils import timezone
 from dataclasses import dataclass, asdict, field
-from typing import Literal, Any
+from typing import Literal, cast
 
 from .models import Node
 
@@ -53,6 +53,14 @@ class VMPath:
 
 
 @dataclass
+class VMPaths:
+    """Routes inside the VM"""
+
+    paths: list[str] | None = None
+    depth: int = 1
+
+
+@dataclass
 class VMFile:
     """
     File to upload
@@ -88,37 +96,40 @@ class VMServiceClient:
     ) -> None:
         self.blocking: bool = blocking
         self.node: Node = node
-        self.base_url: str = str(node.node_host).rstrip("/")
+        self.base_url: str = cast(str, node.node_host).rstrip("/")
         self.timeout: float = timeout
         self.session: requests.Session = session or requests.Session()
         self.headers: dict[str, str] = {
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
-        if node.auth_token:
-            self.headers["Authorization"] = f"Bearer {node.auth_token}"
+        auth_token: str | None = cast(str | None, node.auth_token)
+        if auth_token and len(auth_token) > 0:
+            self.headers["Authorization"] = f"Bearer {auth_token}"
         if extra_headers:
             self.headers.update(extra_headers)
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
 
-    def _handle(self, resp: requests.Response) -> Any:
+    def _handle(self, resp: requests.Response) -> object:
+        detail: object | str | None = None
         if not resp.ok:
             self.set_healthy(False)
             try:
-                detail = resp.json()
+                detail = cast(object, resp.json())
             except Exception:
                 detail = resp.text
             raise requests.HTTPError(
                 f"HTTP {resp.status_code} - {resp.reason} - {detail}", response=resp
             )
-        if resp.status_code == 204 or not resp.content:
+        status: int = resp.status_code
+        if status == 204 or not resp.content:
             self.set_healthy(True)
             return None
 
         self.set_healthy(True)
-        return resp.json()
+        return cast(object, resp.json())
 
     def set_healthy(self, healthy: bool):
         if not self.blocking:
@@ -132,9 +143,9 @@ class VMServiceClient:
         # if not healthy
         try:
             health = self.get_health()
-            health = health.json()
+            health_data: dict[str, str] = cast(dict[str, str], health.json())
             if health.ok:
-                self.node.healthy = health["ok"] == "True"
+                self.node.healthy = health_data["ok"] == "True"
                 self.node.heartbeat_at = timezone.now()
             else:
                 self.node.healthy = False
@@ -150,44 +161,44 @@ class VMServiceClient:
         )
         return resp
 
-    def list_vms(self) -> list[dict[str, Any]]:
+    def list_vms(self) -> list[dict[str, object]]:
         """GET /vms — Lista todas las VMs."""
         resp = self.session.get(
             self._url("/vms"), headers=self.headers, timeout=self.timeout
         )
-        return self._handle(resp)
+        return cast(list[dict[str, object]], self._handle(resp))
 
-    def create_vm(self, payload: VMCreate) -> dict[str, Any]:
+    def create_vm(self, payload: VMCreate) -> dict[str, object]:
         """POST /vms — Create a VM."""
         data = {k: v for k, v in asdict(payload).items() if v is not None}
         resp = self.session.post(
             self._url("/vms"), json=data, headers=self.headers, timeout=self.timeout
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))
 
-    def get_vms(self, vm_ids: list[str]) -> dict[str, Any]:
+    def get_vms(self, vm_ids: list[str]) -> dict[str, object]:
         """GET /vms/list/{vm_ids}"""
         query = ",".join(vm_ids)
         resp = self.session.get(
             self._url(f"/vms/list/{query}"), headers=self.headers, timeout=self.timeout
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))
 
-    def get_vm(self, vm_id: str) -> dict[str, Any]:
+    def get_vm(self, vm_id: str) -> dict[str, object]:
         """GET /vms/{vm_id} — Obtiene una VM por id."""
         resp = self.session.get(
             self._url(f"/vms/{vm_id}"), headers=self.headers, timeout=self.timeout
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))
 
-    def delete_vm(self, vm_id: str) -> dict[str, Any]:
+    def delete_vm(self, vm_id: str) -> dict[str, object]:
         """DELETE /vms/{vm_id} — Elimina (o apaga y borra) una VM."""
         resp = self.session.delete(
             self._url(f"/vms/{vm_id}"), headers=self.headers, timeout=self.timeout
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))
 
-    def action_vm(self, vm_id: str, action: VMAction) -> dict[str, Any]:
+    def action_vm(self, vm_id: str, action: VMAction) -> dict[str, object]:
         """POST /vms/{vm_id}/actions — Ejecuta acción (start/stop/reboot)."""
         data = {k: v for k, v in asdict(action).items() if v is not None}
         resp = self.session.post(
@@ -196,11 +207,10 @@ class VMServiceClient:
             headers=self.headers,
             timeout=self.timeout,
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))
 
-    def upload_files(self, vm_id: str, payload: VMUploadFiles) -> dict[str, Any]:
+    def upload_files(self, vm_id: str, payload: VMUploadFiles) -> dict[str, object]:
         """POST /vms/{vm_id}/upload-files — Sube archivos de texto a la VM."""
-
         data = asdict(payload)
         resp = self.session.post(
             self._url(f"/vms/{vm_id}/upload-files"),
@@ -208,31 +218,32 @@ class VMServiceClient:
             headers=self.headers,
             timeout=self.timeout,
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))
 
-    def upload_files_blob(self, vm_id: str, payload: dict) -> dict[str, Any]:
+    def upload_files_blob(self, vm_id: str, payload: dict) -> dict[str, object]:
         """POST /vms/{vm_id}/upload-files — Sube archivos de texto a la VM."""
-
         resp = self.session.post(
             self._url(f"/vms/{vm_id}/upload-files"),
             json=payload,
             headers=self.headers,
             timeout=self.timeout,
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))
 
-    def list_dir(self, vm_id: str, path: VMPath | str = "/") -> list[dict[str, Any]]:
-        """POST /vms/{vm_id}/list-dir — Lista archivos/directorios en 'path'."""
-        p = {"path": path} if isinstance(path, str) else asdict(path)
+    def list_dirs(
+        self, vm_id: str, paths: VMPaths | list[str]
+    ) -> list[dict[str, object]]:
+        """POST /vms/{vm_id}/list-dirs"""
+        p = {"paths": paths, "depth": 1} if isinstance(paths, list) else asdict(paths)
         resp = self.session.post(
-            self._url(f"/vms/{vm_id}/list-dir"),
+            self._url(f"/vms/{vm_id}/list-dirs"),
             json=p,
             headers=self.headers,
             timeout=self.timeout,
         )
-        return self._handle(resp)
+        return cast(list[dict[str, object]], self._handle(resp))
 
-    def read_file(self, vm_id: str, path: VMPath | str) -> dict[str, Any]:
+    def read_file(self, vm_id: str, path: VMPath | str) -> dict[str, object]:
         """POST /vms/{vm_id}/read-file — Lee un archivo y devuelve su contenido."""
         p = {"path": path} if isinstance(path, str) else asdict(path)
         resp = self.session.post(
@@ -241,9 +252,9 @@ class VMServiceClient:
             headers=self.headers,
             timeout=self.timeout,
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))
 
-    def create_dir(self, vm_id: str, path: VMPath | str) -> dict[str, Any]:
+    def create_dir(self, vm_id: str, path: VMPath | str) -> dict[str, object]:
         """POST /vms/{vm_id}/create-dir — Crea un directorio."""
         p = {"path": path} if isinstance(path, str) else asdict(path)
         resp = self.session.post(
@@ -252,9 +263,9 @@ class VMServiceClient:
             headers=self.headers,
             timeout=self.timeout,
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))
 
-    def tail_console(self, vm_id: str, lines: int = 120) -> Any:
+    def tail_console(self, vm_id: str, lines: int = 120) -> object:
         """GET /vms/{vm_id}/console/tail — Obtiene el tail de la consola."""
         params = {"lines": lines}
         resp = self.session.get(
@@ -265,7 +276,7 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def statistics(self, vm_id: str) -> Any:
+    def statistics(self, vm_id: str) -> object:
         """GET /metrics/{vm_id}"""
         resp = self.session.get(
             self._url(f"/metrics/{vm_id}"),
@@ -274,7 +285,7 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def execute_sh(self, vm_id: str, vm_command: str) -> dict[str, Any]:
+    def execute_sh(self, vm_id: str, vm_command: str) -> dict[str, object]:
         """POST /vms/{vm_id}/execute-sh"""
         p = {"command": vm_command}
         resp = self.session.post(
@@ -283,7 +294,7 @@ class VMServiceClient:
             headers=self.headers,
             timeout=self.timeout,
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))
 
     def download_file(self, vm_id: str, path: str):
         """POST /vms/{vm_id}/download-file"""
@@ -303,7 +314,7 @@ class VMServiceClient:
             timeout=None,
         )
 
-    def search(self, vm_id: str, payload: SearchRequest) -> dict[str, Any]:
+    def search(self, vm_id: str, payload: SearchRequest) -> dict[str, object]:
         """POST /vms/{vm_id}/search — Search for files."""
         data = asdict(payload)
         resp = self.session.post(
@@ -312,4 +323,4 @@ class VMServiceClient:
             headers=self.headers,
             timeout=self.timeout,
         )
-        return self._handle(resp)
+        return cast(dict[str, object], self._handle(resp))

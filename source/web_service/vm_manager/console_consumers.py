@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import json
-from typing import Optional, Dict, Tuple
 
 import websockets
 from django.db import DatabaseError
@@ -22,13 +21,13 @@ class ConsoleConsumer(
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.pk: int = -1
-        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self.loop: asyncio.AbstractEventLoop | None = None
         self.user = None
 
         # Multi-console state
-        self.upstreams: Dict[str, websockets.WebSocketClientProtocol] = {}
-        self.reader_tasks: Dict[str, asyncio.Task] = {}
-        self.active_sid: Optional[str] = None  # default focus (usually "s1")
+        self.upstreams: dict[str, websockets.ClientProtocol] = {}
+        self.reader_tasks: dict[str, asyncio.Task] = {}
+        self.active_sid: str | None = None  # default focus (usually "s1")
 
     # Connection lifecycle
     async def connect(self):
@@ -292,7 +291,7 @@ class ConsoleConsumer(
     # Upstream management
     async def _build_upstream_url_and_headers(
         self, pk: int
-    ) -> Tuple[str, Dict[str, str]]:
+    ) -> tuple[str, dict[str, str]]:
         container_obj, node = await self._get_container_with_node(pk)
         if not container_obj or not node:
             return "", {}
@@ -305,7 +304,7 @@ class ConsoleConsumer(
         return upstream_url, custom_headers
 
     async def _open_upstream(
-        self, sid: str, upstream_url: str, headers: Dict[str, str]
+        self, sid: str, upstream_url: str, headers: dict[str, str]
     ) -> websockets.WebSocketClientProtocol:
         ws = await websockets.connect(
             upstream_url,
@@ -368,7 +367,7 @@ class ConsoleConsumer(
         except Exception as e:
             await self.send(text_data=f"Proxy error when broadcasting upstream: {e}")
 
-    async def _audit(self, action: str, message: str, target_sid: Optional[str] = None):
+    async def _audit(self, action: str, message: str, target_sid: str | None = None):
         await self.audit_ws(
             action=action,
             user=self.user,

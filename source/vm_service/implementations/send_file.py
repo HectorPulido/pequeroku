@@ -5,11 +5,11 @@ import shlex
 import paramiko
 import errno
 from qemu_manager.models import VMUploadFiles, VMRecord, ElementResponse
-from .ssh_cache import open_ssh_and_sftp
+from .ssh_cache import open_ssh_and_sftp, open_ssh
 
 
 def _run_and_check(cli: paramiko.SSHClient, cmd: str, timeout: float | None = None):
-    stdin, stdout, stderr = cli.exec_command(cmd, timeout=timeout)
+    _, stdout, stderr = cli.exec_command(cmd, timeout=timeout)
     exit_status = stdout.channel.recv_exit_status()
     if exit_status != 0:
         err = stderr.read().decode("utf-8", "ignore")
@@ -37,8 +37,10 @@ def _clean_dest(cli: paramiko.SSHClient, dest_path: str):
     _run_and_check(cli, cmd)
 
 
-def _prepare_vm_for_transfer(container: VMRecord, dest_path="/app", clean=True):
-    sftp, cli = open_ssh_and_sftp(container, True)
+def _prepare_vm_for_transfer(
+    container: VMRecord, dest_path: str = "/app", clean: bool = True
+):
+    sftp, cli = open_ssh_and_sftp(container)
     if not sftp:
         return None, None, None
 
@@ -56,7 +58,7 @@ def _sftp_mkdirs(sftp: paramiko.SFTPClient, remote_dir: str):
     for p in parts:
         cur = posixpath.join(cur, p)
         try:
-            sftp.stat(cur)
+            _ = sftp.stat(cur)
         except (IOError, OSError) as e:
             if getattr(e, "errno", None) in (errno.ENOENT, 2):
                 sftp.mkdir(cur)
@@ -102,7 +104,7 @@ def send_files(container: VMRecord, files: VMUploadFiles):
         if not sftp or not dest_path or not cli:
             return ElementResponse(ok=False, reason="No sftp ready")
 
-        failed = []
+        failed: list[dict[str, object]] = []
         for it in files.files:
             try:
                 fullp = _norm_join(dest_path, it.path)
@@ -123,7 +125,7 @@ def send_files(container: VMRecord, files: VMUploadFiles):
 
 
 def create_dir(container: VMRecord, path: str = "/app"):
-    _, cli = open_ssh_and_sftp(container, open_sftp=False)
+    cli = open_ssh(container)
     try:
         _run_and_check(cli, f"mkdir -p {shlex.quote(path)}")
     except Exception as e:

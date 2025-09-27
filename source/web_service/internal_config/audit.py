@@ -1,5 +1,4 @@
-from typing import Any, Dict, Optional
-
+from typing_extensions import cast
 from django.utils import timezone
 from django.http import HttpRequest
 from asgiref.sync import sync_to_async
@@ -9,7 +8,7 @@ from django.contrib.auth.models import AnonymousUser
 from .models import AuditLog
 
 
-def _get_ip_from_request(request: Optional[HttpRequest]) -> Optional[str]:
+def _get_ip_from_request(request: HttpRequest | None) -> str | None:
     if not request:
         return None
     xff = request.META.get("HTTP_X_FORWARDED_FOR")
@@ -18,10 +17,10 @@ def _get_ip_from_request(request: Optional[HttpRequest]) -> Optional[str]:
     return request.META.get("REMOTE_ADDR")
 
 
-def _get_ua_from_request(request: Optional[HttpRequest]) -> str:
+def _get_ua_from_request(request: HttpRequest | None) -> str:
     if not request:
         return ""
-    return request.META.get("HTTP_USER_AGENT", "")
+    return cast(str, request.META.get("HTTP_USER_AGENT", ""))
 
 
 def audit_agent_tool(
@@ -30,14 +29,14 @@ def audit_agent_tool(
     target_type: str = "",
     target_id: str = "",
     message: str = "",
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, object] | None = None,
     success: bool = True,
 ) -> None:
     """
     Register audit for HTTP/DRF
     """
 
-    AuditLog.objects.create(
+    _ = AuditLog.objects.create(
         action=action,
         target_type=target_type,
         target_id=str(target_id) if target_id else "",
@@ -49,13 +48,13 @@ def audit_agent_tool(
 
 
 def audit_log_http(
-    request: Optional[HttpRequest],
+    request: HttpRequest | None,
     *,
     action: str,
     target_type: str = "",
     target_id: str = "",
     message: str = "",
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, object] | None = None,
     success: bool = True,
 ) -> None:
     """
@@ -67,7 +66,7 @@ def audit_log_http(
     if isinstance(user, AnonymousUser):
         user = None
 
-    AuditLog.objects.create(
+    _ = AuditLog.objects.create(
         user=user,
         action=action,
         target_type=target_type,
@@ -85,16 +84,16 @@ def audit_log_http(
 def audit_log_ws(
     *,
     action: str,
-    user=None,  # channels scope user
+    user: object | None = None,  # channels scope user
     ip: str = "",
     user_agent: str = "",
     target_type: str = "",
     target_id: str = "",
     message: str = "",
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, object] | None = None,
     success: bool = True,
 ):
-    return AuditLog.objects.create(
+    _ = AuditLog.objects.create(
         user=user,
         action=action,
         target_type=target_type,

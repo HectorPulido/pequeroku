@@ -137,7 +137,7 @@ Memory:
 - Conversation memory is stored per `user` + `container` in `internal_config.AIMemory`. Sending `/clear` resets and reboots the agent’s system context.
 
 Provider configuration (OpenAI-compatible):
-- The AI client is created in `ai_services.utils._get_openai_client` using the `Config` model values:
+- The AI client is created in `ai_services.utils.get_openai_client` using the `Config` model values:
   - `openai_api_key`
   - `openai_api_url` (e.g. `https://api.openai.com/v1` or a compatible provider like Groq)
   - `openai_model` (e.g. `gpt-4o`, or a provider-specific name)

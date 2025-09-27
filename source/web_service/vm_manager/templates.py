@@ -3,7 +3,10 @@ from .vm_client import VMServiceClient, VMUploadFiles, VMFile
 
 
 def apply_template(
-    container: Container, template: FileTemplate, dest_path="/app", clean=True
+    container: Container,
+    template: FileTemplate,
+    dest_path: str = "/app",
+    clean: bool = True,
 ):
     """
     Apply a template to a container
@@ -28,7 +31,7 @@ def apply_template(
     return response
 
 
-def first_start_of_container(instance):
+def first_start_of_container(instance: Container):
     """
     Apply first template
     """
@@ -41,5 +44,8 @@ def first_start_of_container(instance):
 
     instance.first_start = False
     default_template = FileTemplate.objects.filter(slug="default").first()
-    apply_template(instance, default_template)
+    if not default_template:
+        return
+
+    _ = apply_template(instance, default_template)
     instance.save()

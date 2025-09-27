@@ -48,7 +48,7 @@ export function setupFileTree({
 		if (node) node.classList.add("selected");
 	}
 
-	// === WS: list_dir (cached) ===
+	// === WS: list_dirs (cached) ===
 	const dirCache = new Map();
 	const DIR_TTL_MS = 3000;
 	function cacheGet(path) {
@@ -69,33 +69,117 @@ export function setupFileTree({
 			if (key === base || key.startsWith(`${base}/`)) dirCache.delete(key);
 		}
 	}
-	async function listDir(path = "/app", force = false) {
-		// In-flight de-dup to avoid duplicate WS calls for the same dir
-		listDir._inflight = listDir._inflight || new Map();
+	async function listDirs(paths = ["/app"], force = false) {
+		// Normalize and de-dup
+		const list = Array.from(
+			new Set(paths.map((p) => (p || "/app").replace(/\/$/, ""))),
+		);
+
+		const resultsMap = new Map();
+
+		// Use cache when available
+		const toFetch = [];
 		if (!force) {
-			const cached = cacheGet(path);
-			if (cached) return cached;
-			const p0 = listDir._inflight.get(path);
-			if (p0) return p0;
+			for (const p of list) {
+				const cached = cacheGet(p);
+				if (cached) {
+					resultsMap.set(p, cached);
+				} else {
+					toFetch.push(p);
+				}
+			}
+		} else {
+			toFetch.push(...list);
 		}
-		const p = (async () => {
-			const r = await fsws.call("list_dir", { path });
-			const entries = r.entries || [];
-			cacheSet(path, entries);
-			return entries;
-		})();
-		if (!force) listDir._inflight.set(path, p);
-		try {
-			return await p;
-		} finally {
-			listDir._inflight.delete(path);
+
+		if (toFetch.length) {
+			const r = await fsws.call("list_dirs", { path: toFetch.join(",") });
+			const responseEntries = r?.entries;
+
+			if (Array.isArray(responseEntries)) {
+				// Server returned a single flat array; split per base path with de-dupe by path (latest wins)
+				for (const base of toFetch) {
+					const basePrefix = `${base.replace(/\/$/, "")}/`;
+					const m = new Map();
+					for (const item of responseEntries) {
+						if (!item?.path) continue;
+						if (!item.path.startsWith(basePrefix)) continue;
+						m.set(item.path, item);
+					}
+					const perBase = Array.from(m.values());
+					// Merge with any cached entries already present for this base (de-dup by path, fetched wins)
+					{
+						const existing = Array.isArray(resultsMap.get(base))
+							? resultsMap.get(base)
+							: [];
+						const mm = new Map();
+						for (const it of existing) {
+							if (!it?.path) continue;
+							mm.set(it.path, it);
+						}
+						for (const it of perBase) {
+							if (!it?.path) continue;
+							mm.set(it.path, it);
+						}
+						const merged = Array.from(mm.values());
+						cacheSet(base, merged);
+						resultsMap.set(base, merged);
+					}
+				}
+			} else if (responseEntries && typeof responseEntries === "object") {
+				// Server returned a map: { basePath: entries[] } — de-dupe by path (latest wins)
+				for (const base of toFetch) {
+					const arr = Array.isArray(responseEntries[base])
+						? responseEntries[base]
+						: [];
+					const m = new Map();
+					for (const item of arr) {
+						if (!item?.path) continue;
+						m.set(item.path, item);
+					}
+					const perBase = Array.from(m.values());
+					// Merge with any cached entries already present for this base (de-dup by path, fetched wins)
+					{
+						const existing = Array.isArray(resultsMap.get(base))
+							? resultsMap.get(base)
+							: [];
+						const mm = new Map();
+						for (const it of existing) {
+							if (!it?.path) continue;
+							mm.set(it.path, it);
+						}
+						for (const it of perBase) {
+							if (!it?.path) continue;
+							mm.set(it.path, it);
+						}
+						const merged = Array.from(mm.values());
+						cacheSet(base, merged);
+						resultsMap.set(base, merged);
+					}
+				}
+			} else {
+				// Fallback: nothing
+				for (const base of toFetch) {
+					cacheSet(base, []);
+					resultsMap.set(base, []);
+				}
+			}
 		}
+
+		// Ensure all requested paths are present
+		for (const p of list) {
+			if (!resultsMap.has(p)) {
+				const cached = cacheGet(p) || [];
+				resultsMap.set(p, cached);
+			}
+		}
+		return resultsMap;
 	}
 
 	async function loadDir(path, ul, force = false) {
 		// Build the entire subtree in one shot:
 		// 1) compute all directories to fetch (base + expanded descendants)
-		// 2) fetch list_dir for all targets in parallel
+		// 2) fetch list_dirs for all targets in one WS call
 		// 3) render DOM synchronously using the pre-fetched map
 		const base = path.replace(/\/$/, "");
 		const targets = new Set([base]);
@@ -104,15 +188,22 @@ export function setupFileTree({
 		}
 
 		const targetList = Array.from(targets);
-		const results = await Promise.all(targetList.map((p) => listDir(p, force)));
-		const dirMap = new Map();
-		// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
-		targetList.forEach((p, i) => dirMap.set(p, results[i] || []));
+		const dirMap = await listDirs(targetList, force);
 
 		function getDirectChildren(parentPath) {
 			const items = dirMap.get(parentPath) || [];
+			// Deduplicate by full path to avoid duplicate nodes when multi-path results overlap
+			const seen = new Set();
+			const unique = [];
+			for (const it of items) {
+				const p = it?.path;
+				if (!p) continue;
+				if (seen.has(p)) continue;
+				seen.add(p);
+				unique.push(it);
+			}
 			const prefix = `${parentPath.replace(/\/$/, "")}/`;
-			const direct = items.filter(
+			const direct = unique.filter(
 				(item) =>
 					item.path.startsWith(prefix) &&
 					item.path.slice(prefix.length) &&

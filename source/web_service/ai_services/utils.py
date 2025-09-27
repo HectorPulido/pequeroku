@@ -1,7 +1,7 @@
 from openai import OpenAI
 
 
-def _get_openai_client(open_ai_data: dict) -> OpenAI:
+def get_openai_client(open_ai_data: dict[str, str]) -> OpenAI:
     """
     Get OpenAI data using the OpenAI API.
     """

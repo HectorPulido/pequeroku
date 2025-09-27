@@ -1,35 +1,34 @@
 import json
 import time
-from typing import Dict, Optional
 import socket
-import redis
+from redis.client import Redis
 from qemu_manager.models import VMState, VMRecord
 
 
 class RedisStore:
     def __init__(
         self,
-        url: Optional[str] = None,
+        url: str | None = None,
         namespace: str = "vmservice",
         provisioning_grace_s: int = 900,  # 15 mins default
     ) -> None:
         if not url:
             return
 
-        self.r = redis.Redis.from_url(
+        self.r: Redis = Redis.from_url(
             url,
             decode_responses=True,
         )
-        self.ns = namespace
-        self.ids_key = f"{self.ns}:vms"
-        self.provisioning_grace_s = provisioning_grace_s
+        self.ns: str = namespace
+        self.ids_key: str = f"{self.ns}:vms"
+        self.provisioning_grace_s: int = provisioning_grace_s
 
     # ---- Keys ----
     def _key(self, vm_id: str) -> str:
         return f"{self.ns}:vm:{vm_id}"
 
     # ---- (de)Deserialization ----
-    def _to_dict(self, vm) -> dict:
+    def _to_dict(self, vm: VMRecord) -> dict[str, object]:
         state = vm.state.value if hasattr(vm.state, "value") else str(vm.state)
         if state.startswith("VMState."):
             state = state.split(".", 1)[1]
@@ -48,17 +47,17 @@ class RedisStore:
             "updated_at": float(vm.updated_at),
         }
 
-    def _from_dict(self, d: dict):
-        state_str = d["state"]
+    def _from_dict(self, d: dict[str, object]):
+        state_str = str(d["state"])
         if state_str.startswith("VMState."):
             state_str = state_str.split(".", 1)[1]
         return VMRecord(
-            id=d["id"],
+            id=str(d["id"]),
             state=VMState(state_str),
-            workdir=d["workdir"],
-            vcpus=int(d["vcpus"]),
-            mem_mib=int(d["mem_mib"]),
-            disk_gib=int(d["disk_gib"]),
+            workdir=str(d["workdir"]),
+            vcpus=int(str(d["vcpus"])),
+            mem_mib=int(str(d["mem_mib"])),
+            disk_gib=int(str(d["disk_gib"])),
             ssh_port=(
                 None
                 if d.get("ssh_port")
@@ -66,18 +65,18 @@ class RedisStore:
                     None,
                     "",
                 )
-                else int(d["ssh_port"])
+                else int(str(d["ssh_port"]))
             ),
-            ssh_user=d.get("ssh_user"),
-            key_ref=d.get("key_ref"),
-            error_reason=d.get("error_reason"),
-            created_at=float(d["created_at"]),
-            updated_at=float(d["updated_at"]),
+            ssh_user=str(d.get("ssh_user")),
+            key_ref=str(d.get("key_ref")),
+            error_reason=str(d.get("error_reason")),
+            created_at=float(str(d["created_at"])),
+            updated_at=float(str(d["updated_at"])),
         )
 
     # ---- Liveness ----
     @staticmethod
-    def _ssh_alive(port: Optional[int], timeout: float = 1.5) -> bool:
+    def _ssh_alive(port: int | None, timeout: float = 1.5) -> bool:
         if not port:
             return False
         try:
@@ -86,7 +85,7 @@ class RedisStore:
         except Exception:
             return False
 
-    def _reconcile(self, vm):
+    def _reconcile(self, vm: VMRecord):
         if vm.state == VMState.running and not self._ssh_alive(vm.ssh_port):
             self.set_status(
                 vm, VMState.stopped, error_reason="reconciled: ssh port not reachable"
@@ -94,7 +93,7 @@ class RedisStore:
         return vm
 
     # ---- API compatible ----
-    def put(self, vm) -> None:
+    def put(self, vm: VMRecord) -> None:
         vm.updated_at = time.time()
         data = self._to_dict(vm)
         key = self._key(vm.id)
@@ -111,7 +110,7 @@ class RedisStore:
         vm = self._from_dict(json.loads(s))
         return self._reconcile(vm)
 
-    def all(self) -> Dict[str, "VMRecord"]:
+    def all(self) -> dict[str, "VMRecord"]:
         ids = self.r.smembers(self.ids_key)
         if not ids:
             return {}
@@ -121,7 +120,7 @@ class RedisStore:
         for i in ordered:
             p.get(self._key(i))
         vals = p.execute()
-        out: Dict[str, "VMRecord"] = {}
+        out: dict[str, "VMRecord"] = {}
         for i, s in zip(ordered, vals):
             if not s:
                 continue
@@ -146,9 +145,9 @@ class RedisStore:
 
     def set_status(
         self,
-        vm,
+        vm: VMRecord,
         status: VMState,
-        error_reason: Optional[str] = None,
+        error_reason: str | None = None,
     ):
         vm.state = status
         vm.error_reason = error_reason

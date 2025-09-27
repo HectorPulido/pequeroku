@@ -199,7 +199,3 @@ In the Docker Compose setup at the repo root, Nginx already serves this director
 1. Add a new `*.html` file under this folder.
 2. Include any scripts under `js/` and styles under `css/`.
 3. Add an Nginx route (e.g., `location = /newpage/ { try_files /newpage.html =404; }`).
-
-## License
-
-See the repository root for licensing information (if provided).

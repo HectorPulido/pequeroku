@@ -68,7 +68,7 @@ class FakeAgent:
     def bootstrap_messages():
         return [{"role": "system", "content": "system-prompt"}]
 
-    async def run_tool_loop(self, messages, container, max_rounds: int = 8):
+    def run_tool_loop(self, messages, container, max_rounds: int = 8):
         # Return an async generator as the real code expects
         async def _gen():
             # Immediately finish without invoking any tools
@@ -136,7 +136,7 @@ def test_ai_consumer_connect_and_receive_flow(monkeypatch):
     fake_client = FakeOpenAI(
         stream_chunks=["Hello", " world"], static_message="irrelevant"
     )
-    monkeypatch.setattr(ai_consumers, "_get_openai_client", lambda cfg: fake_client)
+    monkeypatch.setattr(ai_consumers, "get_openai_client", lambda cfg: fake_client)
 
     # Use a lightweight fake agent to skip tool-calls complexity
     monkeypatch.setattr(ai_consumers, "DevAgent", FakeAgent)
@@ -282,7 +282,7 @@ def test_utils_get_openai_client_uses_api_key_and_url(monkeypatch):
     monkeypatch.setattr(utils, "OpenAI", DummyOpenAI)
 
     # Act
-    client = utils._get_openai_client(
+    client = utils.get_openai_client(
         {"openai_api_key": "abc123", "openai_api_url": "http://localhost:9999/v1"}
     )
 
@@ -311,7 +311,7 @@ files: []
     fake_openai = FakeOpenAI(static_message=generated_body)
     import web_service.ai_services.utils as utils
 
-    monkeypatch.setattr(utils, "_get_openai_client", lambda cfg: fake_openai)
+    monkeypatch.setattr(utils, "get_openai_client", lambda cfg: fake_openai)
 
     # Config fetch: patch actual app model via importlib to avoid app_label issues
     import importlib
@@ -341,7 +341,7 @@ files: []
             calls["exec"] = {"vm_id": vm_id, "cmd": cmd}
             return {"ok": True}
 
-        def list_dir(self, vm_id, path):
+        def list_dirs(self, vm_id, path):
             calls["list_dir"] = {"vm_id": vm_id, "path": path}
             return [{"path": "/app/readme.txt", "is_dir": False}]
 
@@ -373,7 +373,7 @@ def test_tools_read_workspace_lists_dir(monkeypatch):
     container = create_container(user=user, node=node, container_id="vm-rw-1")
 
     class FakeVMService:
-        def list_dir(self, vm_id, path):
+        def list_dirs(self, vm_id, path):
             return [{"name": "a.txt"}]
 
     monkeypatch.setattr(tools_mod, "_get_service", lambda obj: FakeVMService())
@@ -448,3 +448,159 @@ def test_tools_exec_command_runs(monkeypatch):
     out = tools_mod.exec_command(DedupPolicy(), container, command="echo ok")
     assert out.get("finished") is True
     assert out.get("cmd") == "echo ok"
+
+
+def test_tools_search_calls_service_and_audits(monkeypatch):
+    import web_service.ai_services.agents.tools as tools_mod
+    from internal_config.models import AuditLog as ALog
+
+    user = create_user(username="harry_ai_search")
+    node = create_node()
+    container = create_container(user=user, node=node, container_id="vm-search-1")
+
+    captured = {}
+
+    class FakeVMService:
+        def search(self, vm_id, req):
+            captured["vm_id"] = vm_id
+            captured["pattern"] = getattr(req, "pattern", None)
+            captured["root"] = getattr(req, "root", None)
+            return [{"path": "/app/a.txt"}]
+
+    monkeypatch.setattr(tools_mod, "_get_service", lambda obj: FakeVMService())
+
+    out = tools_mod.search(None, container, pattern="README", root="/app")
+    assert out.get("finished") is True
+    assert isinstance(out.get("response"), list)
+    assert captured["vm_id"] == str(container.container_id)
+    assert captured["pattern"] == "README"
+    assert captured["root"] == "/app"
+
+    log = ALog.objects.filter(action="agent_tool.search").first()
+    assert log is not None
+    assert log.metadata.get("pattern") == "README"
+    assert log.metadata.get("root") == "/app"
+
+
+def test_tools_search_on_internet_returns_results_and_audits(monkeypatch):
+    import web_service.ai_services.agents.tools as tools_mod
+    from internal_config.models import AuditLog as ALog
+
+    user = create_user(username="ivy_ai_web")
+    node = create_node()
+    container = create_container(user=user, node=node, container_id="vm-web-1")
+
+    class FakeDDGS:
+        def text(self, q, max_results=5, timeout=5):
+            return [{"title": "r1"}, {"title": "r2"}]
+
+    import sys
+
+    fake_ddgs = types.ModuleType("ddgs")
+    fake_ddgs.DDGS = FakeDDGS
+    monkeypatch.setitem(sys.modules, "ddgs", fake_ddgs)
+
+    out = tools_mod.search_on_internet(None, container, search_query="python")
+    assert out.get("finished") is True
+    assert isinstance(out.get("response"), list)
+    assert len(out["response"]) == 2
+
+    log = ALog.objects.filter(action="agent_tool.search_on_internet").first()
+    assert log is not None
+    assert log.metadata.get("query") == "python"
+
+
+def test_tools_read_from_internet_success_audits(monkeypatch):
+    import web_service.ai_services.agents.tools as tools_mod
+    from internal_config.models import AuditLog as ALog
+
+    user = create_user(username="jack_ai_read_web")
+    node = create_node()
+    container = create_container(user=user, node=node, container_id="vm-web-2")
+
+    class FakeArticleSuccess:
+        def __init__(self, url: str):
+            self._url = url
+            self.title = "Hello"
+            self.text = "World"
+
+        def download(self):
+            return None
+
+        def parse(self):
+            return None
+
+    import sys
+
+    fake_news = types.ModuleType("newspaper")
+    fake_news.Article = FakeArticleSuccess
+    monkeypatch.setitem(sys.modules, "newspaper", fake_news)
+
+    out = tools_mod.read_from_internet(None, container, url="http://example.com")
+    assert out.get("finished") is True
+    assert out.get("title") == "Hello"
+    assert out.get("text") == "World"
+
+    log = ALog.objects.filter(action="agent_tool.read_from_internet").first()
+    assert log is not None
+    assert log.success is True
+    assert log.metadata.get("url") == "http://example.com"
+    assert log.metadata.get("title") == "Hello"
+    assert "error" not in log.metadata
+
+
+def test_tools_read_from_internet_error_audits(monkeypatch):
+    import web_service.ai_services.agents.tools as tools_mod
+    from internal_config.models import AuditLog as ALog
+
+    user = create_user(username="kate_ai_read_web")
+    node = create_node()
+    container = create_container(user=user, node=node, container_id="vm-web-3")
+
+    class FakeArticleError:
+        def __init__(self, url: str):
+            pass
+
+        def download(self):
+            raise RuntimeError("network down")
+
+        def parse(self):
+            return None
+
+    import sys
+
+    fake_news = types.ModuleType("newspaper")
+    fake_news.Article = FakeArticleError
+    monkeypatch.setitem(sys.modules, "newspaper", fake_news)
+
+    out = tools_mod.read_from_internet(None, container, url="http://bad")
+    assert out.get("finished") is True
+    assert "error" in out
+
+    log = ALog.objects.filter(action="agent_tool.read_from_internet").first()
+    assert log is not None
+    assert log.success is False
+    assert log.metadata.get("url") == "http://bad"
+    assert "error" in log.metadata
+
+
+def test_tools_exec_command_risk_level_audited(monkeypatch):
+    import web_service.ai_services.agents.tools as tools_mod
+    from web_service.ai_services.agents.tools import DedupPolicy
+    from internal_config.models import AuditLog as ALog
+
+    user = create_user(username="leo_ai_risk")
+    node = create_node()
+    container = create_container(user=user, node=node, container_id="vm-risk-2")
+
+    class FakeVMService:
+        def execute_sh(self, vm_id, cmd):
+            return {"ok": True, "cmd": cmd}
+
+    monkeypatch.setattr(tools_mod, "_get_service", lambda obj: FakeVMService())
+
+    tools_mod.exec_command(DedupPolicy(), container, command="docker push repo/image")
+    log = ALog.objects.filter(action="agent_tool.exec_command").first()
+    assert log is not None
+    assert log.metadata.get("risk_level") == "HIGH"
+    assert log.metadata.get("command") == "docker push repo/image"

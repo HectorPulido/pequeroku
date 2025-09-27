@@ -57,7 +57,8 @@
 	height: 10px;
 	border-radius: 999px;
 	background: var(--color-success);
-	box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-success) 15%, transparent);
+	box-shadow: 0 0 0 4px
+		color-mix(in oklab, var(--color-success) 15%, transparent);
 }
 #bot-header .red-dot {
 	width: 10px;

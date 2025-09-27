@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Tuple
+from collections.abc import Iterable
 from django.core.management.base import BaseCommand
 
 from vm_manager.models import Container, Node
@@ -39,7 +39,7 @@ class Reconciler(VMSyncMixin):
         self, action: str, c: Container, message: str, success: bool, metadata=None
     ):
         try:
-            AuditLog.objects.create(
+            _ = AuditLog.objects.create(
                 user=c.user if hasattr(c, "user_id") else None,
                 action=action,
                 target_type="container",
@@ -53,9 +53,9 @@ class Reconciler(VMSyncMixin):
         except Exception:
             pass
 
-    def _iter_batches(self, batch_size: int = 200) -> Iterable[List[Container]]:
+    def _iter_batches(self, batch_size: int = 200) -> Iterable[list[Container]]:
         qs = Container.objects.select_related("node", "user").all().order_by("pk")
-        batch: List[Container] = []
+        batch: list[Container] = []
         for obj in qs.iterator(chunk_size=batch_size):
             batch.append(obj)
             if len(batch) >= batch_size:
@@ -64,12 +64,12 @@ class Reconciler(VMSyncMixin):
         if batch:
             yield batch
 
-    def reconcile_batch(self, objs: List[Container]) -> Tuple[int, int]:
+    def reconcile_batch(self, objs: list[Container]) -> tuple[int, int]:
         """
         Reconcile a group of containers. Returns (actions_sent, updated_rows)
         """
         actions = 0
-        updated: List[Container] = []
+        updated: list[Container] = []
 
         # 1) Sync statuses with vm-service in bulk (per node)
         changed = self._sync_statuses(objs)
@@ -102,7 +102,7 @@ class Reconciler(VMSyncMixin):
                     "created",
                     "creating",
                 ):
-                    client.action_vm(
+                    _ = client.action_vm(
                         str(c.container_id),
                         VMAction(action="start", cleanup_disks=False),
                     )
@@ -118,7 +118,7 @@ class Reconciler(VMSyncMixin):
                         {"container_id": c.container_id},
                     )
                 elif desired == "stopped" and status == "running":
-                    client.action_vm(
+                    _ = client.action_vm(
                         str(c.container_id),
                         VMAction(action="stop", cleanup_disks=False),
                     )
@@ -150,14 +150,14 @@ class Reconciler(VMSyncMixin):
         # 3) Persist local hints
         if updated:
             try:
-                Container.objects.bulk_update(updated, ["status"], batch_size=200)
+                _ = Container.objects.bulk_update(updated, ["status"], batch_size=200)
             except Exception:
                 # Best effort; continue
                 pass
 
         return actions, len(updated)
 
-    def reconcile_once(self) -> Tuple[int, int, int]:
+    def reconcile_once(self) -> tuple[int, int, int]:
         """
         Run one full pass over all containers.
 
@@ -207,11 +207,11 @@ class Command(BaseCommand):
             orig_sync = reconciler._sync_statuses
             _ = reconciler.reconcile_batch
 
-            def _dry_sync(objs: List[Container]):
+            def _dry_sync(objs: list[Container]):
                 # Still sync from vm-service to show what would change
                 return orig_sync(objs)
 
-            def _dry_reconcile(objs: List[Container]):
+            def _dry_reconcile(objs: list[Container]):
                 # Compute but avoid calling vm-service; do not persist local hints
                 actions = 0
                 _ = reconciler._sync_statuses(objs)

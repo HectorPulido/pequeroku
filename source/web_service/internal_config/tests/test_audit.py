@@ -85,7 +85,7 @@ def test_audit_log_ws_with_values_and_defaults():
     User = get_user_model()
     user = User.objects.create_user(username="bob", password="secret")
 
-    log1 = async_to_sync(audit_log_ws)(
+    async_to_sync(audit_log_ws)(
         action="ws.connect",
         user=user,
         ip="1.1.1.1",
@@ -96,7 +96,9 @@ def test_audit_log_ws_with_values_and_defaults():
         metadata={"x": 1},
         success=True,
     )
-    assert isinstance(log1, AuditLog)
+    assert ALog.objects.count() == 1
+    log1 = ALog.objects.first()
+    assert log1 is not None
     assert log1.user == user
     assert log1.ip == "1.1.1.1"
     assert log1.user_agent == "ws-agent"
@@ -104,14 +106,16 @@ def test_audit_log_ws_with_values_and_defaults():
     assert log1.action == "ws.connect"
     assert log1.success is True
 
-    log2 = async_to_sync(audit_log_ws)(
+    async_to_sync(audit_log_ws)(
         action="ws.disconnect",
         user=None,
         ip="",
         user_agent="",
         metadata=None,
     )
-    assert isinstance(log2, AuditLog)
+    assert ALog.objects.count() == 2
+    log2 = ALog.objects.first()
+    assert log2 is not None
     assert log2.user is None
     assert log2.ip is None
     assert log2.user_agent == ""

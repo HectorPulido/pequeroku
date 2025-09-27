@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 import threading
 import uuid
@@ -9,6 +8,7 @@ import shlex
 from fastapi import HTTPException, Depends, APIRouter, Query
 from fastapi.responses import JSONResponse, Response
 
+from implementations.read_from_vm import list_dirs
 import settings
 
 from qemu_manager.models import (
@@ -21,6 +21,7 @@ from qemu_manager.models import (
     ElementResponse,
     ListDirItem,
     VMPath,
+    VMPaths,
     FileContent,
     VMSh,
     SearchHit,
@@ -31,7 +32,6 @@ from implementations import (
     RedisStore,
     Runner,
     send_files,
-    list_dir,
     read_file,
     create_dir,
     download_file,
@@ -130,14 +130,14 @@ async def upload_files(vm_id: str, files: VMUploadFiles) -> ElementResponse:
     )
 
 
-@vms_router.post("/{vm_id}/list-dir", response_model=list[ListDirItem])
-async def list_dir_endpoint(vm_id: str, root: VMPath) -> list[ListDirItem]:
+@vms_router.post("/{vm_id}/list-dirs", response_model=list[ListDirItem])
+async def list_dirs_endpoint(vm_id: str, root: VMPaths) -> list[ListDirItem]:
     try:
         vm: "VMRecord" = store.get(vm_id)
     except KeyError as e:
         raise HTTPException(404, "VM not found") from e
 
-    return list_dir(vm, root.path)
+    return list_dirs(vm, root.paths, root.depth)
 
 
 @vms_router.post("/{vm_id}/read-file", response_model=FileContent)
