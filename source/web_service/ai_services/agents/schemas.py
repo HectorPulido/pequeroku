@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+PROMPT_SUMMARY = """
+Your task is to summarize all this information tailored to the query, do not invent anything.
+""".strip()
+
+PROMPT_PLANNER = """
+Before taking actions, briefly outline a 1–{max_rounds} step plan, then proceed to call tools. Group shell commands when safe, keep edits minimal, and prefer targeted searches.
+""".strip()
+
 SYSTEM_TOOLS_PROMPT_EN = """
 You are a development assistant expert agent with access to workspace tools.
 
@@ -77,6 +85,9 @@ Extra constraints:
 * Keep markdown minimal.
 * Be extremely chill but useful — short, direct, no fluff, no yapping.
 * NEVER EVER DARE TO LIE TO THE USER, if something is not done yet or something, just say so
+
+Tool usage:
+* YOU HAVE NO TOOLS, DO NOT TRY TO USE TOOLS IN ANY CONTEXT, THE INFO YOU HAVE IS ALL YOU HAVE
 """.strip()
 
 TOOLS_SPEC = [

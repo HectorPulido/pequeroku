@@ -2,12 +2,18 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any
 from asgiref.sync import sync_to_async
 
 from vm_manager.models import Container
 
-from .schemas import SYSTEM_PROMPT_EN, TOOLS_SPEC, SYSTEM_TOOLS_PROMPT_EN
+from .schemas import (
+    SYSTEM_PROMPT_EN,
+    TOOLS_SPEC,
+    SYSTEM_TOOLS_PROMPT_EN,
+    PROMPT_PLANNER,
+    PROMPT_SUMMARY,
+)
 from .tools import (
     ToolError,
     DedupPolicy,
@@ -28,9 +34,10 @@ class DevAgent:
     """
 
     class TaskTracker:
-        def __init__(self):
-            self.plan: List[str] = []
-            self.history: List[str] = []
+        def __init__(self, get_response):
+            self.plan: list[str] = []
+            self.history: list[str] = []
+            self.get_response = get_response
 
         def add_plan(self, content: str) -> None:
             if not content:
@@ -40,40 +47,48 @@ class DevAgent:
             self.plan = lines[:3]
 
         def record(
-            self, action: str, args: Dict[str, Any], result: Dict[str, Any]
+            self, action: str, args: dict[str, Any], result: dict[str, Any]
         ) -> None:
-            preview_keys = ["path", "command", "pattern", "url"]
-            arg_preview = {k: args.get(k) for k in preview_keys if k in args}
             # Risk level when available (from result or injected in args)
             risk_level = result.get("risk_level") if isinstance(result, dict) else None
             if not risk_level:
                 risk_level = args.get("_risk_level")
-            res_keys = []
-            if "finished" in result:
-                res_keys.append("finished")
-            if "path" in result:
-                res_keys.append("path")
-            if "title" in result:
-                res_keys.append("title")
-            if "entries" in result:
-                res_keys.append(f"entries[{len(result.get('entries', []))}]")
-            if "response" in result:
-                res_keys.append("response")
-            if risk_level:
-                res_keys.append(f"risk={risk_level}")
-            summary = f"{action} args={json.dumps(arg_preview, ensure_ascii=False)} result_keys={res_keys}"
-            if len(summary) > 500:
-                summary = summary[:500] + "..."
-            self.history.append(summary)
-            if len(self.history) > 15:
-                self.history = self.history[-15:]
 
-        def summarize(self) -> str:
-            parts = []
+            resp = f"{action} args={json.dumps(args, ensure_ascii=False)} result_keys={json.dumps(result, ensure_ascii=False)}"
+
+            if risk_level:
+                resp += f" risk={risk_level}"
+
+            self.history.append(resp + "\n")
+
+        async def summarize(self, query: str) -> str:
+            parts: list[str] = []
             if self.plan:
                 parts.append("Plan: " + " | ".join(self.plan))
             parts.extend(self.history)
-            return "\n".join(parts).strip()
+
+            parts_str = "\n".join(parts).strip()
+
+            if len(parts_str) > 2500:
+                try:
+                    summary = await self.get_response(
+                        [
+                            {
+                                "role": "system",
+                                "content": PROMPT_SUMMARY,
+                            },
+                            {
+                                "role": "system",
+                                "content": f"<info>{parts_str}</info> <query>{query}</query>",
+                            },
+                        ]
+                    )
+                    return summary.choices[0].message.content
+                except Exception as e:
+                    print("Exception summarizing: ", e)
+                    return parts_str
+
+            return parts_str
 
     def classify_risk_for_command(self, cmd: str) -> str:
         if not cmd:
@@ -106,7 +121,7 @@ class DevAgent:
         return "LOW"
 
     def _condense_tool_event(
-        self, name: str, args: Dict[str, Any], result: Dict[str, Any]
+        self, name: str, args: dict[str, Any], result: dict[str, Any]
     ) -> None:
         if hasattr(self, "tracker") and self.tracker:
             self.tracker.record(name, args, result)
@@ -135,7 +150,7 @@ class DevAgent:
     def __init__(self, client, model: str):
         self.client = client
         self.model = model
-        self.tracker = self.TaskTracker()
+        self.tracker = self.TaskTracker(self.get_response)
         self.token_usage = {
             "prompt_tokens": 0,
             "completion_tokens": 0,
@@ -143,7 +158,7 @@ class DevAgent:
         }
 
     @staticmethod
-    def bootstrap_messages() -> List[Dict[str, Any]]:
+    def bootstrap_messages() -> list[dict[str, Any]]:
         return [
             {
                 "role": "system",
@@ -193,10 +208,9 @@ class DevAgent:
         return result
 
     @sync_to_async
-    def get_response(self, new_messages: List[Dict[str, Any]]) -> Any:
+    def get_response(self, new_messages: list[dict[str, Any]]) -> Any:
         resp = None
         delays = [0.5, 1.0, 2.0, 4.0, 8.0]
-        last_err = None
         for attempt, delay in enumerate(delays, start=1):
             try:
                 resp = self.client.chat.completions.create(
@@ -210,7 +224,6 @@ class DevAgent:
                 self._maybe_update_token_usage_from_response(resp)
                 return resp
             except Exception as e:
-                last_err = e
                 print(
                     f"[AGENTES] Error getting response: (Try {attempt}/{len(delays)}): {e}"
                 )
@@ -220,7 +233,7 @@ class DevAgent:
 
     async def run_tool_loop(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         container: "Container",
         max_rounds: int = 8,
     ):
@@ -238,12 +251,12 @@ class DevAgent:
             ),
         }
         # Initialize task tracker and encourage planning/batching
-        self.tracker = self.TaskTracker()
+        self.tracker = self.TaskTracker(self.get_response)
         new_messages.insert(
             1,
             {
                 "role": "assistant",
-                "content": "Before taking actions, briefly outline a 1–3 step plan, then proceed to call tools. Group shell commands when safe, keep edits minimal, and prefer targeted searches.",
+                "content": PROMPT_PLANNER.replace("{max_rounds}", str(max_rounds)),
             },
         )
 
@@ -352,7 +365,7 @@ class DevAgent:
             if finish_reason in ("stop", "length", None):
                 break
 
-        summary = self.tracker.summarize()
+        summary = await self.tracker.summarize(messages[-1]["content"])
         if summary:
             usage = self.token_usage
 
@@ -363,6 +376,8 @@ class DevAgent:
             print(
                 f"Token usage: prompt: {prompt}, completion: {completion}, total: {total}"
             )
+
+            print(f"Summary: {summary}")
 
             messages.insert(
                 -1,

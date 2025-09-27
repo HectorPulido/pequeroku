@@ -42,6 +42,10 @@ def list_dirs(container: VMRecord, paths: list[str], depth: int) -> list[ListDir
     return list(set(items))
 
 
+def list_dir(container: VMRecord, path: str) -> list[ListDirItem]:
+    return list_dirs(container, [path], 1)
+
+
 def read_file(container: VMRecord, path: str):
     sftp = open_sftp(container)
 

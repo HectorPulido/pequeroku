@@ -31,7 +31,7 @@ def read_workspace(
     subdir: str | None = None,
 ) -> dict[str, object]:
     start = time.monotonic()
-    path = f"/app/{subdir}".replace("//", "/").replace("/app/app/", "/app/")
+    path = f"/app/{subdir}".replace("//", "/").replace("/app/app", "/app")
     if subdir is None or len(subdir.strip()) == 0:
         path = "/app"
 
