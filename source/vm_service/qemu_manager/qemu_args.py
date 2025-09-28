@@ -3,6 +3,7 @@ import platform
 import glob
 import shutil
 import subprocess
+from typing import cast
 
 import settings
 
@@ -394,4 +395,75 @@ def vm_qemu_x86_args(
 
     if pidfile:
         args += ["-pidfile", pidfile]
+    return args
+
+
+def vm_qemu_microvm_args(
+    vcpus: int,
+    mem_mib: int,
+    console_log: str,
+    port: int,
+    overlay: str,
+    seed_iso: str,
+    pidfile: str | None,
+) -> list[str]:
+    """
+    Args for QEMU microvm (x86_64). Needs kvm and direct kernel.
+    """
+    if not os.path.exists("/dev/kvm"):
+        raise RuntimeError("microvm requiere KVM (/dev/kvm)")
+
+    qemu_bin = settings.VM_QEMU_BIN or "qemu-system-x86_64"
+    kernel = settings.VM_KERNEL
+    kappend = settings.VM_KERNEL_APPEND
+    initrd = settings.VM_INITRD
+
+    if not kernel or not os.path.exists(kernel):
+        raise FileNotFoundError("NO VM_KERNEL FOUND")
+
+    args: list[str] = []
+    args += [
+        qemu_bin,
+        "-M",
+        "microvm,accel=kvm",
+        "-cpu",
+        "host",
+        "-smp",
+        str(vcpus),
+        "-m",
+        str(mem_mib),
+        "-nodefaults",
+        "-no-user-config",
+        "-display",
+        "none",
+        "-serial",
+        f"file:{console_log}",
+        "-kernel",
+        kernel,
+        "-append",
+        kappend,
+        "-netdev",
+        f"user,id=n0,hostfwd=tcp:127.0.0.1:{port}-:22",
+        "-device",
+        "virtio-net-device,netdev=n0",
+        "-drive",
+        f"if=none,format=qcow2,file={overlay},id=vd0",
+        "-device",
+        "virtio-blk-device,drive=vd0",
+    ]
+
+    if initrd:
+        args += ["-initrd", initrd]
+
+    if seed_iso:
+        args += [
+            "-drive",
+            f"if=none,format=raw,readonly=on,file={seed_iso},id=cidata",
+            "-device",
+            "virtio-blk-device,drive=cidata",
+        ]
+
+    if pidfile:
+        args += ["-pidfile", pidfile]
+
     return args
