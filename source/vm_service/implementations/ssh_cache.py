@@ -1,7 +1,7 @@
 from typing import cast
 import paramiko
 import settings
-from qemu_manager.models import VMRecord
+from models import VMRecord
 
 cache_data: dict[
     str, dict[str, paramiko.SSHClient | paramiko.SFTPClient | paramiko.Channel | None]

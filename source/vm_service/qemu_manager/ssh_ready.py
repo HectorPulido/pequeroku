@@ -1,23 +1,23 @@
 import socket
 import time
-from typing import Callable, Optional
+from typing import Callable
 import paramiko
 import settings
-from .crypto import _load_pkey
+from .crypto import load_pkey
 
 
-def _wait_ssh(
+def wait_ssh(
     port: int,
     timeout: int,
     user: str,
-    is_vm_alive: Optional[Callable[[], bool]] = None,
+    is_vm_alive: Callable[[], bool] | None = None,
     vm_id: str | None = None,
 ) -> bool:
     """
     Wait until an SSH connection is possible to 127.0.0.1:<port>.
     Preserves the original retry/return semantics (including the attempt>100 early return).
     """
-    print("Start the _wait_ssh process...")
+    print("Start the wait_ssh process...")
     start = time.time()
 
     while time.time() - start < timeout:
@@ -26,7 +26,7 @@ def _wait_ssh(
             with socket.create_connection(("127.0.0.1", port), timeout=1.0):
                 pass
             # 2) SSH auth with supplied key
-            pkey = _load_pkey(settings.VM_SSH_PRIVKEY)
+            pkey = load_pkey(settings.VM_SSH_PRIVKEY)
             cli = paramiko.SSHClient()
             cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             cli.connect(
@@ -40,11 +40,11 @@ def _wait_ssh(
                 look_for_keys=False,
             )
 
-            if cli is not None and vm_id is not None:
+            if vm_id is not None:
                 try:
                     from implementations.ssh_cache import cache_data
 
-                    cli.exec_command("echo hello")
+                    _ = cli.exec_command("echo hello")
                     sftp = cli.open_sftp()
                     cache_data[vm_id] = {"cli": cli, "sftp": sftp}
                 except Exception:

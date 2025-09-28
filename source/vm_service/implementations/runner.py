@@ -7,9 +7,14 @@ import time
 
 import settings
 
-from qemu_manager.vm import _start_vm
-from qemu_manager.ssh_ready import _wait_ssh
-from qemu_manager.models import VMState, VMRecord
+from qemu_manager.vm import start_vm
+from qemu_manager.ssh_ready import wait_ssh
+from models import VMState, VMRecord
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from implementations import RedisStore
 
 
 class Runner:
@@ -30,13 +35,13 @@ class Runner:
         def _run():
             try:
                 vm_ssh_user = settings.VM_SSH_USER
-                proc = _start_vm(vm.workdir, vm.vcpus, vm.mem_mib, vm.disk_gib, vm.id)
+                proc = start_vm(vm.workdir, vm.vcpus, vm.mem_mib, vm.disk_gib, vm.id)
                 vm.proc = proc
                 vm.ssh_port = proc.port_ssh
                 vm.ssh_user = vm_ssh_user
 
                 try:
-                    _wait_ssh(
+                    wait_ssh(
                         port=proc.port_ssh,
                         timeout=settings.VM_TIMEOUT_BOOT_S,
                         user=vm_ssh_user,

@@ -1,22 +1,21 @@
 import asyncio
 import threading
 import time
-from typing import Optional
 
 from fastapi import WebSocket
 import paramiko
 
-from qemu_manager.models import VMRecord
-from .ssh_cache import cache_ssh_and_sftp, generate_console
+from models import VMRecord
+from .ssh_cache import generate_console
 
 
 class TTYBridge:
     def __init__(self, ws: WebSocket, vm: VMRecord) -> None:
-        self.ws = ws
-        self.vm = vm
-        self.cli: Optional[paramiko.SSHClient] = None
-        self.chan: Optional[paramiko.Channel] = None
-        self._alive = False
+        self.ws: WebSocket = ws
+        self.vm: VMRecord = vm
+        self.cli: paramiko.SSHClient | None = None
+        self.chan: paramiko.Channel | None = None
+        self._alive: bool = False
 
     def start(self) -> None:
         def _run():

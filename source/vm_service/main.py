@@ -9,7 +9,7 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 import settings
-from qemu_manager.models import (
+from models import (
     VMState,
     VMRecord,
 )

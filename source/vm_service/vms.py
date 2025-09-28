@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, Response
 from implementations.read_from_vm import list_dirs
 import settings
 
-from qemu_manager.models import (
+from models import (
     VMState,
     VMCreate,
     VMOut,

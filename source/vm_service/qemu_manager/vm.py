@@ -5,21 +5,23 @@ import errno
 
 import settings
 
-from .models import VMProc
-from .seed import _make_overlay, _make_seed_iso
-from .ports import _pick_free_port
-from .qemu_args import _vm_qemu_arm64_args, _vm_qemu_x86_args
-from .ssh_ready import _wait_ssh
+from models import VMProc
+from .seed import make_overlay, make_seed_iso
+from .ports import pick_free_port
+from .qemu_args import vm_qemu_arm64_args, vm_qemu_x86_args
+from .ssh_ready import wait_ssh
 
 
-def _as_int(x, default=None):
+def _as_int(x: str | None, default: int | None = None) -> int | None:
     try:
         return int(x) if x is not None else default
     except Exception:
         return default
 
 
-def _ensure_owner_and_perms(path: str, uid: int, gid: int, dmode=0o775, fmode=0o664):
+def _ensure_owner_and_perms(
+    path: str, uid: int, gid: int, dmode: int = 0o775, fmode: int = 0o664
+):
     if not path:
         return
 
@@ -70,7 +72,7 @@ def _ensure_paths_for_vm(run_uid: int, run_gid: int, workdir: str, files: list[s
                     pass
                 os.chmod(p, 0o664)
     finally:
-        os.umask(old_umask)
+        _ = os.umask(old_umask)
 
 
 def _drop_privs():
@@ -79,7 +81,7 @@ def _drop_privs():
     os.setsid()
     run_uid = int(getattr(settings, "VM_RUN_AS_UID", 0) or 0)
     run_gid = int(getattr(settings, "VM_RUN_AS_GID", 0) or 0)
-    os.umask(0o002)
+    _ = os.umask(0o002)
     if run_gid:
         os.setgid(run_gid)
 
@@ -134,7 +136,7 @@ def _clear_stale_pidfile(pidfile: str) -> None:
         print("Error clearing stale pidfile", e)
 
 
-def _start_vm(
+def start_vm(
     workdir: str, vcpus: int, mem_mib: int, disk_gib: int, vm_id: str | None = None
 ) -> VMProc:
     """
@@ -155,8 +157,8 @@ def _start_vm(
     vm_ssh_privkey: str = settings.VM_SSH_PRIVKEY or ""
     vm_timeout_boot_s: int = int(settings.VM_TIMEOUT_BOOT_S or "100")
 
-    _make_overlay(vm_base_image, overlay, disk_gib=disk_gib)
-    _make_seed_iso(
+    make_overlay(vm_base_image, overlay, disk_gib=disk_gib)
+    make_seed_iso(
         seed_iso,
         vm_ssh_user,
         vm_ssh_privkey + ".pub",
@@ -171,11 +173,11 @@ def _start_vm(
             run_uid, run_gid, workdir, files=[overlay, seed_iso, console_log]
         )
 
-    port = _pick_free_port()
+    port = pick_free_port()
 
     if platform.machine() in ("aarch64", "arm64"):
         print("Using arm64...")
-        args = _vm_qemu_arm64_args(
+        args = vm_qemu_arm64_args(
             vcpus=vcpus,
             mem_mib=mem_mib,
             console_log=console_log,
@@ -186,7 +188,7 @@ def _start_vm(
         )
     else:
         print("Using x86...")
-        args = _vm_qemu_x86_args(
+        args = vm_qemu_x86_args(
             vcpus=vcpus,
             mem_mib=mem_mib,
             console_log=console_log,
@@ -205,7 +207,7 @@ def _start_vm(
     print("Process executed", proc)
 
     try:
-        ok = _wait_ssh(
+        ok = wait_ssh(
             port=port,
             timeout=vm_timeout_boot_s,
             user=vm_ssh_user,

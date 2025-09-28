@@ -3,13 +3,11 @@ import platform
 import glob
 import shutil
 import subprocess
-from typing import List, Optional
-
 
 import settings
 
 
-def _first_existing(paths) -> Optional[str]:
+def _first_existing(paths: list[str]) -> str | None:
     """Return the first path that exists from a list of candidates."""
     for p in paths:
         if p and os.path.exists(p):
@@ -17,7 +15,7 @@ def _first_existing(paths) -> Optional[str]:
     return None
 
 
-def _qemu_datadir(qemu_bin: str) -> Optional[str]:
+def _qemu_datadir(qemu_bin: str) -> str | None:
     """
     Try to infer QEMU's datadir (where firmware files usually live).
     Heuristic: parse `qemu-system-aarch64 -help` or `-version` for paths containing 'share/qemu'.
@@ -66,7 +64,7 @@ def _resolve_qemu_bin_arm64() -> str:
     return "qemu-system-aarch64"
 
 
-def _find_uefi_firmware_arm64() -> str:
+def _find_uefi_firmware_arm64() -> str | None:
     """
     Locate UEFI firmware for QEMU ARM64.
 
@@ -76,7 +74,7 @@ def _find_uefi_firmware_arm64() -> str:
       3. Paths discovered from QEMU's datadir
     """
     # 1) explicit override
-    override = getattr(settings, "VM_UEFI_ARM64", None)
+    override: str | None = getattr(settings, "VM_UEFI_ARM64", None)
     if override and os.path.exists(override):
         return override
 
@@ -124,17 +122,17 @@ def _find_uefi_firmware_arm64() -> str:
 
 
 def _no_kvm(
-    arm_64_bin,
-    vcpus,
-    mem_mib,
-    console_log,
-    uefi,
-    port,
-    overlay,
-    seed_iso,
-    pidfile: Optional[str],
+    arm_64_bin: str,
+    vcpus: int,
+    mem_mib: int,
+    console_log: str,
+    uefi: str,
+    port: int,
+    overlay: str,
+    seed_iso: str,
+    pidfile: str | None,
 ):
-    args = []
+    args: list[str] = []
     args += [
         arm_64_bin,
         "-accel",
@@ -174,17 +172,17 @@ def _no_kvm(
 
 
 def _kvm(
-    arm_64_bin,
-    vcpus,
-    mem_mib,
-    console_log,
-    uefi,
-    port,
-    overlay,
-    seed_iso,
-    pidfile: Optional[str],
+    arm_64_bin: str,
+    vcpus: int,
+    mem_mib: int,
+    console_log: str,
+    uefi: str,
+    port: int,
+    overlay: str,
+    seed_iso: str,
+    pidfile: str | None,
 ):
-    args = []
+    args: list[str] = []
     args += [
         "taskset",
         "-c",
@@ -231,18 +229,18 @@ def _kvm(
 
 
 def _hvf(
-    arm_64_bin,
-    vcpus,
-    mem_mib,
-    console_log,
-    uefi,
-    port,
-    overlay,
-    seed_iso,
-    pidfile: Optional[str],
+    arm_64_bin: str,
+    vcpus: int,
+    mem_mib: int,
+    console_log: str,
+    uefi: str,
+    port: int,
+    overlay: str,
+    seed_iso: str,
+    pidfile: str | None,
 ):
     # For mac
-    args = []
+    args: list[str] = []
     args += [
         arm_64_bin,
         "-accel",
@@ -281,15 +279,15 @@ def _hvf(
     return args
 
 
-def _vm_qemu_arm64_args(
+def vm_qemu_arm64_args(
     vcpus: int,
     mem_mib: int,
     console_log: str,
     port: int,
     overlay: str,
     seed_iso: str,
-    pidfile: Optional[str],
-) -> List[str]:
+    pidfile: str | None,
+) -> list[str]:
     """
     Build QEMU args for ARM64 hosts, preserving original accel branches and device layout.
     """
@@ -301,7 +299,7 @@ def _vm_qemu_arm64_args(
     if not bool(arm_64_bin):
         raise FileNotFoundError("Not valid QEMU bin for arm64")
 
-    args: list = []
+    args: list[str] = []
 
     use_kvm = os.path.exists("/dev/kvm") and platform.machine() in ("aarch64", "arm64")
     use_hvf = platform.system() == "Darwin"
@@ -353,19 +351,19 @@ def _vm_qemu_arm64_args(
     return args
 
 
-def _vm_qemu_x86_args(
+def vm_qemu_x86_args(
     vcpus: int,
     mem_mib: int,
     console_log: str,
     port: int,
     overlay: str,
     seed_iso: str,
-    pidfile: Optional[str],
-) -> List[str]:
+    pidfile: str | None,
+) -> list[str]:
     """
     Build QEMU args for x86 hosts; writes serial output to console_log.
     """
-    args: List[str] = [settings.VM_QEMU_BIN]
+    args: list[str] = [settings.VM_QEMU_BIN]
     if os.path.exists("/dev/kvm"):
         print("Using KVM")
         args += ["-enable-kvm", "-machine", "accel=kvm,type=q35", "-cpu", "host"]

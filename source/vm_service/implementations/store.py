@@ -2,7 +2,7 @@ import json
 import time
 import socket
 from redis.client import Redis
-from qemu_manager.models import VMState, VMRecord
+from models import VMState, VMRecord
 
 
 class RedisStore:

@@ -6,7 +6,7 @@ from security import verify_bearer_token
 from implementations import RedisStore, Runner
 import settings
 
-from qemu_manager.models import MachineMetrics
+from models import MachineMetrics
 
 
 router_metrics = APIRouter(

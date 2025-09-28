@@ -3,7 +3,7 @@ import shlex
 import mimetypes
 import paramiko
 
-from qemu_manager.models import VMRecord, ListDirItem, FileContent
+from models import VMRecord, ListDirItem, FileContent
 from .ssh_cache import open_ssh, open_sftp
 
 

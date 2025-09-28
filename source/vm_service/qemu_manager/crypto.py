@@ -4,7 +4,7 @@ import hashlib
 import paramiko
 
 
-def _spec_hash(user: str, pubkey_path: str) -> str:
+def spec_hash(user: str, pubkey_path: str) -> str:
     """Stable hash that captures the cloud-init spec identity.
 
     Matches the original behavior: the hash is over (user, pubkey contents).
@@ -15,7 +15,7 @@ def _spec_hash(user: str, pubkey_path: str) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
-def _load_pkey(path: str):
+def load_pkey(path: str):
     """Try common private key formats, raising if none match.
 
     Keep the order and exceptions identical to the original implementation.

@@ -4,10 +4,10 @@ import subprocess
 
 import settings
 
-from .crypto import _spec_hash
+from .crypto import spec_hash
 
 
-def _make_overlay(base_image: str, overlay: str, disk_gib: int) -> None:
+def make_overlay(base_image: str, overlay: str, disk_gib: int) -> None:
     """
     Create a qcow2 overlay disk if it doesn't already exist.
 
@@ -32,18 +32,15 @@ def _make_overlay(base_image: str, overlay: str, disk_gib: int) -> None:
     print(args)
 
     try:
-        subprocess.run(
+        _ = subprocess.run(
             args,
             check=True,
         )
     except subprocess.CalledProcessError as e:
-        print(f"Command failed with error: {e}")
-        print(f"Stderr: {e.stderr}")
+        print("Command failed with error:", e)
 
 
-def _make_seed_iso(
-    seed_iso: str, user: str, pubkey_path: str, instance_id: str
-) -> None:
+def make_seed_iso(seed_iso: str, user: str, pubkey_path: str, instance_id: str) -> None:
     """
     Create (or reuse) a cloud-init seed ISO with user+root SSH access and Docker setup.
 
@@ -54,7 +51,7 @@ def _make_seed_iso(
     """
     print("Creating the seed iso: ", seed_iso, user, pubkey_path, instance_id)
     spec_path = seed_iso + ".spec"
-    want = _spec_hash(user, pubkey_path)
+    want = spec_hash(user, pubkey_path)
 
     if os.path.exists(seed_iso) and os.path.exists(spec_path):
         if open(spec_path, encoding="utf-8").read().strip() == want:
@@ -106,7 +103,7 @@ local-hostname: {instance_id}
     geniso = shutil.which("genisoimage") or shutil.which("mkisofs")
     if cloud_localds:
         print("Using cloud localds")
-        subprocess.run([cloud_localds, seed_iso, ud, md], check=True)
+        _ = subprocess.run([cloud_localds, seed_iso, ud, md], check=True)
     else:
         print("Using geniso image")
         input_data = [

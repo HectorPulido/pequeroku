@@ -137,7 +137,7 @@ class ListDirItem(BaseModel):
     path_type: Literal["directory", "file"]
 
     def __hash__(self):
-        return hash((self.path, ))
+        return hash((self.path,))
 
 
 class ElementResponse(BaseModel):
