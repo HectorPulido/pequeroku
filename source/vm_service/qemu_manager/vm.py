@@ -8,7 +8,7 @@ import settings
 from models import VMProc
 from .seed import make_overlay, make_seed_iso
 from .ports import pick_free_port
-from .qemu_args import vm_qemu_arm64_args, vm_qemu_x86_args, vm_qemu_microvm_args
+from .qemu_args import vm_qemu_arm64_args, vm_qemu_x86_args
 from .ssh_ready import wait_ssh
 
 
@@ -187,28 +187,16 @@ def start_vm(
             pidfile=pidfile,
         )
     else:
-        if settings.VM_USE_MICRO_VM:
-            print("Using x86 microvm...")
-            args = vm_qemu_microvm_args(
-                vcpus=vcpus,
-                mem_mib=mem_mib,
-                console_log=console_log,
-                port=port,
-                overlay=overlay,
-                seed_iso=seed_iso,
-                pidfile=pidfile,
-            )
-        else:
-            print("Using x86...")
-            args = vm_qemu_x86_args(
-                vcpus=vcpus,
-                mem_mib=mem_mib,
-                console_log=console_log,
-                port=port,
-                overlay=overlay,
-                seed_iso=seed_iso,
-                pidfile=pidfile,
-            )
+        print("Using x86...")
+        args = vm_qemu_x86_args(
+            vcpus=vcpus,
+            mem_mib=mem_mib,
+            console_log=console_log,
+            port=port,
+            overlay=overlay,
+            seed_iso=seed_iso,
+            pidfile=pidfile,
+        )
 
     proc = subprocess.Popen(
         args,

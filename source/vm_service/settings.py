@@ -35,10 +35,3 @@ except Exception as e:
 
 VM_RUN_AS_UID = vm_run_as_uid
 VM_RUN_AS_GID = vm_run_as_gid
-
-
-# This will only work on x86
-VM_USE_MICRO_VM: bool = os.environ.get("VM_USE_MICRO_VM", "").lower() == "true"
-VM_KERNEL: str = os.environ.get("VM_KERNEL", "")
-VM_INITRD: str = os.environ.get("VM_INITRD", "")
-VM_KERNEL_APPEND: str = "console=ttyS0 root=/dev/vda rw"
