@@ -81,6 +81,9 @@ const searchPatternInput = $("#search-pattern");
 const btnSearch = $("#btn-search");
 const btnSearchClear = $("#btn-search-clear");
 const searchResultsEl = $("#search-results");
+const searchIncludeInput = $("#search-include");
+const searchExcludeInput = $("#search-exclude");
+const searchCaseCheckbox = $("#search-case");
 
 await setupHiddableDragabble(containerId, async (isMobile) => {
 	await mobileConfig(isMobile);
@@ -277,20 +280,21 @@ function renderSearchResults(items) {
 	const html = items
 		.map((it) => {
 			const path = String(it?.path || "");
-			const first =
-				(Array.isArray(it?.matchs) && it.matchs.length ? it.matchs[0] : "") ||
-				(Array.isArray(it?.matches) && it.matches.length ? it.matches[0] : "");
-			const m = String(first || "")
-				.trim()
-				.match(/^L(\d+):/);
-			const line = m ? Number(m[1]) : 1;
 			const rel = path.startsWith("/app/") ? path.slice(5) : path;
-			const preview = first
-				? String(first)
-						.replace(/^L\d+:/, "")
-						.trim()
-				: "";
-			return `<li data-path="${path}" data-line="${line}"><strong>${rel}</strong>${preview ? ` — ${preview}` : ""}</li>`;
+			const rawMatches =
+				(Array.isArray(it?.matchs) && it.matchs) ||
+				(Array.isArray(it?.matches) && it.matches) ||
+				[];
+			const inner = rawMatches
+				.map((m) => {
+					const mm = String(m || "").trim();
+					const r = mm.match(/^L(\d+):/);
+					const line = r ? Number(r[1]) : 1;
+					const preview = mm.replace(/^L\d+:/, "").trim();
+					return `<li class="match" data-path="${path}" data-line="${line}">L${line}: ${preview}</li>`;
+				})
+				.join("");
+			return `<li class="file"><strong>${rel}</strong><ul>${inner}</ul></li>`;
 		})
 		.join("");
 	searchResultsEl.innerHTML = html || "";
@@ -298,10 +302,21 @@ function renderSearchResults(items) {
 
 if (searchResultsEl) {
 	searchResultsEl.addEventListener("click", async (e) => {
-		const li = e.target.closest("li[data-path]");
-		if (!li) return;
-		const path = li.getAttribute("data-path");
-		const line = parseInt(li.getAttribute("data-line") || "1", 10);
+		// Support clicking individual matches and file rows (open at first match)
+		let path = null;
+		let line = 1;
+		const matchEl = e.target.closest("li.match");
+		if (matchEl) {
+			path = matchEl.getAttribute("data-path");
+			line = parseInt(matchEl.getAttribute("data-line") || "1", 10);
+		} else {
+			const fileEl = e.target.closest("li.file");
+			if (!fileEl) return;
+			const firstMatch = fileEl.querySelector("li.match");
+			if (!firstMatch) return;
+			path = firstMatch.getAttribute("data-path");
+			line = parseInt(firstMatch.getAttribute("data-line") || "1", 10);
+		}
 		if (!path) return;
 		await openFileIntoEditor(apiReadFileWrapper, path, setPath);
 		try {
@@ -319,8 +334,17 @@ if (btnSearch) {
 	btnSearch.addEventListener("click", async () => {
 		const pattern = (searchPatternInput?.value || "").trim();
 		if (!pattern) return;
+		const include_globs = (searchIncludeInput?.value || "").trim();
+		const exclude_dirs = (searchExcludeInput?.value || "").trim();
+		const caseVal = searchCaseCheckbox?.checked ? "true" : "false";
 		try {
-			const res = await fsws.call("search", { root: "/app", pattern });
+			const res = await fsws.call("search", {
+				root: "/app",
+				pattern,
+				case: caseVal,
+				include_globs,
+				exclude_dirs,
+			});
 			const items = normalizeSearchResults(res);
 			renderSearchResults(items);
 		} catch (err) {
@@ -341,6 +365,9 @@ if (searchPatternInput) {
 if (btnSearchClear) {
 	btnSearchClear.addEventListener("click", () => {
 		if (searchPatternInput) searchPatternInput.value = "";
+		if (searchIncludeInput) searchIncludeInput.value = "";
+		if (searchExcludeInput) searchExcludeInput.value = ".git,.venv";
+		if (searchCaseCheckbox) searchCaseCheckbox.checked = false;
 		if (searchResultsEl) searchResultsEl.innerHTML = "";
 	});
 }

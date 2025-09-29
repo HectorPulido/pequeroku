@@ -189,6 +189,9 @@ class EditorConsumer(
     async def _handle_search(self, content: dict[str, str], req_id: int) -> None:
         root = self._check_path(content["root"])
         pattern = content["pattern"]
+        case_sensitive = bool(content.get("case", "false") == "true")
+        include_globs = content.get("include_globs", "").split(",")
+        exclude_dirs = content.get("exclude_dirs", ".git,.venv").split(",")
         if not self.client:
             return
 
@@ -197,7 +200,9 @@ class EditorConsumer(
             SearchRequest(
                 pattern=pattern,
                 root=root,
-                case_insensitive=False,
+                case_insensitive=case_sensitive,
+                include_globs=include_globs,
+                exclude_dirs=exclude_dirs,
                 max_results_total=250,
                 timeout_seconds=5,
             ),

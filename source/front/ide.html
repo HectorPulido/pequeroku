@@ -78,9 +78,28 @@
                         <button id="btn-search" title="Search">
                             <i class="iconoir-search"></i>
                         </button>
+                        <label class="toggle-case" title="Case-sensitive">
+                            <input id="search-case" type="checkbox" />
+                            <i class="iconoir-text-size"></i>
+                        </label>
                         <button id="btn-search-clear" title="Clear results">
                             <i class="iconoir-xmark-circle"></i>
                         </button>
+                    </div>
+                    <div class="toolbar" id="search-advanced">
+                        <input
+                            id="search-include"
+                            type="text"
+                            placeholder="Include globs (comma separated)"
+                            autocomplete="off"
+                        />
+                        <input
+                            id="search-exclude"
+                            type="text"
+                            placeholder="Exclude dirs (comma separated)"
+                            value=".git,.venv"
+                            autocomplete="off"
+                        />
                     </div>
                     <ul id="search-results" class="search-results"></ul>
                 </div>
