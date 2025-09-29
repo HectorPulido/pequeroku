@@ -56,6 +56,9 @@
                     <button id="btn-download" title="Download folder">
                         <i class="iconoir-cloud-download"></i>
                     </button>
+                    <button id="toggle-search" title="Toggle search">
+                        <i class="iconoir-search"></i>
+                    </button>
                     <button
                         id="toggle-sidebar-2"
                         class="hidden-big"
@@ -63,6 +66,23 @@
                     >
                         <i class="iconoir-menu"></i>
                     </button>
+                </div>
+                <div id="search-box" class="search-box hidden">
+                    <div class="toolbar" id="search-toolbar">
+                        <input
+                            id="search-pattern"
+                            type="text"
+                            placeholder="Search in files..."
+                            autocomplete="off"
+                        />
+                        <button id="btn-search" title="Search">
+                            <i class="iconoir-search"></i>
+                        </button>
+                        <button id="btn-search-clear" title="Clear results">
+                            <i class="iconoir-xmark-circle"></i>
+                        </button>
+                    </div>
+                    <ul id="search-results" class="search-results"></ul>
                 </div>
                 <ul id="file-tree"></ul>
             </div>

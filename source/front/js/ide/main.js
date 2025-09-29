@@ -15,6 +15,7 @@ import { setupConsole } from "./console.js";
 import {
 	changeTheme,
 	clearEditor,
+	getEditor,
 	getEditorValue,
 	loadMonaco,
 	mobileConfig,
@@ -74,6 +75,12 @@ const tplCleanEl = $("#tpl-clean");
 const btnCloneRepo = $("#btn-clone-repo");
 const btnCloseCloneRepo = $("#btn-github-close");
 const btnSubmitCloneRepo = $("#btn-github");
+const btnToggleSearch = $("#toggle-search");
+const searchBoxEl = $("#search-box");
+const searchPatternInput = $("#search-pattern");
+const btnSearch = $("#btn-search");
+const btnSearchClear = $("#btn-search-clear");
+const searchResultsEl = $("#search-results");
 
 await setupHiddableDragabble(containerId, async (isMobile) => {
 	await mobileConfig(isMobile);
@@ -254,6 +261,94 @@ apiReadFileWrapper = async (url) => {
 	if (typeof data.rev === "number") fsws.revs.set(path, data.rev);
 	return { content: data.content ?? "" };
 };
+
+// === Search in files (WS 'search') ===
+function normalizeSearchResults(res) {
+	if (Array.isArray(res)) return res;
+	if (Array.isArray(res?.results)) return res.results;
+	if (res && typeof res === "object") {
+		return Object.values(res).flat().filter(Boolean);
+	}
+	return [];
+}
+
+function renderSearchResults(items) {
+	if (!searchResultsEl) return;
+	const html = items
+		.map((it) => {
+			const path = String(it?.path || "");
+			const first =
+				(Array.isArray(it?.matchs) && it.matchs.length ? it.matchs[0] : "") ||
+				(Array.isArray(it?.matches) && it.matches.length ? it.matches[0] : "");
+			const m = String(first || "")
+				.trim()
+				.match(/^L(\d+):/);
+			const line = m ? Number(m[1]) : 1;
+			const rel = path.startsWith("/app/") ? path.slice(5) : path;
+			const preview = first
+				? String(first)
+						.replace(/^L\d+:/, "")
+						.trim()
+				: "";
+			return `<li data-path="${path}" data-line="${line}"><strong>${rel}</strong>${preview ? ` — ${preview}` : ""}</li>`;
+		})
+		.join("");
+	searchResultsEl.innerHTML = html || "";
+}
+
+if (searchResultsEl) {
+	searchResultsEl.addEventListener("click", async (e) => {
+		const li = e.target.closest("li[data-path]");
+		if (!li) return;
+		const path = li.getAttribute("data-path");
+		const line = parseInt(li.getAttribute("data-line") || "1", 10);
+		if (!path) return;
+		await openFileIntoEditor(apiReadFileWrapper, path, setPath);
+		try {
+			const ed = getEditor?.();
+			if (ed) {
+				ed.revealLineInCenter(line);
+				ed.setPosition({ lineNumber: line, column: 1 });
+				ed.focus();
+			}
+		} catch {}
+	});
+}
+
+if (btnSearch) {
+	btnSearch.addEventListener("click", async () => {
+		const pattern = (searchPatternInput?.value || "").trim();
+		if (!pattern) return;
+		try {
+			const res = await fsws.call("search", { root: "/app", pattern });
+			const items = normalizeSearchResults(res);
+			renderSearchResults(items);
+		} catch (err) {
+			notifyAlert(err.message || String(err), "error");
+		}
+	});
+}
+
+if (searchPatternInput) {
+	searchPatternInput.addEventListener("keydown", (e) => {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			btnSearch?.click();
+		}
+	});
+}
+
+if (btnSearchClear) {
+	btnSearchClear.addEventListener("click", () => {
+		if (searchPatternInput) searchPatternInput.value = "";
+		if (searchResultsEl) searchResultsEl.innerHTML = "";
+	});
+}
+if (btnToggleSearch && searchBoxEl) {
+	btnToggleSearch.addEventListener("click", () => {
+		searchBoxEl.classList.toggle("hidden");
+	});
+}
 
 function setPath(p) {
 	try {

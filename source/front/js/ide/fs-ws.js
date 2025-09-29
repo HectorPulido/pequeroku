@@ -95,8 +95,30 @@ export function createFSWS({ containerPk, onBroadcast, onOpen }) {
 		});
 	}
 
+	// Search files in container via WS
+	async function search({ pattern, root = "/app" }) {
+		const res = await call("search", { root, pattern });
+		let list = [];
+		if (Array.isArray(res)) {
+			list = res;
+		} else if (Array.isArray(res?.results)) {
+			list = res.results;
+		} else if (res && typeof res === "object") {
+			list = Object.values(res).flat().filter(Boolean);
+		}
+		return list.map((item) => {
+			const path = String(item?.path || item?.file || "");
+			const matches =
+				(Array.isArray(item?.matchs) && item.matchs) ||
+				(Array.isArray(item?.matches) && item.matches) ||
+				[];
+			return { path, matches };
+		});
+	}
+
 	return {
 		call,
 		revs,
+		search,
 	};
 }
