@@ -9,6 +9,7 @@ import {
 	applyTheme,
 	getCurrentTheme,
 	setupThemeToggle,
+	toggleTheme,
 } from "../core/themes.js";
 import { hideHeader, sleep } from "../core/utils.js";
 import { setupConsole } from "./console.js";
@@ -25,6 +26,7 @@ import { setupFileTree } from "./files.js";
 import { createFSWS } from "./fs-ws.js";
 import { setupHiddableDragabble } from "./hiddableDraggable.js";
 import { loadRunConfig } from "./runConfig.js";
+import { createSlashCommandHandler } from "./slashCommands.js";
 import { setupUploads } from "./uploads.js";
 import { createWS } from "./websockets.js";
 
@@ -84,6 +86,7 @@ const searchResultsEl = $("#search-results");
 const searchIncludeInput = $("#search-include");
 const searchExcludeInput = $("#search-exclude");
 const searchCaseCheckbox = $("#search-case");
+const btnOpenAiModal = $("#btn-open-ai-modal");
 
 await setupHiddableDragabble(containerId, async (isMobile) => {
 	await mobileConfig(isMobile);
@@ -96,6 +99,7 @@ let consoleApi = null;
 
 let runCommand = null;
 let ws = null;
+let slash = null;
 
 function updateTabs() {
 	const el = consoleTabsEl;
@@ -490,8 +494,13 @@ function connectWs() {
 		inputEl: consoleCMD,
 		ctrlButtons: $$(".btn-send"),
 		onSend: (data) => {
-			if (!ws) return;
 			const active = consoleApi.getActive?.() || null;
+
+			// Slash commands: handled locally, do not send to backend
+			const raw = String(data || "").trim();
+			if (slash?.handle(raw)) return;
+
+			if (!ws) return;
 			if (data === "clear") {
 				consoleApi.clear(active);
 				return;
@@ -501,6 +510,27 @@ function connectWs() {
 			const payload = active ? { sid: active, data } : { data };
 			ws.send(payload);
 		},
+	});
+	slash = createSlashCommandHandler({
+		addLine: (text, sid) => consoleApi.addLine?.(text, sid),
+		getActiveSid: () => consoleApi.getActive?.() || null,
+		clear: (sid) => consoleApi.clear?.(sid),
+		openAi: () => btnOpenAiModal?.click(),
+		openGithub: () => btnCloneRepo?.click(),
+		toggleTheme: () => {
+			try {
+				toggleTheme();
+			} catch {
+				themeToggleBtn?.click();
+			}
+		},
+		listSessions: () => consoleApi.listSessions?.() || [],
+		openSession: (sid) => ws?.send?.({ control: "open", sid }),
+		closeSession: (sid) => ws?.send?.({ control: "close", sid }),
+		focusSession: (sid) => ws?.send?.({ control: "focus", sid }),
+		run: () => runCodeBtn?.click?.(),
+		openFile: (path) => openFileIntoEditor(apiReadFileWrapper, path, setPath),
+		saveFile: () => saveCurrentFile?.(),
 	});
 	// Hook to sync tabs with console sessions lifecycle
 	const __open = consoleApi.openSession?.bind(consoleApi);

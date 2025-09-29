@@ -112,8 +112,16 @@ export function setupConsole({
 		if (text == null) return;
 		const s = sid ? sessions.get(sid) : null;
 		if (!s) return;
-		let t = String(text).replace(/\r(?!\n)/g, "\n");
-		if (!/\n$/.test(t)) t += "\n";
+		let t = String(text);
+		// Normalize all newlines to CRLF
+		t = t.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, "\r\n");
+		// Prepend CRLF only if not at column 0 (avoid double-leading breaks)
+		let atCol0 = false;
+		try {
+			atCol0 = s.term.buffer?.active?.cursorX === 0;
+		} catch {}
+		if (!atCol0) t = `\r\n${t}`;
+		if (!/\r\n$/.test(t)) t += "\r\n";
 		s.term.write(t);
 	}
 
@@ -149,6 +157,18 @@ export function setupConsole({
 
 	// Initialize with a default session
 	openSession("s1", true);
+
+	// Fit xterm when the layout changes or a terminal-resize event is dispatched
+	window.addEventListener("resize", () => {
+		try {
+			fit();
+		} catch {}
+	});
+	window.addEventListener("terminal-resize", () => {
+		try {
+			fit();
+		} catch {}
+	});
 
 	if (sendBtn && inputEl) {
 		sendBtn.addEventListener("click", () => {

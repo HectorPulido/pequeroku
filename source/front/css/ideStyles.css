@@ -197,7 +197,8 @@ wc-monaco-editor#editor {
 	overflow-y: auto;
 	font-family: monospace;
 	white-space: pre-wrap;
-	height: 30rem;
+	flex: 1 1 auto;
+	min-height: 0;
 	min-width: 0;
 }
 
@@ -390,7 +391,7 @@ body {
 	background: var(--border-strong);
 }
 #console-area {
-	height: 260px;
+	height: auto;
 }
 
 #editor {
