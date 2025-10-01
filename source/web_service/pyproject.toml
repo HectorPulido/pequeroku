@@ -22,8 +22,7 @@ uvicorn = "^0.35.0"
 redis = "^6.4.0"
 channels-redis = "^4.3.0"
 ddgs = "^9.6.0"
-newspaper3k = "^0.2.8"
-lxml-html-clean = "^0.4.2"
+bs4 = "^0.0.2"
 
 [tool.pyrefly]
 project-includes = ["**/*"]
@@ -53,7 +52,7 @@ branch = true
 source = ["vm_manager", "ai_services", "internal_config", "pequeroku"]
 
 [tool.coverage.report]
-fail_under = 60
+fail_under = 65
 show_missing = true
 skip_covered = true
 exclude_lines = [

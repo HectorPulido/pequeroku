@@ -2,7 +2,7 @@ import pytest
 from asgiref.sync import async_to_sync
 
 # We import the module as packaged in this codebase
-import web_service.pequeroku.redis as redis_mod
+import pequeroku.redis as redis_mod
 
 
 class FakeRedisAsyncClient:

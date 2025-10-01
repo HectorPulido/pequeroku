@@ -5,7 +5,7 @@ from django.core.management import call_command
 
 from internal_config.models import AuditLog
 from vm_manager.management.commands.reconcile_containers import Reconciler
-from web_service.vm_manager.test_utils import (
+from vm_manager.test_utils import (
     create_user,
     create_node,
     create_container,

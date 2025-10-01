@@ -11,25 +11,20 @@ from vm_manager.vm_client import (
 )
 from internal_config.audit import audit_agent_tool
 
-
-class DedupPolicy:
-    def __init__(self):
-        self.logs: dict[str, dict[str, object]] = {}
+from ai_services.agents import DedupPolicy, ToolResult
+from asgiref.sync import sync_to_async
 
 
 def _get_service(obj: Container) -> VMServiceClient:
     return VMServiceClient(cast(Node, obj.node))
 
 
-class ToolError(Exception):
-    """Raised for user-facing tool errors (validation, not-found, etc.)."""
-
-
+@sync_to_async
 def read_workspace(
-    _: DedupPolicy | None,
+    dedup_policy: DedupPolicy | None,
     container: Container,
     subdir: str | None = None,
-) -> dict[str, object]:
+) -> ToolResult:
     start = time.monotonic()
     path = f"/app/{subdir}".replace("//", "/").replace("/app/app", "/app")
     if subdir is None or len(subdir.strip()) == 0:
@@ -51,12 +46,13 @@ def read_workspace(
     return {"path": path, "entries": resp, "finished": True}
 
 
+@sync_to_async
 def create_file(
-    dedup: DedupPolicy,
+    dedup_policy: DedupPolicy,
     container: Container,
     path: str,
     content: str,
-) -> dict[str, object]:
+) -> ToolResult:
     start = time.monotonic()
     subdir = f"/app/{path}".replace("//", "/").replace("/app/app/", "/app/")
     if len(path.strip()) == 0:
@@ -64,9 +60,9 @@ def create_file(
 
     container_id: str = cast(str, container.container_id)
 
-    if f"create_file_{subdir}" in dedup.logs:
+    if f"create_file_{subdir}" in dedup_policy.logs:
         print("Redup policy applied")
-        dedup.logs[f"create_file_{subdir}"]["dedup"] = True
+        dedup_policy.logs[f"create_file_{subdir}"]["dedup"] = True
         duration_ms = int((time.monotonic() - start) * 1000)
         audit_agent_tool(
             action="agent_tool.create_file",
@@ -76,7 +72,7 @@ def create_file(
             metadata={"path": subdir, "duration_ms": duration_ms},
             success=True,
         )
-        return dedup.logs[f"create_file_{subdir}"]
+        return dedup_policy.logs[f"create_file_{subdir}"]
 
     service = _get_service(container)
     resp = service.upload_files(
@@ -98,11 +94,12 @@ def create_file(
         success=True,
     )
 
-    dedup.logs[f"create_file_{subdir}"] = resp
+    dedup_policy.logs[f"create_file_{subdir}"] = resp
     return resp
 
 
-def read_file(_: DedupPolicy, container: Container, path: str) -> dict[str, object]:
+@sync_to_async
+def read_file(dedup_policy: DedupPolicy, container: Container, path: str) -> ToolResult:
     start = time.monotonic()
     subdir = f"/app/{path}".replace("//", "/").replace("/app/app/", "/app/")
     if len(path.strip()) == 0:
@@ -125,23 +122,162 @@ def read_file(_: DedupPolicy, container: Container, path: str) -> dict[str, obje
     return resp
 
 
+PROJECT_GENERATION_PROMPT = """
+Your task is to create a minimum viable product (MVP) application that achieves the following objectives:
+
+<objective>
+{objectives}
+</objective>
+
+Additionally:
+The target OS is Debian, so be careful with details like preferring "python3" instead of "python", for example.
+
+Instructions (process you must follow):
+
+1. Plan and structure your approach: Think carefully about how you will write the required code. Document and explain your reasoning.
+2. Write the code: Implement the solution as normal, and explain what you are doing.
+3. Review your code: Analyze potential issues and risks in your implementation. Document this review.
+4. Iterate if needed: If problems are found, go back to step 1 and refine your approach.
+5. Follow the steps in order: You must complete at least one full cycle of steps 1–4 before moving forward. Skipping directly to step 6 is not allowed.
+6. Finalize and export: Once you are confident the code works, finish with `---HERE-YAML--` and then immediately output the complete project in YAML format, structured like this:
+
+<example>
+...
+ports:
+    - "8080:8080"
+environment:
+    - PORT=8080
+
+---HERE-YAML--
+
+project: bottle-demo
+description: "Small web server with Bottle, HTML, Dockerfile, and Docker Compose"
+files:
+  - path: app/main.py
+    mode: "0644"
+    text: |-
+      import os
+      from bottle import Bottle, static_file, template
+
+      app = Bottle()
+
+      from bottle import TEMPLATE_PATH
+      TEMPLATE_PATH.insert(0, os.path.join(os.path.dirname(__file__), "..", "templates"))
+
+      STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
+
+      @app.route("/")
+      def index():
+          return template("index", name="Bottle Demo")
+
+      @app.route("/static/<filepath:path>")
+      def server_static(filepath):
+          return static_file(filepath, root=STATIC_DIR)
+
+      if __name__ == "__main__":
+          port = int(os.getenv("PORT", "8080"))
+          app.run(host="0.0.0.0", port=port, debug=True, reloader=False)
+
+  - path: templates/index.tpl
+    mode: "0644"
+    text: |-
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>{{name}}</title>
+        </head>
+        <body>
+          <main>
+            <h1>{{name}}</h1>
+            <p>Hello from Bottle running in Docker! 🚀</p>
+            <p>Server time: {{!import time; time.strftime('%Y-%m-%d %H:%M:%S')}}</p>
+            <p><a href="https://bottlepy.org/docs/dev/">Bottle Docs</a></p>
+          </main>
+        </body>
+      </html>
+
+  - path: requirements.txt
+    mode: "0644"
+    text: |-
+      bottle
+
+  - path: Dockerfile
+    mode: "0644"
+    text: |-
+      FROM python:3.12-slim
+
+      ENV PYTHONDONTWRITEBYTECODE=1 \
+          PYTHONUNBUFFERED=1
+
+      WORKDIR /app
+
+      RUN apt-get update && apt-get install -y --no-install-recommends \
+          ca-certificates \
+          && rm -rf /var/lib/apt/lists/*
+
+      COPY requirements.txt ./requirements.txt
+      RUN pip install --no-cache-dir -r requirements.txt
+
+      # Copy the rest of the project
+      COPY . .
+
+      EXPOSE 8080
+
+      CMD ["python", "app/main.py"]
+
+  - path: docker-compose.yml
+    mode: "0644"
+    text: |-
+      services:
+        web:
+          build: .
+          container_name: bottle-demo
+          ports:
+            - "8080:8080"
+          environment:
+            - PORT=8080
+
+  - path: readme.txt
+    mode: "0644"
+    text: |-
+      This is a simple project that uses Bottle and is containerized.
+
+  - path: config.json
+    mode: "0644"
+    text: |-
+      {"run": "docker compose down ; docker compose up -d --build"}
+</example>
+
+Additional notes:
+
+* Notice that the files `readme.txt` and `config.json` must always be included, especially `config.json`, which should contain the `"run"` field with the command needed to run the project.
+* The project does not need to be dockerized unless the objective explicitly requires it.
+* After the `---HERE-YAML--` separator, do not write anything except the YAML file.
+* The YAML must be valid and clean; do not include Markdown formatting (no bold/italics) or code fences (```) either.
+* Do not include titles or anything other than YAML after the ---HERE-YAML-- line.
+* If you want to explain something or add comments, place them in `readme.txt` or before the `---HERE-YAML--`, never after.
+"""
+
+
+@sync_to_async
 def create_full_project(
-    dedup: DedupPolicy, container: Container, full_description: str
-) -> dict[str, object]:
+    dedup_policy: DedupPolicy, container: Container, full_description: str
+) -> ToolResult:
     import os
     from django.conf import settings
     from internal_config.models import Config
 
-    from .schemas import PROJECT_GENERATION_PROMPT
     from ..utils import get_openai_client
 
     start = time.monotonic()
 
     container_id: str = cast(str, container.container_id)
 
-    if "create_full_project" in dedup.logs:
+    if "create_full_project" in dedup_policy.logs:
         print("Redup policy applied")
-        dedup.logs["create_full_project"]["dedup"] = True
+        dedup_policy.logs["create_full_project"]["dedup"] = True
         duration_ms = int((time.monotonic() - start) * 1000)
         audit_agent_tool(
             action="agent_tool.create_full_project",
@@ -151,7 +287,7 @@ def create_full_project(
             metadata={"duration_ms": duration_ms},
             success=True,
         )
-        return dedup.logs["create_full_project"]
+        return dedup_policy.logs["create_full_project"]
 
     open_ai_data = Config.get_config_values(
         ["openai_api_key", "openai_api_url", "openai_model"]
@@ -214,7 +350,7 @@ def create_full_project(
     response["finished"] = True
     response["workspace"] = read_workspace(None, container)
 
-    dedup.logs["create_full_project"] = response
+    dedup_policy.logs["create_full_project"] = response
 
     duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
@@ -228,42 +364,11 @@ def create_full_project(
     return response
 
 
-def _classify_risk(command: str) -> str:
-    if not command:
-        return "LOW"
-    high_markers = [
-        "docker push",
-        "kubectl",
-        "helm ",
-        " rm -rf /",
-        "curl ",
-        "| sh",
-        "systemctl",
-        "iptables",
-        "shutdown",
-        "reboot",
-    ]
-    if any(m in command for m in high_markers):
-        return "HIGH"
-    medium_markers = [
-        "apt-get ",
-        "pip install",
-        "npm install",
-        "docker build",
-        "docker compose up",
-        "pytest",
-        "make ",
-    ]
-    if any(m in command for m in medium_markers):
-        return "MEDIUM"
-    return "LOW"
-
-
+@sync_to_async
 def exec_command(
-    _: DedupPolicy, container: Container, command: str
-) -> dict[str, object]:
+    dedup_policy: DedupPolicy, container: Container, command: str
+) -> ToolResult:
     start = time.monotonic()
-    risk_level = _classify_risk(command)
     service = _get_service(container)
 
     container_id: str = cast(str, container.container_id)
@@ -278,7 +383,6 @@ def exec_command(
         message="Exec command",
         metadata={
             "command": command,
-            "risk_level": risk_level,
             "duration_ms": duration_ms,
         },
         success=True,
@@ -286,9 +390,10 @@ def exec_command(
     return resp
 
 
+@sync_to_async
 def search(
-    _: DedupPolicy, container: Container, pattern: str, root: str
-) -> dict[str, object]:
+    dedup_policy: DedupPolicy, container: Container, pattern: str, root: str
+) -> ToolResult:
     start = time.monotonic()
     service = _get_service(container)
 
@@ -316,9 +421,10 @@ def search(
     return {"response": resp, "finished": True}
 
 
+@sync_to_async
 def search_on_internet(
-    _: DedupPolicy, container: Container, search_query: str
-) -> dict[str, object]:
+    dedup_policy: DedupPolicy, container: Container, search_query: str
+) -> ToolResult:
     start = time.monotonic()
     from ddgs import DDGS
 
@@ -337,29 +443,59 @@ def search_on_internet(
     return {"response": results, "finished": True}
 
 
+@sync_to_async
 def read_from_internet(
-    _: DedupPolicy, container: Container, url: str
-) -> dict[str, object]:
+    dedup_policy: DedupPolicy, container: Container, url: str
+) -> ToolResult:
     start = time.monotonic()
-    from newspaper import Article
+
+    import requests
+    from bs4 import BeautifulSoup
 
     container_id: str = cast(str, container.container_id)
 
-    ok: bool = True
-    title: str | None = None
-    text: str = ""
-    error: str | None = None
+    DEFAULT_UA = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+    headers = {"User-Agent": DEFAULT_UA}
+
+    error = None
+    resp = None
+    cleaned = ""
+    text = ""
+
     try:
-        article = Article(url)
-        article.download()
-        article.parse()
-        title = cast(str, article.title or "")
-        text = cast(str, article.text or "")
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
     except Exception as e:
-        ok = False
-        error = f"{e.__class__.__name__}: {e}"
-        title = title or ""
-        text = text or ""
+        error = str(e)
+
+    if not error and resp:
+        soup = BeautifulSoup(resp.text, "html.parser")
+        # Remove script/style elements
+        for element in soup(["script", "style", "noscript"]):
+            element.decompose()
+        # Get text
+        text = soup.get_text(separator="\n")
+        # Collapse whitespace lines
+        lines = [line.strip() for line in text.splitlines()]
+        cleaned = "\n".join([ln for ln in lines if ln])
+
+    # Truncate very long content to avoid overwhelming the caller
+    max_len = 8000
+
+    if len(cleaned) > max_len:
+        cleaned = cleaned[:max_len]
+
+    result: dict[str, bool | str | None] = {
+        "finished": True,
+        "text": cleaned,
+    }
+    if error is not None:
+        result["error"] = error
+
     duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
         target_type="container",
@@ -367,23 +503,11 @@ def read_from_internet(
         action="agent_tool.read_from_internet",
         message="Read from internet",
         metadata=(
-            {"url": url, "title": title, "error": error, "duration_ms": duration_ms}
-            if not ok
-            else {"url": url, "title": title, "duration_ms": duration_ms}
+            {"url": url, "error": error, "duration_ms": duration_ms}
+            if not error
+            else {"url": url, "duration_ms": duration_ms}
         ),
-        success=ok,
+        success=error is None,
     )
 
-    # Truncate very long content to avoid overwhelming the caller
-    max_len = 8000
-    if len(text) > max_len:
-        text = text[:max_len]
-
-    result: dict[str, bool | str | None] = {
-        "finished": True,
-        "text": text,
-        "title": title,
-    }
-    if not ok:
-        result["error"] = error
     return cast(dict[str, object], result)

@@ -18,6 +18,14 @@ class AIUsageLog(models.Model):
     response = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
+    model_used = models.TextField(blank=True, default="")
+    prompt_tokens = models.PositiveIntegerField(
+        default=0, help_text="Total input token used"
+    )
+    completion_tokens = models.PositiveIntegerField(
+        default=0, help_text="Total output token used"
+    )
+
     class Meta:
         indexes = [
             models.Index(fields=["user", "created_at"]),
