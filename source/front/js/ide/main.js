@@ -176,6 +176,12 @@ if (fileTabsEl) {
 			const prevActive = ideStore.get().files?.active || null;
 			const files = ideStore.get().files?.open || [];
 			const idx = Math.max(0, files.indexOf(path));
+			try {
+				if (dirtyPaths.has(path)) {
+					const mod = await import("./editor.js");
+					mod.discardPathModel?.(path);
+				}
+			} catch {}
 			ideStore.actions.files.close(path);
 			if (prevActive === path) {
 				const remaining = ideStore.get().files?.open || [];
@@ -795,15 +801,6 @@ function connectWs() {
 			fsws.revs.set(activePath, nextRev);
 			notifyAlert(`File ${activePath} saved`, "success");
 			if (activePath === "/app/config.json") await hydrateRun();
-			try {
-				const m = getEditor()?.getModel?.();
-				if (m) m._prk_lastSaved = m.getValue?.() ?? "";
-				window.dispatchEvent(
-					new CustomEvent("editor-dirty-changed", {
-						detail: { path: activePath, dirty: false },
-					}),
-				);
-			} catch {}
 			try {
 				const m = getEditor()?.getModel?.();
 				if (m) m._prk_lastSaved = m.getValue?.() ?? "";

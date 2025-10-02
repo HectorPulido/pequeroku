@@ -5,6 +5,7 @@ const THEME_LIGHT = "crema";
 const THEME_DARK = "monokai";
 
 const __modelsByPath = new Map();
+let __scratchModel = null;
 
 export function loadMonaco(theme) {
 	require.config({
@@ -120,8 +121,17 @@ export async function mobileConfig(isMobile) {
 }
 
 export function clearEditor() {
-	const model = getEditor().getModel();
-	model.setValue("");
+	const ed = getEditor();
+	try {
+		if (!__scratchModel) {
+			__scratchModel = monaco.editor.createModel("", "plaintext");
+		}
+		ed.setModel(__scratchModel);
+	} catch {
+		try {
+			ed.getModel()?.setValue?.("");
+		} catch {}
+	}
 }
 
 export function getEditorValue() {
@@ -147,9 +157,7 @@ export async function openFile(api, path, setPathLabel) {
 		const emit = (p, dirty) => {
 			try {
 				window.dispatchEvent(
-					new CustomEvent("editor-dirty-changed", {
-						detail: { path: p, dirty },
-					}),
+					new CustomEvent("editor-dirty-changed", { detail: { path: p, dirty } }),
 				);
 			} catch {}
 		};
@@ -159,21 +167,25 @@ export async function openFile(api, path, setPathLabel) {
 			try {
 				monaco.editor.setModelLanguage(model, lang);
 			} catch {}
+			// If model is NOT dirty, refresh from backend before showing
+			const isDirty = (model.getValue?.() ?? "") !== (model._prk_lastSaved ?? "");
+			if (!isDirty) {
+				const { content } = await api(`/read_file/?path=${encodeURIComponent(path)}`);
+				try {
+					model.setValue(content);
+				} catch {}
+				model._prk_lastSaved = content;
+				model._prk_dirty = false;
+				emit(model.uri?.path || path, false);
+			} else {
+				emit(model.uri?.path || path, true);
+			}
 			getEditor().setModel(model);
-			// Emit current dirty state when focusing an existing model
-			const uriPath = model.uri?.path || path;
-			const curDirty =
-				(model.getValue?.() ?? "") !==
-				(model._prk_lastSaved ?? model.getValue?.());
-			model._prk_dirty = !!curDirty;
-			emit(uriPath, !!curDirty);
 			setPathLabel(path);
 			return;
 		}
 
-		const { content } = await api(
-			`/read_file/?path=${encodeURIComponent(path)}`,
-		);
+		const { content } = await api(`/read_file/?path=${encodeURIComponent(path)}`);
 		const uri = monaco.Uri.parse(`file://${path}`);
 		model = monaco.editor.createModel(content, lang, uri);
 
@@ -257,4 +269,33 @@ export function getActivePath() {
 	} catch {
 		return null;
 	}
+}
+
+export function discardPathModel(path) {
+	try {
+		const model = __modelsByPath.get(path);
+		if (!model) return;
+		// If active, detach from editor first
+		const ed = getEditor?.();
+		if (ed && ed.getModel && ed.getModel() === model) {
+			if (!__scratchModel) {
+				__scratchModel = monaco.editor.createModel("", "plaintext");
+			}
+			ed.setModel(__scratchModel);
+		}
+		// Dispose subscriptions and model
+		try {
+			model._prk_dispose?.();
+		} catch {}
+		try {
+			model.dispose?.();
+		} catch {}
+		__modelsByPath.delete(path);
+		// Notify UI that it's no longer dirty
+		try {
+			window.dispatchEvent(
+				new CustomEvent("editor-dirty-changed", { detail: { path, dirty: false } }),
+			);
+		} catch {}
+	} catch {}
 }
