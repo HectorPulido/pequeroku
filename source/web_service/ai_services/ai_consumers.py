@@ -91,7 +91,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
 
     async def send_history(self, memory: list[OpenAIChatMessage]):
         for i, msg in enumerate(memory):
-            if i == 0:
+            if msg["role"] in ("function", "system"):
                 continue
 
             if msg["content"].startswith(

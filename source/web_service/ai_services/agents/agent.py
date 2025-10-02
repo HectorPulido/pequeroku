@@ -264,7 +264,7 @@ class Agent:
                 print(f"[AGENT] STOP_REASON: {finish_reason}")
                 break
 
-        if len(calls) == 0:
+        if len(calls) < 2:
             return messages, total_usage
 
         if summary_tools:
