@@ -123,18 +123,15 @@ OpenAIChatMessage = (
 class OpenAIMessage:
     @staticmethod
     @overload
-    def get_message(role: Literal["assistant"], content: str) -> AssistantMessage:
-        ...
+    def get_message(role: Literal["assistant"], content: str) -> AssistantMessage: ...
 
     @staticmethod
     @overload
-    def get_message(role: Literal["user"], content: str) -> UserMessage:
-        ...
+    def get_message(role: Literal["user"], content: str) -> UserMessage: ...
 
     @staticmethod
     @overload
-    def get_message(role: Literal["system"], content: str) -> SystemMessage:
-        ...
+    def get_message(role: Literal["system"], content: str) -> SystemMessage: ...
 
     @staticmethod
     def get_message(

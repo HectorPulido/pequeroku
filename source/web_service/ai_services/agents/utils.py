@@ -61,7 +61,6 @@ def retry_on_exception(
                             f"[RETRY] async {func.__name__} attempt {attempt}/"
                             f"{len(delays)} failed: {exc}"
                         )
-                        raise exc
                         if attempt == len(delays):
                             break
                         await asyncio.sleep(pause)
