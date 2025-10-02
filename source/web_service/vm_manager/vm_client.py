@@ -25,6 +25,27 @@ class SearchRequest:
     max_results_total: int | None = None
     timeout_seconds: int = 10
 
+    def apply_exclude_diff(self):
+        exclude_dirs = [
+            ".git",
+            ".venv",
+            "venv",
+            "node_modules",
+            "target",
+            "build",
+            "dist",
+            "__pycache__",
+            "Library",
+            ".gradle",
+            "Pods",
+            ".m2",
+            "DerivedData",
+        ] + self.exclude_dirs
+        exclude_dirs = list(set([item for item in exclude_dirs if item.strip()]))
+
+        self.exclude_dirs = exclude_dirs
+        return self
+
 
 @dataclass
 class VMCreate:

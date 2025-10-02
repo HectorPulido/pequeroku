@@ -40,7 +40,6 @@ def retry_on_exception(
                         f"[RETRY] {func.__name__} attempt {attempt}/"
                         f"{len(delays)} failed: {exc}"
                     )
-                    raise exc
                     if attempt == len(delays):
                         break
                     time.sleep(pause)

@@ -87,22 +87,18 @@ def _now_iso() -> str:
 
 
 class Agent:
-    PROMPT_SUMMARY: str = (
-        """
+    PROMPT_SUMMARY: str = """
     Your task is to summarize all this information in a very objective way,
     always tailored to the query, do not invent anything and do not dare to lie.
     Respond on this format
     Query: <the user query>
     Summary: <the summary tailored to the query>
     """.strip()
-    )
 
-    PROMPT_PLANNER: str = (
-        """
+    PROMPT_PLANNER: str = """
     Before taking actions, briefly outline a 1–{max_rounds} step plan, then proceed to call tools.
     Group multiple calls if possible, ask for permission if something is not safe, and keep edits and change minimal.
     """.strip()
-    )
 
     def _set_first_message(self, messages: list[OpenAIChatMessage], prompt: str):
         new_messages = messages.copy()

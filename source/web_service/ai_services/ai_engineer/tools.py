@@ -407,7 +407,7 @@ def search(
             case_insensitive=False,
             max_results_total=250,
             timeout_seconds=5,
-        ),
+        ).apply_exclude_diff(),
     )
     duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
