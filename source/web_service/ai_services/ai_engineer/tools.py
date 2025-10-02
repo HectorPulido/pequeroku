@@ -430,6 +430,21 @@ def search_on_internet(
 
     container_id: str = cast(str, container.container_id)
 
+    key = f"search_on_internet_{search_query}"
+    if key in dedup_policy.logs:
+        print("Redup policy applied")
+        dedup_policy.logs[key]["dedup"] = True
+        duration_ms = int((time.monotonic() - start) * 1000)
+        audit_agent_tool(
+            target_type="container",
+            target_id=container_id,
+            action="agent_tool.search_on_internet",
+            message="Web search (dedup hit)",
+            metadata={"query": search_query, "duration_ms": duration_ms},
+            success=True,
+        )
+        return dedup_policy.logs[key]
+
     results = list(DDGS().text(search_query, max_results=5, timeout=5))
     duration_ms = int((time.monotonic() - start) * 1000)
     audit_agent_tool(
@@ -440,7 +455,9 @@ def search_on_internet(
         metadata={"query": search_query, "duration_ms": duration_ms},
         success=True,
     )
-    return {"response": results, "finished": True}
+    resp: dict[str, object] = {"response": results, "finished": True}
+    dedup_policy.logs[key] = resp
+    return resp
 
 
 @sync_to_async
@@ -453,6 +470,21 @@ def read_from_internet(
     from bs4 import BeautifulSoup
 
     container_id: str = cast(str, container.container_id)
+
+    key = f"read_from_internet_{url}"
+    if key in dedup_policy.logs:
+        print("Redup policy applied")
+        dedup_policy.logs[key]["dedup"] = True
+        duration_ms = int((time.monotonic() - start) * 1000)
+        audit_agent_tool(
+            target_type="container",
+            target_id=container_id,
+            action="agent_tool.read_from_internet",
+            message="Read from internet (dedup hit)",
+            metadata={"url": url, "duration_ms": duration_ms},
+            success=True,
+        )
+        return dedup_policy.logs[key]
 
     DEFAULT_UA = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -489,7 +521,7 @@ def read_from_internet(
     if len(cleaned) > max_len:
         cleaned = cleaned[:max_len]
 
-    result: dict[str, bool | str | None] = {
+    result: dict[str, object] = {
         "finished": True,
         "text": cleaned,
     }
@@ -510,4 +542,6 @@ def read_from_internet(
         success=error is None,
     )
 
-    return cast(dict[str, object], result)
+    dedup_policy.logs[key] = result
+
+    return result
