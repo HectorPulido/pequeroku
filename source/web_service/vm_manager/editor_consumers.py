@@ -191,7 +191,23 @@ class EditorConsumer(
         pattern = content["pattern"]
         case_sensitive = bool(content.get("case", "false") == "true")
         include_globs = content.get("include_globs", "").split(",")
-        exclude_dirs = content.get("exclude_dirs", ".git,.venv").split(",")
+        exclude_dirs = [
+            ".git",
+            ".venv",
+            "venv",
+            "node_modules",
+            "target",
+            "build",
+            "dist",
+            "__pycache__",
+            "Library",
+            ".gradle",
+            "Pods",
+            ".m2",
+            "DerivedData",
+        ] + content.get("exclude_dirs", "").split(",")
+        exclude_dirs = list(set([item for item in exclude_dirs if item.strip()]))
+
         if not self.client:
             return
 
@@ -204,7 +220,7 @@ class EditorConsumer(
                 include_globs=include_globs,
                 exclude_dirs=exclude_dirs,
                 max_results_total=250,
-                timeout_seconds=5,
+                timeout_seconds=10,
             ),
         )
         await self.send_json({"event": "ok", "req_id": req_id, "data": search})

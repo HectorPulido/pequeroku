@@ -52,15 +52,10 @@ export async function setupHiddableDragabble(containerId, callback) {
 			const w = Math.max(20, Math.min(600, startW + (ev.clientX - startX)));
 			editorModal.style.gridTemplateColumns = `${w}px 6px 1fr`;
 			try {
-				callback?.({ type: "resize", target: "sidebar", width: w });
-			} catch {}
-			try {
+				callback?.({ type: "resize", target: "console", height: h });
 				window.dispatchEvent(
-					new CustomEvent("terminal-resize", { detail: { target: "sidebar" } }),
+					new CustomEvent("terminal-resize", { detail: { target: "console" } }),
 				);
-			} catch {}
-
-			try {
 				window?._fitAddon?.fit();
 			} catch {}
 		};
@@ -96,21 +91,9 @@ export async function setupHiddableDragabble(containerId, callback) {
 			consoleArea.style.height = `${h}px`;
 			try {
 				callback?.({ type: "resize", target: "console", height: h });
-			} catch {}
-			try {
 				window.dispatchEvent(
 					new CustomEvent("terminal-resize", { detail: { target: "console" } }),
 				);
-			} catch {}
-			try {
-				callback?.({ type: "resize", target: "console", height: h });
-			} catch {}
-			try {
-				window.dispatchEvent(
-					new CustomEvent("terminal-resize", { detail: { target: "console" } }),
-				);
-			} catch {}
-			try {
 				window?._fitAddon?.fit();
 			} catch {}
 		};
@@ -151,6 +134,17 @@ export async function setupHiddableDragabble(containerId, callback) {
 				} catch {}
 			} else {
 				consoleArea.style.height = `${h}px`;
+				try {
+					callback?.({ type: "resize", target: "console", height: h });
+				} catch {}
+				try {
+					window.dispatchEvent(
+						new CustomEvent("terminal-resize", {
+							detail: { target: "console" },
+						}),
+					);
+					window?._fitAddon?.fit();
+				} catch {}
 			}
 		} else {
 			consoleArea.style.height = `${MIN_HEIGHT}px`;

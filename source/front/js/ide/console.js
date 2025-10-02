@@ -153,10 +153,20 @@ export function setupConsole({
 				term.options = { theme };
 			} catch {}
 		});
+		// Ensure terminal recalculates dimensions after theme change
+		try {
+			fit();
+		} catch {}
 	}
 
 	// Initialize with a default session
 	openSession("s1", true);
+	// Ensure initial fit after layout settles
+	setTimeout(() => {
+		try {
+			fit();
+		} catch {}
+	}, 50);
 
 	// Fit xterm when the layout changes or a terminal-resize event is dispatched
 	window.addEventListener("resize", () => {

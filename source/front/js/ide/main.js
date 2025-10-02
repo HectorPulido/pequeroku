@@ -88,8 +88,10 @@ const searchExcludeInput = $("#search-exclude");
 const searchCaseCheckbox = $("#search-case");
 const btnOpenAiModal = $("#btn-open-ai-modal");
 
-await setupHiddableDragabble(containerId, async (isMobile) => {
-	await mobileConfig(isMobile);
+await setupHiddableDragabble(containerId, async (arg) => {
+	if (typeof arg === "boolean") {
+		await mobileConfig(arg);
+	}
 });
 
 if (themeToggleBtn) setupThemeToggle(themeToggleBtn);
@@ -100,6 +102,7 @@ let consoleApi = null;
 let runCommand = null;
 let ws = null;
 let slash = null;
+const dirtyPaths = new Set();
 
 function updateTabs() {
 	const el = consoleTabsEl;
@@ -113,12 +116,13 @@ function updateTabs() {
 		return;
 	}
 	el.innerHTML = list
-		.map(
-			(sid) =>
-				`<button class="console-tab" role="tab" aria-selected="${
-					sid === active
-				}" data-sid="${sid}" title="${sid}">${sid}<span class="icon" data-close="${sid}">×</span></button>`,
-		)
+		.map((sid) => {
+			const final_sid =
+				sid.length > 25 ? `...${sid.slice(sid.length - 25)}` : sid;
+			return `<button class="console-tab" role="tab" aria-selected="${
+				sid === active
+			}" data-sid="${sid}" title="${sid}">${final_sid}<span class="icon" data-close="${sid}">×</span></button>`;
+		})
 		.join("");
 }
 
@@ -156,9 +160,11 @@ function updateFileTabs() {
 	el.innerHTML = files
 		.map((fp) => {
 			const name = fp.replace("/app/", "");
+			const final_name =
+				name.length > 25 ? `...${name.slice(name.length - 25)}` : name;
 			return `<button class="file-tab" role="tab" aria-selected="${
 				fp === active
-			}" data-path="${fp}" title="${fp}">${name}<span class="icon" data-close-file="${fp}">×</span></button>`;
+			}" data-path="${fp}" title="${fp}">${final_name}${dirtyPaths.has(fp) ? "*" : ""}<span class="icon" data-close-file="${fp}">×</span></button>`;
 		})
 		.join("");
 }
@@ -211,6 +217,28 @@ ideStore.select(
 	(s) => s.files,
 	() => updateFileTabs(),
 );
+
+window.addEventListener("editor-dirty-changed", (e) => {
+	try {
+		let p = e.detail?.path || "";
+		const d = !!e.detail?.dirty;
+		if (!p) return;
+		// Normalize to full /app path
+		if (p.startsWith("file://")) {
+			try {
+				p = new URL(p).pathname;
+			} catch {}
+		}
+		if (!p.startsWith("/app/") && p.includes("/app/")) {
+			p = p.slice(p.indexOf("/app/"));
+		} else if (!p.startsWith("/app/") && p.startsWith("app/")) {
+			p = `/${p}`;
+		}
+		if (d) dirtyPaths.add(p);
+		else dirtyPaths.delete(p);
+		updateFileTabs();
+	} catch {}
+});
 ideStore.select(
 	(s) => s.files.active,
 	(active) => {
@@ -397,6 +425,12 @@ function connectWs() {
 			ideStore.actions.console.clear();
 			updateTabs();
 			consoleApi.addLine?.("[connected]");
+			try {
+				window.dispatchEvent(
+					new CustomEvent("terminal-resize", { detail: { target: "console" } }),
+				);
+				consoleApi?.fit?.();
+			} catch {}
 		},
 		onMessage: (ev) => {
 			// Multi-console protocol:
@@ -511,6 +545,12 @@ function connectWs() {
 			ws.send(payload);
 		},
 	});
+	try {
+		window.dispatchEvent(
+			new CustomEvent("terminal-resize", { detail: { target: "console" } }),
+		);
+		consoleApi?.fit?.();
+	} catch {}
 	slash = createSlashCommandHandler({
 		addLine: (text, sid) => consoleApi.addLine?.(text, sid),
 		getActiveSid: () => consoleApi.getActive?.() || null,
@@ -743,7 +783,7 @@ function connectWs() {
 			notifyAlert("Open a file first", "error");
 			return;
 		}
-		const content = getEditorValue();
+		const content = getEditor()?.getModel()?.getValue?.() ?? getEditorValue();
 		const prev = fsws.revs.get(activePath) || 0;
 		try {
 			const res = await fsws.call("write_file", {
@@ -755,6 +795,24 @@ function connectWs() {
 			fsws.revs.set(activePath, nextRev);
 			notifyAlert(`File ${activePath} saved`, "success");
 			if (activePath === "/app/config.json") await hydrateRun();
+			try {
+				const m = getEditor()?.getModel?.();
+				if (m) m._prk_lastSaved = m.getValue?.() ?? "";
+				window.dispatchEvent(
+					new CustomEvent("editor-dirty-changed", {
+						detail: { path: activePath, dirty: false },
+					}),
+				);
+			} catch {}
+			try {
+				const m = getEditor()?.getModel?.();
+				if (m) m._prk_lastSaved = m.getValue?.() ?? "";
+				window.dispatchEvent(
+					new CustomEvent("editor-dirty-changed", {
+						detail: { path: activePath, dirty: false },
+					}),
+				);
+			} catch {}
 		} catch (e) {
 			if (String(e.message).includes("conflict")) {
 				const cur = fsws.revs.get(activePath) || 0;

@@ -4,6 +4,8 @@ import { detectLangFromPath } from "../shared/langMap.js";
 const THEME_LIGHT = "crema";
 const THEME_DARK = "monokai";
 
+const __modelsByPath = new Map();
+
 export function loadMonaco(theme) {
 	require.config({
 		paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs" },
@@ -109,6 +111,9 @@ export async function mobileConfig(isMobile) {
 				minimap: { enabled: true },
 				wordWrap: "off",
 				fontSize: 14,
+				lineNumbers: "on",
+				glyphMargin: true,
+				folding: true,
 			});
 		}
 	});
@@ -139,12 +144,117 @@ export function changeTheme(isDark, consoleApi) {
 export async function openFile(api, path, setPathLabel) {
 	await waitForMonaco(async () => {
 		const lang = detectLangFromPath(path);
-		const model = getEditor().getModel();
-		monaco.editor.setModelLanguage(model, lang);
+		const emit = (p, dirty) => {
+			try {
+				window.dispatchEvent(
+					new CustomEvent("editor-dirty-changed", {
+						detail: { path: p, dirty },
+					}),
+				);
+			} catch {}
+		};
+
+		let model = __modelsByPath.get(path);
+		if (model) {
+			try {
+				monaco.editor.setModelLanguage(model, lang);
+			} catch {}
+			getEditor().setModel(model);
+			// Emit current dirty state when focusing an existing model
+			const uriPath = model.uri?.path || path;
+			const curDirty =
+				(model.getValue?.() ?? "") !==
+				(model._prk_lastSaved ?? model.getValue?.());
+			model._prk_dirty = !!curDirty;
+			emit(uriPath, !!curDirty);
+			setPathLabel(path);
+			return;
+		}
+
 		const { content } = await api(
 			`/read_file/?path=${encodeURIComponent(path)}`,
 		);
-		model.setValue(content);
+		const uri = monaco.Uri.parse(`file://${path}`);
+		model = monaco.editor.createModel(content, lang, uri);
+
+		// Track saved snapshot and dirty state per model
+		model._prk_lastSaved = content;
+		model._prk_dirty = false;
+
+		// Attach change listener once to update dirty state and notify UI
+		if (!model._prk_dispose) {
+			const sub = model.onDidChangeContent(() => {
+				const nowDirty = model.getValue() !== (model._prk_lastSaved ?? "");
+				if (nowDirty !== !!model._prk_dirty) {
+					model._prk_dirty = nowDirty;
+					emit(model.uri?.path || path, nowDirty);
+				}
+			});
+			model._prk_dispose = () => sub.dispose();
+		}
+
+		__modelsByPath.set(path, model);
+		getEditor().setModel(model);
+		getEditor().setScrollTop(0);
+		getEditor().setPosition({ lineNumber: 1, column: 1 });
+		emit(model.uri?.path || path, false);
 		setPathLabel(path);
 	});
+}
+
+// Helpers to interact with dirty state from other modules (e.g., tab UI)
+export function isPathDirty(path) {
+	const model = __modelsByPath.get(path);
+	if (!model) return false;
+	const saved = model._prk_lastSaved ?? "";
+	return (model.getValue?.() ?? "") !== saved;
+}
+
+export function getDirtyPaths() {
+	const res = [];
+	__modelsByPath.forEach((model, p) => {
+		const saved = model._prk_lastSaved ?? "";
+		if ((model.getValue?.() ?? "") !== saved) res.push(p);
+	});
+	return res;
+}
+
+export function markPathSaved(path) {
+	const model = __modelsByPath.get(path) || null;
+	if (!model) return;
+	model._prk_lastSaved = model.getValue?.() ?? "";
+	const uriPath = model.uri?.path || path;
+	model._prk_dirty = false;
+	try {
+		window.dispatchEvent(
+			new CustomEvent("editor-dirty-changed", {
+				detail: { path: uriPath, dirty: false },
+			}),
+		);
+	} catch {}
+}
+
+export function markCurrentSaved() {
+	try {
+		const m = getEditor()?.getModel?.();
+		if (!m) return;
+		const p = m.uri?.path || null;
+		if (!p) return;
+		m._prk_lastSaved = m.getValue?.() ?? "";
+		m._prk_dirty = false;
+		window.dispatchEvent(
+			new CustomEvent("editor-dirty-changed", {
+				detail: { path: p, dirty: false },
+			}),
+		);
+	} catch {}
+}
+
+export function getActivePath() {
+	try {
+		const m = getEditor()?.getModel?.();
+		return m?.uri?.path || null;
+	} catch {
+		return null;
+	}
 }
