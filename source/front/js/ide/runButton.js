@@ -152,11 +152,15 @@ export function setupRunButton({
 				};
 
 				const pollTunnelUrl = async () => {
-					for (let i = 0; i < 10; i++) {
-						await new Promise((r) => setTimeout(r, 5000));
+					await new Promise((r) => setTimeout(r, 5000));
+					for (let i = 0; i < 100; i++) {
+						await new Promise((r) => setTimeout(r, 1000));
 						const content = await readServerFile(tunnel_url);
 						const v = (content || "").trim();
-						if (v) return v;
+						if (v) {
+							await new Promise((r) => setTimeout(r, 1000));
+							return v;
+						}
 					}
 					return null;
 				};
