@@ -1,18 +1,16 @@
 import { notifyAlert } from "../core/alerts.js";
 import { makeApi } from "../core/api.js";
-import { escapeHtml } from "../core/dom.js";
+import { $, escapeHtml } from "../core/dom.js";
 import { bindModal } from "../core/modals.js";
 
-export function setupTemplates({
-	openBtn,
-	modalEl,
-	closeBtn,
-	listEl,
-	destInput,
-	cleanInput,
-	containerId,
-	refreshIDE,
-}) {
+export function setupTemplates({ containerId, refreshIDE }) {
+	const openBtn = $("#btn-open-templates-modal");
+	const modalEl = $("#templates-modal");
+	const closeBtn = $("#btn-templates-close");
+	const listEl = $("#tpl-list");
+	const destInput = $("#tpl-dest");
+	const cleanInput = $("#tpl-clean");
+
 	const titleEl = modalEl.querySelector(".upload-header > span");
 	bindModal(modalEl, openBtn, closeBtn, {
 		titleEl,

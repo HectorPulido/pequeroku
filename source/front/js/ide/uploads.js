@@ -1,17 +1,15 @@
 import { notifyAlert } from "../core/alerts.js";
 import { getCSRF } from "../core/csrf.js";
+import { $ } from "../core/dom.js";
 import { bindModal } from "../core/modals.js";
 
-export function setupUploads({
-	api,
-	openBtn,
-	modalEl,
-	closeBtn,
-	inputEl,
-	uploadBtn,
-	onDone,
-	fileTreeEl,
-}) {
+export function setupUploads({ api, onDone, fileTreeEl }) {
+	const openBtn = $("#btn-open-upload-modal");
+	const modalEl = $("#upload-modal");
+	const closeBtn = $("#btn-upload-close");
+	const inputEl = $("#file-input");
+	const uploadBtn = $("#btn-upload");
+
 	async function upload(file) {
 		if (!file) {
 			notifyAlert("Select a file first.", "warning");

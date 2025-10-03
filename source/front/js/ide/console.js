@@ -1,13 +1,13 @@
 import { Terminal } from "https://esm.sh/xterm@5.3.0";
 import { FitAddon } from "https://esm.sh/xterm-addon-fit@0.8.0";
+import { $, $$ } from "../core/dom.js";
 
-export function setupConsole({
-	consoleEl,
-	sendBtn,
-	inputEl,
-	ctrlButtons = [],
-	onSend,
-}) {
+export function setupConsole({ onSend }) {
+	const sendBtn = $("#send-cmd");
+	const inputEl = $("#console-cmd");
+	const consoleEl = $("#console-log");
+	const ctrlButtons = $$(".btn-send");
+
 	const history = [];
 	let hIdx = -1;
 
@@ -251,7 +251,6 @@ export function setupConsole({
 		clear: (sid) => clear(sid),
 		fit,
 		setTheme,
-		// sessions
 		openSession,
 		closeSession,
 		focusSession,

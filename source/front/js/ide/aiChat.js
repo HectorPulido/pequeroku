@@ -1,5 +1,17 @@
 import { $ } from "../core/dom.js";
 
+const messagesEl = $("#messages");
+const form = $("#ai-composer");
+const input = $("#chat-input");
+const sendBtn = $("#ai-send");
+const aiDot = $("#ai-dot");
+const aiUsesLeft = $("#ai-left");
+const btnReconnectDiv = $("#reconnect");
+const btnReconnect = $("#ai-reconect");
+const btnOpenAi = $("#btn-open-ai-modal");
+const aiModal = $("#ai-chat");
+const btnAiClose = $("#btn-ai-chat-close");
+
 let mdParse = (t) => t;
 (async () => {
 	try {
@@ -15,18 +27,6 @@ let mdParse = (t) => t;
 		console.error("Could not load marked:", e);
 	}
 })();
-
-const messagesEl = $("#messages");
-const form = $("#ai-composer");
-const input = $("#chat-input");
-const sendBtn = $("#ai-send");
-const aiDot = $("#ai-dot");
-const aiUsesLeft = $("#ai-left");
-const btnReconnectDiv = $("#reconnect");
-const btnReconnect = $("#ai-reconect");
-const btnOpenAi = $("#btn-open-ai-modal");
-const aiModal = $("#ai-chat");
-const btnAiClose = $("#btn-ai-chat-close");
 
 let bubble = null;
 let buffer = "";

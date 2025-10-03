@@ -40,104 +40,21 @@ export async function setupHiddableDragabble(containerId, callback) {
 		return Math.max(min, Math.min(max, n));
 	}
 
-	editorModal.style.gridTemplateColumns = `${savedW}px 6px 1fr`;
-	consoleArea.style.height = `${savedH}px`;
+	if (editorModal)
+		editorModal.style.gridTemplateColumns = `${savedW}px 6px 1fr`;
+	if (consoleArea) consoleArea.style.height = `${savedH}px`;
 
 	// Vertical splitter (files)
-	splitterV.addEventListener("mousedown", (e) => {
-		e.preventDefault();
-		const startX = e.clientX;
-		const startW = sidebarEl.getBoundingClientRect().width;
-		const onMove = (ev) => {
-			const w = Math.max(20, Math.min(600, startW + (ev.clientX - startX)));
-			editorModal.style.gridTemplateColumns = `${w}px 6px 1fr`;
-			try {
-				callback?.({ type: "resize", target: "console", height: h });
-				window.dispatchEvent(
-					new CustomEvent("terminal-resize", { detail: { target: "console" } }),
-				);
-				window?._fitAddon?.fit();
-			} catch {}
-		};
-		const onUp = () => {
-			const w = sidebarEl.getBoundingClientRect().width;
-			localStorage.setItem(LS_SIDEBAR_SIZE_KEY, String(w));
-			try {
-				callback?.({ type: "resize", target: "sidebar", width: w });
-			} catch {}
-			try {
-				window.dispatchEvent(
-					new CustomEvent("terminal-resize", { detail: { target: "sidebar" } }),
-				);
-			} catch {}
-			window.removeEventListener("mousemove", onMove);
-			window.removeEventListener("mouseup", onUp);
-		};
-		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", onUp);
-	});
-
-	// Horizontal splitter (console)
-	splitterH.addEventListener("mousedown", (e) => {
-		e.preventDefault();
-		const containerRect = editorModal.getBoundingClientRect();
-		const containerBottom = containerRect.bottom; // ancla estable
-		const resizerHeight = splitterH.getBoundingClientRect().height || 0;
-
-		const onMove = (ev) => {
-			const raw = containerBottom - ev.clientY - resizerHeight;
-			h = clamp(raw, MIN_HEIGHT, window.innerHeight);
-
-			consoleArea.style.height = `${h}px`;
-			try {
-				callback?.({ type: "resize", target: "console", height: h });
-				window.dispatchEvent(
-					new CustomEvent("terminal-resize", { detail: { target: "console" } }),
-				);
-				window?._fitAddon?.fit();
-			} catch {}
-		};
-		const onUp = () => {
-			h = consoleArea.getBoundingClientRect().height;
-			localStorage.setItem(LS_CONSOLE_SIZE_KEY, String(h));
-			window.removeEventListener("mousemove", onMove);
-			window.removeEventListener("mouseup", onUp);
-		};
-		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", onUp);
-	});
-
-	// Colapse files
-	function applySidebarState(state) {
-		editorModal.classList.toggle("sidebar-collapsed", state !== "open");
-		editorModal.classList.toggle("sidebar-open", state === "open");
-	}
-	function applyConsoleState(state) {
-		consoleHiddable.forEach((a) => {
-			a.classList.toggle("collapsed", state !== "open");
-		});
-		window.pequeroku?.debug && console.log("state: ", state);
-		if (state === "open") {
-			if (IS_MOBILE) {
-				window.pequeroku?.debug && console.log("MOBILE");
-				consoleArea.style.height = `185dvh`;
-				try {
-					const hh = consoleArea.getBoundingClientRect().height;
-					callback?.({ type: "resize", target: "console", height: hh });
-				} catch {}
-				try {
-					window.dispatchEvent(
-						new CustomEvent("terminal-resize", {
-							detail: { target: "console" },
-						}),
-					);
-				} catch {}
-			} else {
-				consoleArea.style.height = `${h}px`;
+	if (splitterV && editorModal && sidebarEl) {
+		splitterV.addEventListener("mousedown", (e) => {
+			e.preventDefault();
+			const startX = e.clientX;
+			const startW = sidebarEl.getBoundingClientRect().width;
+			const onMove = (ev) => {
+				const w = Math.max(20, Math.min(600, startW + (ev.clientX - startX)));
+				editorModal.style.gridTemplateColumns = `${w}px 6px 1fr`;
 				try {
 					callback?.({ type: "resize", target: "console", height: h });
-				} catch {}
-				try {
 					window.dispatchEvent(
 						new CustomEvent("terminal-resize", {
 							detail: { target: "console" },
@@ -145,17 +62,122 @@ export async function setupHiddableDragabble(containerId, callback) {
 					);
 					window?._fitAddon?.fit();
 				} catch {}
+			};
+			const onUp = () => {
+				const w = sidebarEl.getBoundingClientRect().width;
+				localStorage.setItem(LS_SIDEBAR_SIZE_KEY, String(w));
+				try {
+					callback?.({ type: "resize", target: "sidebar", width: w });
+				} catch {}
+				try {
+					window.dispatchEvent(
+						new CustomEvent("terminal-resize", {
+							detail: { target: "sidebar" },
+						}),
+					);
+				} catch {}
+				window.removeEventListener("mousemove", onMove);
+				window.removeEventListener("mouseup", onUp);
+			};
+			window.addEventListener("mousemove", onMove);
+			window.addEventListener("mouseup", onUp);
+		});
+	}
+
+	// Horizontal splitter (console)
+	if (splitterH && editorModal && consoleArea) {
+		splitterH.addEventListener("mousedown", (e) => {
+			e.preventDefault();
+			const containerRect = editorModal.getBoundingClientRect();
+			const containerBottom = containerRect.bottom; // ancla estable
+			const resizerHeight = splitterH.getBoundingClientRect().height || 0;
+
+			const onMove = (ev) => {
+				const raw = containerBottom - ev.clientY - resizerHeight;
+				h = clamp(raw, MIN_HEIGHT, window.innerHeight);
+
+				consoleArea.style.height = `${h}px`;
+				try {
+					callback?.({ type: "resize", target: "console", height: h });
+					window.dispatchEvent(
+						new CustomEvent("terminal-resize", {
+							detail: { target: "console" },
+						}),
+					);
+					window?._fitAddon?.fit();
+				} catch {}
+			};
+			const onUp = () => {
+				h = consoleArea.getBoundingClientRect().height;
+				localStorage.setItem(LS_CONSOLE_SIZE_KEY, String(h));
+				window.removeEventListener("mousemove", onMove);
+				window.removeEventListener("mouseup", onUp);
+			};
+			window.addEventListener("mousemove", onMove);
+			window.addEventListener("mouseup", onUp);
+		});
+	}
+
+	// Colapse files
+	function applySidebarState(state) {
+		if (!editorModal) return;
+		editorModal.classList.toggle("sidebar-collapsed", state !== "open");
+		editorModal.classList.toggle("sidebar-open", state === "open");
+	}
+	function applyConsoleState(state) {
+		if (consoleHiddable && typeof consoleHiddable.forEach === "function") {
+			consoleHiddable.forEach((a) => {
+				a.classList.toggle("collapsed", state !== "open");
+			});
+		}
+		window.pequeroku?.debug && console.log("state: ", state);
+		if (state === "open") {
+			if (IS_MOBILE) {
+				window.pequeroku?.debug && console.log("MOBILE");
+				if (consoleArea) {
+					consoleArea.style.height = `185dvh`;
+					try {
+						const hh = consoleArea.getBoundingClientRect().height;
+						callback?.({ type: "resize", target: "console", height: hh });
+					} catch {}
+					try {
+						window.dispatchEvent(
+							new CustomEvent("terminal-resize", {
+								detail: { target: "console" },
+							}),
+						);
+					} catch {}
+				}
+			} else {
+				if (consoleArea) {
+					consoleArea.style.height = `${h}px`;
+					try {
+						callback?.({ type: "resize", target: "console", height: h });
+					} catch {}
+					try {
+						window.dispatchEvent(
+							new CustomEvent("terminal-resize", {
+								detail: { target: "console" },
+							}),
+						);
+						window?._fitAddon?.fit();
+					} catch {}
+				}
 			}
 		} else {
-			consoleArea.style.height = `${MIN_HEIGHT}px`;
-			try {
-				callback?.({ type: "resize", target: "console", height: MIN_HEIGHT });
-			} catch {}
-			try {
-				window.dispatchEvent(
-					new CustomEvent("terminal-resize", { detail: { target: "console" } }),
-				);
-			} catch {}
+			if (consoleArea) {
+				consoleArea.style.height = `${MIN_HEIGHT}px`;
+				try {
+					callback?.({ type: "resize", target: "console", height: MIN_HEIGHT });
+				} catch {}
+				try {
+					window.dispatchEvent(
+						new CustomEvent("terminal-resize", {
+							detail: { target: "console" },
+						}),
+					);
+				} catch {}
+			}
 		}
 	}
 
@@ -171,6 +193,7 @@ export async function setupHiddableDragabble(containerId, callback) {
 	}
 
 	function toggleSidebar() {
+		if (!editorModal) return;
 		const _collapsed =
 			editorModal.classList.contains("sidebar-open") &&
 			!editorModal.classList.contains("sidebar-collapsed");
@@ -180,7 +203,8 @@ export async function setupHiddableDragabble(containerId, callback) {
 	}
 
 	function toggleConsole() {
-		const _collapsed = consoleHiddable[0].classList.contains("collapsed");
+		const first = consoleHiddable?.[0];
+		const _collapsed = first ? first.classList.contains("collapsed") : true;
 		const next = _collapsed ? "open" : "collapsed";
 		localStorage.setItem(LS_CONSOLE_KEY, next);
 		applyConsoleState(next);
@@ -194,9 +218,12 @@ export async function setupHiddableDragabble(containerId, callback) {
 	applyConsoleState(getInitialConsoleState());
 
 	// ====== Listeners ======
-	toggleSidebarBtn2.addEventListener("click", toggleSidebar);
-	toggleSidebarBtn.addEventListener("click", toggleSidebar);
-	toggleConsoleBtn.addEventListener("click", toggleConsole);
+	if (toggleSidebarBtn2)
+		toggleSidebarBtn2.addEventListener("click", toggleSidebar);
+	if (toggleSidebarBtn)
+		toggleSidebarBtn.addEventListener("click", toggleSidebar);
+	if (toggleConsoleBtn)
+		toggleConsoleBtn.addEventListener("click", toggleConsole);
 	window.addEventListener("resize", () => {
 		try {
 			callback?.({ type: "resize", target: "window" });

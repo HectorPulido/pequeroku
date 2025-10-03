@@ -157,7 +157,9 @@ export async function openFile(api, path, setPathLabel) {
 		const emit = (p, dirty) => {
 			try {
 				window.dispatchEvent(
-					new CustomEvent("editor-dirty-changed", { detail: { path: p, dirty } }),
+					new CustomEvent("editor-dirty-changed", {
+						detail: { path: p, dirty },
+					}),
 				);
 			} catch {}
 		};
@@ -168,9 +170,12 @@ export async function openFile(api, path, setPathLabel) {
 				monaco.editor.setModelLanguage(model, lang);
 			} catch {}
 			// If model is NOT dirty, refresh from backend before showing
-			const isDirty = (model.getValue?.() ?? "") !== (model._prk_lastSaved ?? "");
+			const isDirty =
+				(model.getValue?.() ?? "") !== (model._prk_lastSaved ?? "");
 			if (!isDirty) {
-				const { content } = await api(`/read_file/?path=${encodeURIComponent(path)}`);
+				const { content } = await api(
+					`/read_file/?path=${encodeURIComponent(path)}`,
+				);
 				try {
 					model.setValue(content);
 				} catch {}
@@ -185,7 +190,9 @@ export async function openFile(api, path, setPathLabel) {
 			return;
 		}
 
-		const { content } = await api(`/read_file/?path=${encodeURIComponent(path)}`);
+		const { content } = await api(
+			`/read_file/?path=${encodeURIComponent(path)}`,
+		);
 		const uri = monaco.Uri.parse(`file://${path}`);
 		model = monaco.editor.createModel(content, lang, uri);
 
@@ -277,7 +284,7 @@ export function discardPathModel(path) {
 		if (!model) return;
 		// If active, detach from editor first
 		const ed = getEditor?.();
-		if (ed && ed.getModel && ed.getModel() === model) {
+		if (ed?.getModel && ed.getModel() === model) {
 			if (!__scratchModel) {
 				__scratchModel = monaco.editor.createModel("", "plaintext");
 			}
@@ -294,7 +301,9 @@ export function discardPathModel(path) {
 		// Notify UI that it's no longer dirty
 		try {
 			window.dispatchEvent(
-				new CustomEvent("editor-dirty-changed", { detail: { path, dirty: false } }),
+				new CustomEvent("editor-dirty-changed", {
+					detail: { path, dirty: false },
+				}),
 			);
 		} catch {}
 	} catch {}

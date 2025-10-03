@@ -1,9 +1,6 @@
-import { notifyAlert } from "../core/alerts.js";
 import { makeApi } from "../core/api.js";
-import { ACTION_DELAYS } from "../core/constants.js";
-import { $, $$ } from "../core/dom.js";
+import { $ } from "../core/dom.js";
 import { installGlobalLoader } from "../core/loader.js";
-import { bindModal } from "../core/modals.js";
 import { ideStore } from "../core/store.js";
 import {
 	applyTheme,
@@ -11,24 +8,33 @@ import {
 	setupThemeToggle,
 	toggleTheme,
 } from "../core/themes.js";
-import { hideHeader, sleep } from "../core/utils.js";
+import { hideHeader } from "../core/utils.js";
 import { setupConsole } from "./console.js";
+import { createDirtyTracker } from "./dirtyTracker.js";
 import {
 	changeTheme,
 	clearEditor,
+	discardPathModel,
 	getEditor,
 	getEditorValue,
 	loadMonaco,
 	mobileConfig,
 	openFile as openFileIntoEditor,
 } from "./editor.js";
+import { setupFileActions } from "./fileActions.js";
 import { setupFileTree } from "./files.js";
 import { createFSWS } from "./fs-ws.js";
+import { createReadFileApi } from "./fsAdapter.js";
+import { setupGithubModal } from "./githubModal.js";
 import { setupHiddableDragabble } from "./hiddableDraggable.js";
+import { setupRunButton } from "./runButton.js";
 import { loadRunConfig } from "./runConfig.js";
+import { setupSearchUI } from "./search.js";
 import { createSlashCommandHandler } from "./slashCommands.js";
+import { setupConsoleTabs, setupFileTabs } from "./tabs.js";
+import { setupTemplates } from "./templates.js";
 import { setupUploads } from "./uploads.js";
-import { createWS } from "./websockets.js";
+import { setupWSController } from "./wsController.js";
 
 installGlobalLoader();
 applyTheme();
@@ -47,45 +53,11 @@ const themeToggleBtn = $("#theme-toggle");
 const pathLabel = $("#current_path_label");
 const refreshTreeBtn = $("#refresh-tree");
 const fileTreeEl = $("#file-tree");
-const sendCMDBtn = $("#send-cmd");
-const consoleCMD = $("#console-cmd");
 const restartContainerBtn = $("#restart-container");
 const runCodeBtn = $("#run-code");
-const saveFileBtn = $("#save-file");
-const consoleEl = $("#console-log");
-const newFolderBtn = $("#new-folder");
-const newFileBtn = $("#new-file");
-const btnDownloadBtn = $("#btn-download");
 const btnOpenSession = $("#btn-open-session");
 const btnCloseSession = $("#btn-close-session");
-const consoleTabsEl = $("#console-tabs");
-const fileTabsEl = $("#file-tabs");
 
-const btnOpenUpload = $("#btn-open-upload-modal");
-const uploadModal = $("#upload-modal");
-const btnUploadClose = $("#btn-upload-close");
-const input = $("#file-input");
-const btnUpload = $("#btn-upload");
-
-const btnOpenTemplates = $("#btn-open-templates-modal");
-const templatesModal = $("#templates-modal");
-const btnTemplatesClose = $("#btn-templates-close");
-const tplListEl = $("#tpl-list");
-const tplDestEl = $("#tpl-dest");
-const tplCleanEl = $("#tpl-clean");
-
-const btnCloneRepo = $("#btn-clone-repo");
-const btnCloseCloneRepo = $("#btn-github-close");
-const btnSubmitCloneRepo = $("#btn-github");
-const btnToggleSearch = $("#toggle-search");
-const searchBoxEl = $("#search-box");
-const searchPatternInput = $("#search-pattern");
-const btnSearch = $("#btn-search");
-const btnSearchClear = $("#btn-search-clear");
-const searchResultsEl = $("#search-results");
-const searchIncludeInput = $("#search-include");
-const searchExcludeInput = $("#search-exclude");
-const searchCaseCheckbox = $("#search-case");
 const btnOpenAiModal = $("#btn-open-ai-modal");
 
 await setupHiddableDragabble(containerId, async (arg) => {
@@ -99,152 +71,35 @@ if (themeToggleBtn) setupThemeToggle(themeToggleBtn);
 let apiReadFileWrapper = null;
 let consoleApi = null;
 
-let runCommand = null;
-let ws = null;
+let wsCtrl = null;
 let slash = null;
-const dirtyPaths = new Set();
 
-function updateTabs() {
-	const el = consoleTabsEl;
-	if (!el) return;
-	const { sessions: list, active } = ideStore.get().console || {
-		sessions: [],
-		active: null,
-	};
-	if (!list.length) {
-		el.innerHTML = "";
-		return;
-	}
-	el.innerHTML = list
-		.map((sid) => {
-			const final_sid =
-				sid.length > 25 ? `...${sid.slice(sid.length - 25)}` : sid;
-			return `<button class="console-tab" role="tab" aria-selected="${
-				sid === active
-			}" data-sid="${sid}" title="${sid}">${final_sid}<span class="icon" data-close="${sid}">×</span></button>`;
-		})
-		.join("");
-}
+const dirty = createDirtyTracker({ onChange: () => fileTabs.update?.() });
 
-if (consoleTabsEl) {
-	consoleTabsEl.addEventListener("click", (e) => {
-		const closeEl = e.target.closest("[data-close]");
-		if (closeEl) {
-			const sid = closeEl.getAttribute("data-close");
-			try {
-				ws?.send({ control: "close", sid });
-			} catch {}
-			e.stopPropagation();
-			return;
-		}
-		const tab = e.target.closest("[data-sid]");
-		if (tab) {
-			const sid = tab.getAttribute("data-sid");
-			if (sid && sid !== (ideStore.get().console.active || null)) {
-				try {
-					ws?.send({ control: "focus", sid });
-				} catch {}
-			}
-		}
-	});
-}
-function updateFileTabs() {
-	const el = fileTabsEl;
-	if (!el) return;
-	const files = ideStore.get().files?.open || [];
-	const active = ideStore.get().files?.active || null;
-	if (!files.length) {
-		el.innerHTML = "";
-		return;
-	}
-	el.innerHTML = files
-		.map((fp) => {
-			const name = fp.replace("/app/", "");
-			const final_name =
-				name.length > 25 ? `...${name.slice(name.length - 25)}` : name;
-			return `<button class="file-tab" role="tab" aria-selected="${
-				fp === active
-			}" data-path="${fp}" title="${fp}">${final_name}${dirtyPaths.has(fp) ? "*" : ""}<span class="icon" data-close-file="${fp}">×</span></button>`;
-		})
-		.join("");
-}
-if (fileTabsEl) {
-	fileTabsEl.addEventListener("click", async (e) => {
-		const closeEl = e.target.closest("[data-close-file]");
-		if (closeEl) {
-			const path = closeEl.getAttribute("data-close-file");
-			const prevActive = ideStore.get().files?.active || null;
-			const files = ideStore.get().files?.open || [];
-			const idx = Math.max(0, files.indexOf(path));
-			try {
-				if (dirtyPaths.has(path)) {
-					const mod = await import("./editor.js");
-					mod.discardPathModel?.(path);
-				}
-			} catch {}
-			ideStore.actions.files.close(path);
-			if (prevActive === path) {
-				const remaining = ideStore.get().files?.open || [];
-				const nextIdx = idx < remaining.length ? idx : idx - 1;
-				const next = nextIdx >= 0 ? remaining[nextIdx] : null;
-				if (next) {
-					try {
-						await openFileIntoEditor(apiReadFileWrapper, next, setPath);
-					} catch {}
-				} else {
-					try {
-						clearEditor();
-					} catch {}
-
-					pathLabel.innerText = "";
-					localStorage.removeItem(`last:${containerId}`);
-					updateFileTabs();
-				}
-			} else {
-				updateFileTabs();
-			}
-			e.stopPropagation();
-			return;
-		}
-		const tab = e.target.closest("[data-path]");
-		if (tab) {
-			const path = tab.getAttribute("data-path");
-			if (path) {
-				await openFileIntoEditor(apiReadFileWrapper, path, setPath);
-			}
-		}
-	});
-}
-ideStore.select(
-	(s) => s.console,
-	() => updateTabs(),
-);
-ideStore.select(
-	(s) => s.files,
-	() => updateFileTabs(),
-);
-
-window.addEventListener("editor-dirty-changed", (e) => {
-	try {
-		let p = e.detail?.path || "";
-		const d = !!e.detail?.dirty;
-		if (!p) return;
-		// Normalize to full /app path
-		if (p.startsWith("file://")) {
-			try {
-				p = new URL(p).pathname;
-			} catch {}
-		}
-		if (!p.startsWith("/app/") && p.includes("/app/")) {
-			p = p.slice(p.indexOf("/app/"));
-		} else if (!p.startsWith("/app/") && p.startsWith("app/")) {
-			p = `/${p}`;
-		}
-		if (d) dirtyPaths.add(p);
-		else dirtyPaths.delete(p);
-		updateFileTabs();
-	} catch {}
+const consoleTabs = setupConsoleTabs({
+	onFocus: (sid) => wsCtrl?.focusSession?.(sid),
+	onClose: (sid) => wsCtrl?.closeSession?.(sid),
 });
+
+const fileTabs = setupFileTabs({
+	isDirty: (p) => dirty.isDirty(p),
+	openFile: (path) => openFileIntoEditor(apiReadFileWrapper, path, setPath),
+	clearEditor: () => {
+		try {
+			clearEditor();
+		} catch {}
+		pathLabel.innerText = "";
+		localStorage.removeItem(`last:${containerId}`);
+	},
+	discardIfDirty: async (p) => {
+		try {
+			discardPathModel?.(p);
+		} catch {}
+	},
+});
+
+dirty.attach();
+
 ideStore.select(
 	(s) => s.files.active,
 	(active) => {
@@ -253,7 +108,6 @@ ideStore.select(
 		else localStorage.removeItem(`last:${containerId}`);
 	},
 );
-let lastBytesSid = null;
 let ft;
 
 const fsws = createFSWS({
@@ -289,131 +143,20 @@ const fsws = createFSWS({
 			if (dirs.size > 0) {
 				await Promise.all(Array.from(dirs).map((d) => ft.refreshPath(d)));
 			}
-			updateFileTabs();
+			fileTabs.update?.();
 		} catch {}
 	},
 });
 
 // === "API-like" wrapper so editor.js remains unchanged but reads via WS ===
-apiReadFileWrapper = async (url) => {
-	const qs = new URLSearchParams(url.split("?")[1] || "");
-	const path = qs.get("path");
-	const data = await fsws.call("read_file", { path });
-	if (typeof data.rev === "number") fsws.revs.set(path, data.rev);
-	return { content: data.content ?? "" };
-};
+apiReadFileWrapper = createReadFileApi(fsws);
 
-// === Search in files (WS 'search') ===
-function normalizeSearchResults(res) {
-	if (Array.isArray(res)) return res;
-	if (Array.isArray(res?.results)) return res.results;
-	if (res && typeof res === "object") {
-		return Object.values(res).flat().filter(Boolean);
-	}
-	return [];
-}
-
-function renderSearchResults(items) {
-	if (!searchResultsEl) return;
-	const html = items
-		.map((it) => {
-			const path = String(it?.path || "");
-			const rel = path.startsWith("/app/") ? path.slice(5) : path;
-			const rawMatches =
-				(Array.isArray(it?.matchs) && it.matchs) ||
-				(Array.isArray(it?.matches) && it.matches) ||
-				[];
-			const inner = rawMatches
-				.map((m) => {
-					const mm = String(m || "").trim();
-					const r = mm.match(/^L(\d+):/);
-					const line = r ? Number(r[1]) : 1;
-					const preview = mm.replace(/^L\d+:/, "").trim();
-					return `<li class="match" data-path="${path}" data-line="${line}">L${line}: ${preview}</li>`;
-				})
-				.join("");
-			return `<li class="file"><strong>${rel}</strong><ul>${inner}</ul></li>`;
-		})
-		.join("");
-	searchResultsEl.innerHTML = html || "";
-}
-
-if (searchResultsEl) {
-	searchResultsEl.addEventListener("click", async (e) => {
-		// Support clicking individual matches and file rows (open at first match)
-		let path = null;
-		let line = 1;
-		const matchEl = e.target.closest("li.match");
-		if (matchEl) {
-			path = matchEl.getAttribute("data-path");
-			line = parseInt(matchEl.getAttribute("data-line") || "1", 10);
-		} else {
-			const fileEl = e.target.closest("li.file");
-			if (!fileEl) return;
-			const firstMatch = fileEl.querySelector("li.match");
-			if (!firstMatch) return;
-			path = firstMatch.getAttribute("data-path");
-			line = parseInt(firstMatch.getAttribute("data-line") || "1", 10);
-		}
-		if (!path) return;
-		await openFileIntoEditor(apiReadFileWrapper, path, setPath);
-		try {
-			const ed = getEditor?.();
-			if (ed) {
-				ed.revealLineInCenter(line);
-				ed.setPosition({ lineNumber: line, column: 1 });
-				ed.focus();
-			}
-		} catch {}
-	});
-}
-
-if (btnSearch) {
-	btnSearch.addEventListener("click", async () => {
-		const pattern = (searchPatternInput?.value || "").trim();
-		if (!pattern) return;
-		const include_globs = (searchIncludeInput?.value || "").trim();
-		const exclude_dirs = (searchExcludeInput?.value || "").trim();
-		const caseVal = searchCaseCheckbox?.checked ? "true" : "false";
-		try {
-			const res = await fsws.call("search", {
-				root: "/app",
-				pattern,
-				case: caseVal,
-				include_globs,
-				exclude_dirs,
-			});
-			const items = normalizeSearchResults(res);
-			renderSearchResults(items);
-		} catch (err) {
-			notifyAlert(err.message || String(err), "error");
-		}
-	});
-}
-
-if (searchPatternInput) {
-	searchPatternInput.addEventListener("keydown", (e) => {
-		if (e.key === "Enter") {
-			e.preventDefault();
-			btnSearch?.click();
-		}
-	});
-}
-
-if (btnSearchClear) {
-	btnSearchClear.addEventListener("click", () => {
-		if (searchPatternInput) searchPatternInput.value = "";
-		if (searchIncludeInput) searchIncludeInput.value = "";
-		if (searchExcludeInput) searchExcludeInput.value = ".git,.venv";
-		if (searchCaseCheckbox) searchCaseCheckbox.checked = false;
-		if (searchResultsEl) searchResultsEl.innerHTML = "";
-	});
-}
-if (btnToggleSearch && searchBoxEl) {
-	btnToggleSearch.addEventListener("click", () => {
-		searchBoxEl.classList.toggle("hidden");
-	});
-}
+// === Search UI (extracted module) ===
+setupSearchUI({
+	fsws,
+	openFile: (path) => openFileIntoEditor(apiReadFileWrapper, path, setPath),
+	getEditor: () => getEditor?.(),
+});
 
 function setPath(p) {
 	try {
@@ -421,118 +164,44 @@ function setPath(p) {
 	} catch {}
 }
 
+const fileActions = setupFileActions({
+	fsws,
+	getActivePath: () => ideStore.get().files?.active || null,
+	getEditor,
+	getEditorValue,
+	openEditorPath: (path) =>
+		openFileIntoEditor(apiReadFileWrapper, path, setPath),
+	runHydrate: () => runCtrl?.hydrate?.(),
+	onAfterSave: () => {
+		try {
+			fileTabs.update?.();
+		} catch {}
+	},
+});
+
 function connectWs() {
-	ws = createWS(containerId, {
-		onOpen: () => {
-			// Reset local sessions; the server will resend session list
-			const sids = consoleApi.listSessions?.() || [];
-			// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
-			sids.forEach((sid) => consoleApi.closeSession?.(sid));
-			ideStore.actions.console.clear();
-			updateTabs();
-			consoleApi.addLine?.("[connected]");
+	wsCtrl = setupWSController({
+		containerId,
+		consoleApi,
+		onTabsChange: () => {
 			try {
-				window.dispatchEvent(
-					new CustomEvent("terminal-resize", { detail: { target: "console" } }),
-				);
-				consoleApi?.fit?.();
+				consoleTabs.update?.();
 			} catch {}
 		},
-		onMessage: (ev) => {
-			// Multi-console protocol:
-			// - JSON: {type:"stream"| "stream-bytes" | "info" | "error", sid?, ...}
-			// - After "stream-bytes", a binary frame follows for that sid
-			try {
-				const msg = JSON.parse(ev.data);
-				if (msg && typeof msg === "object") {
-					if (msg.type === "stream") {
-						const sid = msg.sid || consoleApi.getActive?.();
-						const payload = typeof msg.payload === "string" ? msg.payload : "";
-						consoleApi.write(payload, sid);
-						return;
-					}
-					if (msg.type === "stream-bytes") {
-						lastBytesSid = msg.sid || consoleApi.getActive?.();
-						return;
-					}
-					if (msg.type === "info") {
-						// Bootstrap connected info or session events
-						if (msg.message === "Connected") {
-							const sessions = Array.isArray(msg.sessions) ? msg.sessions : [];
-							const active = msg.active || sessions[0] || "s1";
-							// biome-ignore lint/suspicious/useIterableCallbackReturn: This is correct
-							sessions.forEach((sid) => consoleApi.openSession?.(sid, false));
-							consoleApi.focusSession?.(active);
-							// state handled by ideStore
-							ideStore.actions.console.setAll(sessions, active);
-							consoleApi.addLine?.(
-								`[info] Connected. Sessions: ${sessions.join(", ") || "none"}, active: ${active}`,
-								active,
-							);
-							updateTabs();
-							return;
-						}
-						if (msg.message === "session-opened") {
-							const makeActive = msg.active ? msg.active === msg.sid : true;
-							consoleApi.openSession?.(msg.sid, !!makeActive);
-							// state handled by ideStore
-							if (makeActive) {
-								consoleApi.focusSession?.(msg.sid);
-							}
-							ideStore.actions.console.open(msg.sid, makeActive);
-							updateTabs();
-							return;
-						}
-						if (msg.message === "session-closed") {
-							consoleApi.closeSession?.(msg.sid);
-							// state handled by ideStore
-							return;
-						}
-						if (msg.message === "session-focused") {
-							consoleApi.focusSession?.(msg.sid);
-							// state handled by ideStore
-							ideStore.actions.console.focus(msg.sid);
-							return;
-						}
-						// Generic info, route to sid if provided
-						const sid = msg.sid || consoleApi.getActive?.();
-						consoleApi.addLine?.(`[info] ${msg.message ?? ""}`, sid);
-						return;
-					}
-					if (msg.type === "error") {
-						notifyAlert(msg.message || "Unknown error", "error");
-						return;
-					}
-				}
-				// Fallback: treat as text line
-				let text = String(ev.data || "");
-				text = text.replace(/\r(?!\n)/g, "\r\n");
-				consoleApi.write(text);
-			} catch {
-				if (ev.data instanceof ArrayBuffer) {
-					const targetSid = lastBytesSid || consoleApi.getActive?.();
-					lastBytesSid = null;
-					consoleApi.write(new Uint8Array(ev.data), targetSid);
-				} else {
-					let text = String(ev.data || "");
-					text = text.replace(/\r(?!\n)/g, "\r\n");
-					consoleApi.write(text);
-				}
-			}
-		},
-		onClose: () => {
-			consoleApi.write("[disconnected]\n");
-		},
-		onError: () => notifyAlert("WebSocket error", "error"),
 	});
+	wsCtrl.connect();
 }
+
+const runCtrl = setupRunButton({
+	buttonEl: runCodeBtn,
+	loadRunConfig: () => loadRunConfig(apiReadFileWrapper),
+	saveCurrentFile: fileActions.saveCurrentFile,
+	wsSend: (payload) => wsCtrl?.send?.(payload),
+	autoOpenUrl: true,
+});
 
 (async () => {
 	consoleApi = setupConsole({
-		consoleEl,
-		sendBtn: sendCMDBtn,
-		inputEl: consoleCMD,
-		ctrlButtons: $$(".btn-send"),
 		onSend: (data) => {
 			const active = consoleApi.getActive?.() || null;
 
@@ -540,15 +209,14 @@ function connectWs() {
 			const raw = String(data || "").trim();
 			if (slash?.handle(raw)) return;
 
-			if (!ws) return;
+			if (!wsCtrl?.hasConnection?.()) return;
 			if (data === "clear") {
 				consoleApi.clear(active);
 				return;
 			}
 			if (data === "ctrlc") data = "\u0003";
 			else if (data === "ctrld") data = "\u0004";
-			const payload = active ? { sid: active, data } : { data };
-			ws.send(payload);
+			wsCtrl?.sendInput?.(data);
 		},
 	});
 	try {
@@ -562,7 +230,7 @@ function connectWs() {
 		getActiveSid: () => consoleApi.getActive?.() || null,
 		clear: (sid) => consoleApi.clear?.(sid),
 		openAi: () => btnOpenAiModal?.click(),
-		openGithub: () => btnCloneRepo?.click(),
+		openGithub: () => github?.open?.(),
 		toggleTheme: () => {
 			try {
 				toggleTheme();
@@ -571,22 +239,23 @@ function connectWs() {
 			}
 		},
 		listSessions: () => consoleApi.listSessions?.() || [],
-		openSession: (sid) => ws?.send?.({ control: "open", sid }),
-		closeSession: (sid) => ws?.send?.({ control: "close", sid }),
-		focusSession: (sid) => ws?.send?.({ control: "focus", sid }),
+		openSession: (sid) => wsCtrl?.openSession?.(sid),
+		closeSession: (sid) => wsCtrl?.closeSession?.(sid),
+		focusSession: (sid) => wsCtrl?.focusSession?.(sid),
 		run: () => runCodeBtn?.click?.(),
 		openFile: (path) => openFileIntoEditor(apiReadFileWrapper, path, setPath),
-		saveFile: () => saveCurrentFile?.(),
+		saveFile: () => fileActions.saveCurrentFile?.(),
 	});
 	// Hook to sync tabs with console sessions lifecycle
 	const __open = consoleApi.openSession?.bind(consoleApi);
 	if (__open) {
+		setTimeout(() => {
+			consoleApi.setTheme(getCurrentTheme() === "dark");
+		}, 1000);
 		consoleApi.openSession = (sid, makeActive) => {
 			__open(sid, makeActive);
-			// state handled by ideStore
 			ideStore.actions.console.open(sid, !!makeActive);
-			updateTabs();
-
+			consoleTabs.update?.();
 			setTimeout(() => {
 				consoleApi.setTheme(getCurrentTheme() === "dark");
 			}, 50);
@@ -597,7 +266,7 @@ function connectWs() {
 		consoleApi.closeSession = (sid) => {
 			__close(sid);
 			ideStore.actions.console.close(sid);
-			updateTabs();
+			consoleTabs.update?.();
 		};
 	}
 	const __focus = consoleApi.focusSession?.bind(consoleApi);
@@ -605,7 +274,7 @@ function connectWs() {
 		consoleApi.focusSession = (sid) => {
 			__focus(sid);
 			ideStore.actions.console.focus(sid);
-			updateTabs();
+			consoleTabs.update?.();
 		};
 	}
 
@@ -619,10 +288,10 @@ function connectWs() {
 			while (list.includes(`s${i}`)) i++;
 			const sid = `s${i}`;
 			try {
-				ws?.send({ control: "open", sid });
+				wsCtrl?.openSession?.(sid);
 			} catch {}
 			ideStore.actions.console.open(sid, true);
-			updateTabs();
+			consoleTabs.update?.();
 		});
 	}
 	if (btnCloseSession) {
@@ -630,10 +299,10 @@ function connectWs() {
 			const sid = ideStore.get().console.active || null;
 			if (sid) {
 				try {
-					ws?.send({ control: "close", sid });
+					wsCtrl?.closeSession?.(sid);
 				} catch {}
 				ideStore.actions.console.close(sid);
-				updateTabs();
+				consoleTabs.update?.();
 			}
 		});
 	}
@@ -641,11 +310,11 @@ function connectWs() {
 
 	restartContainerBtn.addEventListener("click", () => {
 		try {
-			ws?.close();
+			wsCtrl?.close?.();
 		} catch {}
 		consoleApi.clear();
 		connectWs();
-		updateFileTabs();
+		fileTabs.update?.();
 	});
 
 	ft = setupFileTree({
@@ -656,71 +325,61 @@ function connectWs() {
 		onClearCurrent: () => {
 			pathLabel.innerText = "";
 			localStorage.removeItem(`last:${containerId}`);
-			updateFileTabs();
+			fileTabs.update?.();
 		},
 	});
 	refreshTreeBtn.addEventListener("click", async () => {
 		await ft.refresh();
 		await hydrateRun();
-		updateFileTabs();
+		fileTabs.update?.();
 	});
 
 	setupUploads({
 		api,
-		openBtn: btnOpenUpload,
-		modalEl: uploadModal,
-		closeBtn: btnUploadClose,
-		inputEl: input,
-		uploadBtn: btnUpload,
 		onDone: async () => {
 			await ft.refresh();
 			await hydrateRun();
+			fileTabs.update?.();
 		},
 		fileTreeEl: fileTreeEl,
 	});
 
-	const { setupTemplates } = await import("./templates.js");
 	setupTemplates({
-		openBtn: btnOpenTemplates,
-		modalEl: templatesModal,
-		closeBtn: btnTemplatesClose,
-		listEl: tplListEl,
-		destInput: tplDestEl,
-		cleanInput: tplCleanEl,
 		containerId,
 		refreshIDE: async () => {
 			await ft.refresh();
 			await hydrateRun();
+			fileTabs.update?.();
 		},
 	});
 
-	newFolderBtn.addEventListener("click", async () => {
+	$("#new-folder").addEventListener("click", async () => {
 		ft.newFolder(null, "folder");
+		fileTabs.update?.();
 	});
-	newFileBtn.addEventListener("click", async () => {
-		ft.newFile(null, setPath, saveCurrentFile, clearEditor, "folder");
+	$("#new-file").addEventListener("click", async () => {
+		ft.newFile(
+			null,
+			setPath,
+			fileActions.saveCurrentFile,
+			clearEditor,
+			"folder",
+		);
+		fileTabs.update?.();
 	});
 
-	btnDownloadBtn.addEventListener("click", async () => {
+	$("#btn-download").addEventListener("click", async () => {
 		open(`/api/containers/${containerId}/download_folder/`);
 	});
 
-	saveFileBtn.addEventListener("click", saveCurrentFile);
-	runCodeBtn.addEventListener("click", async () => {
-		await saveCurrentFile();
-		if (runCommand) ws.send({ data: runCommand });
-		else
-			notifyAlert(
-				"There is no 'run' command in config.json. The button is disabled.",
-				"warning",
-			);
-	});
+	$("#save-file").addEventListener("click", fileActions.saveCurrentFile);
+	/* Run button wired by setupRunButton */
 
 	window.addEventListener("keydown", (e) => {
 		const mod = e.ctrlKey || e.metaKey;
 		if (mod && e.key.toLowerCase() === "s") {
 			e.preventDefault();
-			saveCurrentFile();
+			fileActions.saveCurrentFile();
 		}
 		if (mod && e.key === "Enter") {
 			e.preventDefault();
@@ -734,13 +393,13 @@ function connectWs() {
 			let i = 1;
 			while (list.includes(`s${i}`)) i++;
 			const sid = `s${i}`;
-			ws?.send({ control: "open", sid });
+			wsCtrl?.openSession?.(sid);
 		}
 		// - Ctrl/Cmd+Shift+W: close active session
 		if (mod && e.shiftKey && e.key.toLowerCase() === "w") {
 			e.preventDefault();
 			const sid = consoleApi.getActive?.();
-			if (sid) ws?.send({ control: "close", sid });
+			if (sid) wsCtrl?.closeSession?.(sid);
 		}
 	});
 
@@ -749,11 +408,11 @@ function connectWs() {
 			e,
 			async (path) => {
 				await openFileIntoEditor(apiReadFileWrapper, path, setPath);
-				updateFileTabs();
+				fileTabs.update?.();
 			},
 			setPath,
 			clearEditor,
-			saveCurrentFile,
+			fileActions.saveCurrentFile,
 			ideStore.get().files?.active,
 		),
 	);
@@ -764,7 +423,7 @@ function connectWs() {
 	const lastPath = localStorage.getItem(`last:${containerId}`);
 	if (lastPath) await tryOpen(lastPath);
 	else await tryOpen("/app/readme.txt");
-	updateFileTabs();
+	fileTabs.update?.();
 	refreshTreeBtn.click();
 
 	async function tryOpen(p) {
@@ -776,53 +435,10 @@ function connectWs() {
 	}
 
 	async function hydrateRun() {
-		runCommand = await loadRunConfig(apiReadFileWrapper);
-		runCodeBtn.disabled = !runCommand;
-		ideStore.actions.setRunCommand(runCommand);
+		await runCtrl.hydrate();
 	}
 
 	// moved: apiReadFileWrapper initialized earlier to avoid race
-
-	async function saveCurrentFile() {
-		const activePath = ideStore.get().files?.active || null;
-		if (!activePath) {
-			notifyAlert("Open a file first", "error");
-			return;
-		}
-		const content = getEditor()?.getModel()?.getValue?.() ?? getEditorValue();
-		const prev = fsws.revs.get(activePath) || 0;
-		try {
-			const res = await fsws.call("write_file", {
-				path: activePath,
-				prev_rev: prev,
-				content,
-			});
-			const nextRev = typeof res?.rev === "number" ? res.rev : prev + 1;
-			fsws.revs.set(activePath, nextRev);
-			notifyAlert(`File ${activePath} saved`, "success");
-			if (activePath === "/app/config.json") await hydrateRun();
-			try {
-				const m = getEditor()?.getModel?.();
-				if (m) m._prk_lastSaved = m.getValue?.() ?? "";
-				window.dispatchEvent(
-					new CustomEvent("editor-dirty-changed", {
-						detail: { path: activePath, dirty: false },
-					}),
-				);
-			} catch {}
-		} catch (e) {
-			if (String(e.message).includes("conflict")) {
-				const cur = fsws.revs.get(activePath) || 0;
-				notifyAlert(
-					`Conflict saving saving current Rev ${cur}. Reload...`,
-					"error",
-				);
-				await openFileIntoEditor(apiReadFileWrapper, activePath, setPath);
-			} else {
-				notifyAlert(e.message || String(e), "error");
-			}
-		}
-	}
 
 	window.addEventListener("beforeunload", () => {
 		try {
@@ -833,33 +449,15 @@ function connectWs() {
 	window.addEventListener("themechange", (ev) => {
 		const isDark = ev.detail?.theme === "dark";
 		changeTheme(isDark, consoleApi);
-		updateFileTabs();
+		fileTabs.update?.();
 		ideStore.actions.setTheme(isDark ? "dark" : "light");
 	});
 
-	const githubModal = $("#github-modal");
-	const githubTitleEl = githubModal?.querySelector(".upload-header > span");
-	const githubModalCtrl = bindModal(
-		githubModal,
-		btnCloneRepo,
-		btnCloseCloneRepo,
-		{
-			titleEl: githubTitleEl,
-			defaultTitle: githubTitleEl?.textContent || "Clone from Github",
-			initialFocus: () => $("#url_git"),
-		},
-	);
-	btnSubmitCloneRepo.addEventListener("click", async () => {
-		const repo = $("#url_git").value;
-		const base_path = $("#base_path").value;
-		const cmd = `bash -lc 'set -euo pipefail; REPO="${repo}"; X="${base_path}"; TMP="$(mktemp -d)"; git clone "$REPO" "$TMP/repo"; sudo mkdir -p /app; find /app -mindepth 1 -not -name "readme.txt" -not -name "config.json" -exec rm -rf {} +; SRC="$TMP/repo"; [ "\${X:-/}" != "/" ] && SRC="$TMP/repo/\${X#/}"; shopt -s dotglob nullglob; mv "$SRC"/* /app/; rm -rf "$TMP"'`;
-
-		if (ws != null) {
-			ws.send({ data: cmd });
-			await sleep(ACTION_DELAYS.cloneRepoWaitMs);
+	const github = setupGithubModal({
+		wsCtrl,
+		refreshIDE: async () => {
 			await ft.refresh();
 			await hydrateRun();
-			githubModalCtrl.close();
-		}
+		},
 	});
 })();
