@@ -1,6 +1,44 @@
 /** biome-ignore-all lint/complexity/noImportantStyles: Important stuff is important */
 /** biome-ignore-all lint/style/noDescendingSpecificity: I do not know css :( */
 
+/* ===== Preview (IDE sidebar) ===== */
+.preview-box {
+	padding: 4px;
+	background: var(--card);
+	border-top: 1px solid var(--border);
+}
+
+.preview-box.hidden {
+	display: none;
+}
+
+#preview-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 4px;
+}
+
+#preview-toolbar > input {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+#preview-iframe {
+	width: 100%;
+	height: 30vh;
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+/* Better use of space on small screens */
+@media (max-width: 768px) {
+	#preview-iframe {
+		height: 35vh;
+	}
+}
+
 /* ===== Base ===== */
 html,
 body {

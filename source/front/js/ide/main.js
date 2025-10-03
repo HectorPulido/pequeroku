@@ -198,6 +198,7 @@ const runCtrl = setupRunButton({
 	saveCurrentFile: fileActions.saveCurrentFile,
 	wsSend: (payload) => wsCtrl?.send?.(payload),
 	autoOpenUrl: true,
+	readFileApi: apiReadFileWrapper,
 });
 
 (async () => {

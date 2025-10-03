@@ -59,6 +59,9 @@
                     <button id="toggle-search" title="Toggle search">
                         <i class="iconoir-search"></i>
                     </button>
+                    <button id="toggle-preview" title="Toggle preview">
+                        <i class="iconoir-globe"></i>
+                    </button>
                     <button
                         id="toggle-sidebar-2"
                         class="hidden-big"
@@ -102,6 +105,31 @@
                         />
                     </div>
                     <ul id="search-results" class="search-results"></ul>
+                </div>
+                <div id="preview-box" class="preview-box hidden">
+                    <div class="toolbar" id="preview-toolbar">
+                        <input
+                            id="preview-url"
+                            type="text"
+                            placeholder="https://example.com"
+                            autocomplete="off"
+                        />
+                        <button id="btn-preview-go" title="Go">
+                            <i class="iconoir-arrow-right"></i>
+                        </button>
+                        <button id="btn-preview-refresh" title="Refresh">
+                            <i class="iconoir-reload-window"></i>
+                        </button>
+                        <button id="btn-preview-popout" title="Open in new tab">
+                            <i class="iconoir-open-new-window"></i>
+                        </button>
+                    </div>
+                    <iframe
+                        id="preview-iframe"
+                        src="about:blank"
+                        frameborder="0"
+                        style="width: 100%; height: 30vh;"
+                    ></iframe>
                 </div>
                 <ul id="file-tree"></ul>
             </div>
@@ -336,5 +364,7 @@
 
         <script type="module" src="/js/ide/main.js"></script>
         <script type="module" src="/js/ide/aiChat.js"></script>
+        <script type="module" src="/js/ide/minibrowser.js"></script>
+
     </body>
 </html>
