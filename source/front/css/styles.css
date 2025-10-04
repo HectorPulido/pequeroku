@@ -112,7 +112,8 @@ main {
 }
 
 /* Console Styles */
-#console-modal {
+#console-modal,
+#create-container-modal {
 	position: fixed;
 	top: 0;
 	left: 0;
@@ -123,6 +124,22 @@ main {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+}
+
+.container-type-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#create-modal-header {
+    width: 50%;
+}
+
+#create-modal-body {
+    width: 50%;
+    height: auto;
+    padding: 10px;
 }
 
 .console-header {

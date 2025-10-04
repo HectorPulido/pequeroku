@@ -95,7 +95,8 @@ body {
 #ai-modal,
 #templates-modal,
 #metrics-modal,
-#github-modal {
+#github-modal,
+#create-modal{
 	position: fixed;
 	top: 0;
 	left: 0;

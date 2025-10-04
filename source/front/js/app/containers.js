@@ -55,6 +55,14 @@ export function setupContainers() {
 	const metricsModalBody = $("#metrics-modal-body");
 	const btnFullscreenMetrics = $("#btn-fullscreen-metrics");
 
+	let containerTypes = null;
+	let currentCredits = 0;
+	let createModalEl = null;
+	let createModalBody = null;
+	let createTitleEl = null;
+	let btnCloseCreate = null;
+	let createCtrl = null;
+
 	let lastSig = null;
 	let pollId = null;
 	let currentUsername = null;
@@ -97,9 +105,9 @@ export function setupContainers() {
 			userData.innerText = `Hello ${data.username?.[0]?.toUpperCase()}${data.username?.slice(1) || ""}!`;
 			quotaInfo.textContent = JSON.stringify(data, null, "\t");
 			if (data.has_quota) {
-				btnCreate.innerHTML = `<i class="mod-iconoir iconoir-plus-circle"></i> New container (${data.quota.max_containers - data.active_containers})`;
-				btnCreate.disabled =
-					data.active_containers >= data.quota.max_containers;
+				currentCredits = Number(data?.quota?.credits_left ?? 0) || 0;
+				btnCreate.innerHTML = `<i class="mod-iconoir iconoir-plus-circle"></i> New container (${currentCredits})`;
+				btnCreate.disabled = currentCredits <= 0;
 			} else {
 				btnCreate.innerText = "No quota";
 				btnCreate.disabled = true;
@@ -189,13 +197,106 @@ export function setupContainers() {
 
 	async function createContainer() {
 		try {
-			await makeApi("/api/containers")("/", {
-				method: "POST",
-				credentials: "same-origin",
+			// Refresh user data to get latest credits label/state (best-effort)
+			try {
+				await fetchUserData();
+			} catch {}
+
+			// Fetch container types (cache after first call)
+			if (!Array.isArray(containerTypes)) {
+				containerTypes = await makeApi("/api/container-types")("/", {
+					credentials: "same-origin",
+					noLoader: true,
+					noAuthRedirect: true,
+					noAuthAlert: true,
+				});
+			}
+
+			// Lazy-build modal DOM
+			if (!createModalEl) {
+				createModalEl = document.createElement("div");
+				createModalEl.id = "create-container-modal";
+				createModalEl.className = "hidden";
+				createModalEl.innerHTML = `
+					<div id="create-modal-header" class="console-header console">
+						<span id="create-title">Create container</span>
+						<div>
+							<button id="btn-close-create" class="top-btn">
+								<i class="iconoir-xmark-circle"></i>
+							</button>
+						</div>
+					</div>
+					<div id="create-modal-body" class="console-body console"></div>
+				`;
+				document.body.appendChild(createModalEl);
+
+				createTitleEl = createModalEl.querySelector("#create-title");
+				btnCloseCreate = createModalEl.querySelector("#btn-close-create");
+				createModalBody = createModalEl.querySelector("#create-modal-body");
+
+				createCtrl = bindModal(createModalEl, null, btnCloseCreate, {
+					titleEl: createTitleEl,
+					defaultTitle: "Create container",
+				});
+			}
+
+			// Render available types
+			createModalBody.innerHTML = renderContainerTypes(containerTypes, currentCredits);
+
+			// Wire actions
+			Array.from(createModalBody.querySelectorAll("[data-type-id]")).forEach((btn) => {
+				btn.onclick = async () => {
+					const typeId = Number(btn.getAttribute("data-type-id"));
+					try {
+						await makeApi("/api/containers")("/", {
+							method: "POST",
+							credentials: "same-origin",
+							body: JSON.stringify({ container_type: typeId }),
+						});
+						createCtrl?.close?.();
+						await fetchContainers();
+						// Update credits shown in header (best-effort)
+						try {
+							await fetchUserData();
+						} catch {}
+					} catch (e) {
+						addAlert(e.message, "error");
+					}
+				};
 			});
-			await fetchContainers();
+
+			createCtrl.open({ title: "Create container" });
 		} catch (e) {
 			addAlert(e.message, "error");
+		}
+
+		function renderContainerTypes(types, credits_left) {
+			if (!Array.isArray(types) || types.length === 0) {
+				return `<div>No container types available</div>`;
+			}
+			const items = types
+				.map((t) => {
+					const canAfford =
+						typeof t.credits_cost === "number" ? credits_left >= t.credits_cost : true;
+					const disabled = !canAfford ? "disabled" : "";
+					const note =
+						typeof t.credits_cost === "number"
+							? `Cost: ${t.credits_cost} credits`
+							: "";
+					const name = t.container_type_name || t.name || `Type #${t.id}`;
+					const mem = t.memory_mb ? `${t.memory_mb} MB` : "";
+					const cpu = t.vcpus ? `${t.vcpus} vCPU` : "";
+					const disk = t.disk_gib ? `${t.disk_gib} GiB` : "";
+					const specs = [mem, cpu, disk].filter(Boolean).join(" • ");
+					return `
+<div class="container-card container-type-card">
+  <h3>${name}</h3>
+  <p>${specs || ""}</p>
+  <button data-type-id="${t.id}" ${disabled}><i class="mod-iconoir iconoir-plus-circle"></i> Create (${note})</button>
+</div>`;
+				})
+				.join("");
+			return `<div class="container-grid">${items}</div>`;
 		}
 	}
 
