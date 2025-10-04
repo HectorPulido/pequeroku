@@ -29,17 +29,21 @@ Files are plain ES modules with no build step. External libraries are loaded via
   - The main app shell:
     - Login form (`/api/user/login/`)
     - Containers dashboard (`/api/containers/`)
-    - Actions: create, start, stop, delete
+    - Actions: create (select container type and optional name), start, stop, delete
+    - The “New container” button shows remaining credits and is disabled when insufficient
     - Opens the IDE and Metrics in iframes or new tabs
   - Entry script: `/js/app/main.js`
 
 - `ide.html`
   - In-browser micro-IDE for a container:
-    - File tree (WebSocket-based FS operations)
-    - Monaco editor for code editing
-    - xterm.js-based terminal with multi-session tabs
-    - “Run” action via a configurable `config.json`
-    - GitHub clone helper
+    - File tree (WebSocket-based FS operations) with live broadcasts
+    - Monaco editor for code editing with dirty tracking and tabs
+    - xterm.js-based terminal with multi-session tabs and slash commands
+    - Search across files, open-by-path, and quick actions
+    - GitHub clone modal and file uploads
+    - Run button from `/app/config.json` with optional auto-open URL
+    - Optional AI chat panel for the current container
+    - Mini-browser preview and draggable/resizable panes
   - Entry script: `/js/ide/main.js`
 
 - `metrics.html`
@@ -67,12 +71,23 @@ Files are plain ES modules with no build step. External libraries are loaded via
     - `editor.js` – Monaco integration and layout
     - `console.js` – xterm.js multi-session console
     - `files.js` – file-tree UI and actions
+    - `fileActions.js` – new file/folder, save, delete, rename helpers
+    - `tabs.js` – file and console tabs management
+    - `dirtyTracker.js` – tracks unsaved changes
+    - `search.js` – find and open files quickly
     - `fs-ws.js` – WS RPC for FS (read/write/move/delete/broadcast)
-    - `websockets.js` – WS for container console sessions
-    - `templates.js` – list/apply project templates
-    - `uploads.js` – file upload modal
+    - `fsAdapter.js` – adapter to read files via FS WebSocket
+    - `wsController.js` – multiplexed console sessions controller
+    - `websockets.js` – low-level WS helpers for console
     - `runConfig.js` – reads `/app/config.json` and exposes run command
+    - `runButton.js` – binds run action and handles auto-open URL
+    - `templates.js` – list/apply project templates
+    - `githubModal.js` – GitHub clone helper UI
+    - `uploads.js` – file upload modal
+    - `minibrowser.js` – preview URLs inside the IDE
+    - `aiChat.js` – container-scoped AI chat panel
     - `hiddableDraggable.js` – responsive/resizable panels
+    - `slashCommands.js` – client-side slash commands for console
   - `metrics/`
     - `main.js` – polling loop, charts, KPIs
   - `core/` – shared utilities
@@ -95,11 +110,13 @@ All calls assume same-origin and use cookies for auth/CSRF. The fetch wrapper se
 
 - Auth and user data
   - `POST /api/user/login/` – login
-  - `GET /api/user/me/` – user info, quota
+  - `GET /api/user/me/` – user info, credits and quota flags
 
 - Containers (dashboard)
   - `GET /api/containers/` – list containers
-  - `POST /api/containers/` – create new container
+  - `GET /api/container-types/` – list available container types
+  - `POST /api/containers/` – create new container by selecting a type
+    - JSON body: `{"container_type": <id>, "container_name": "<optional>"}`
   - `POST /api/containers/{id}/power_on/` – start
   - `POST /api/containers/{id}/power_off/` – stop
   - `DELETE /api/containers/{id}/` – delete
@@ -110,6 +127,7 @@ All calls assume same-origin and use cookies for auth/CSRF. The fetch wrapper se
   - `WS /ws/fs/{containerPk}/` – file system RPC and broadcasts
     - Actions like `read_file`, `write_file`, `path_moved`, `path_deleted`, etc.
     - Revision numbers are used for basic conflict detection
+  - `WS /ws/ai/{containerId}/` – AI assistant stream for the active container
 
 - Templates
   - `GET /api/templates/`

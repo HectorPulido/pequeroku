@@ -124,7 +124,7 @@ export function setupContainers() {
 
 		card.innerHTML = `
 <h2>${c.id} — ${c.name}</h2>
-<small>${c.username}</small> - <small>${new Date(c.created_at).toLocaleString()}</small>
+<small>${c.username}</small> - <small>${c.container_type_name}</small> - <small>${new Date(c.created_at).toLocaleString()}</small>
 <p>Status: <strong id="st-${c.id}" class="status-${c.status}">${c.status}</strong></p>
 <div>
   <button class="btn-edit" ${!isRunning ? "hidden" : ""}><i class="mod-iconoir iconoir-edit-pencil"></i> Open</button>
@@ -241,34 +241,38 @@ export function setupContainers() {
 			}
 
 			// Render available types
-			createModalBody.innerHTML = renderContainerTypes(
-				containerTypes,
-				currentCredits,
-			);
+			createModalBody.innerHTML = renderContainerTypes(containerTypes, currentCredits);
 
 			// Wire actions
-			Array.from(createModalBody.querySelectorAll("[data-type-id]")).forEach(
-				(btn) => {
-					btn.onclick = async () => {
-						const typeId = Number(btn.getAttribute("data-type-id"));
+			Array.from(createModalBody.querySelectorAll("[data-type-id]")).forEach((btn) => {
+				btn.onclick = async () => {
+					const typeId = Number(btn.getAttribute("data-type-id"));
+					// Read optional container name from the input
+					const nameInput = createModalEl.querySelector("#container-name-input");
+					const containerName =
+						nameInput && typeof nameInput.value === "string"
+							? nameInput.value.trim()
+							: "";
+					const payload = { container_type: typeId };
+					if (containerName) payload.container_name = containerName;
+
+					try {
+						await makeApi("/api/containers")("/", {
+							method: "POST",
+							credentials: "same-origin",
+							body: JSON.stringify(payload),
+						});
+						createCtrl?.close?.();
+						await fetchContainers();
+						// Update credits shown in header (best-effort)
 						try {
-							await makeApi("/api/containers")("/", {
-								method: "POST",
-								credentials: "same-origin",
-								body: JSON.stringify({ container_type: typeId }),
-							});
-							createCtrl?.close?.();
-							await fetchContainers();
-							// Update credits shown in header (best-effort)
-							try {
-								await fetchUserData();
-							} catch {}
-						} catch (e) {
-							addAlert(e.message, "error");
-						}
-					};
-				},
-			);
+							await fetchUserData();
+						} catch {}
+					} catch (e) {
+						addAlert(e.message, "error");
+					}
+				};
+			});
 
 			createCtrl.open({ title: "Create container" });
 		} catch (e) {
@@ -282,9 +286,7 @@ export function setupContainers() {
 			const items = types
 				.map((t) => {
 					const canAfford =
-						typeof t.credits_cost === "number"
-							? credits_left >= t.credits_cost
-							: true;
+						typeof t.credits_cost === "number" ? credits_left >= t.credits_cost : true;
 					const disabled = !canAfford ? "disabled" : "";
 					const note =
 						typeof t.credits_cost === "number"
@@ -296,14 +298,18 @@ export function setupContainers() {
 					const disk = t.disk_gib ? `${t.disk_gib} GiB` : "";
 					const specs = [mem, cpu, disk].filter(Boolean).join(" • ");
 					return `
-<div class="container-card container-type-card">
-  <h3>${name}</h3>
-  <p>${specs || ""}</p>
-  <button data-type-id="${t.id}" ${disabled}><i class="mod-iconoir iconoir-plus-circle"></i> Create (${note})</button>
-</div>`;
+	<div class="container-card container-type-card">
+	  <h3>${name}</h3>
+	  <p>${specs || ""}</p>
+	  <button data-type-id="${t.id}" ${disabled}><i class="mod-iconoir iconoir-plus-circle"></i> Create (${note})</button>
+	</div>`;
 				})
 				.join("");
-			return `<div class="container-grid">${items}</div>`;
+			return `
+	<div style="margin-bottom: 0.75rem">
+		<input type="text" id="container-name-input" placeholder="Container name (Optional)" style="width: 100%; padding: 0.5rem; margin-top: 0.25rem; border: 1px solid var(--button-border); border-radius: 4px; background: var(--console-bg); color: var(--console-fg);" />
+	</div>
+	<div class="container-grid">${items}</div>`;
 		}
 	}
 

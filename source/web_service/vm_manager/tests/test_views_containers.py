@@ -193,13 +193,13 @@ def test_create_container_uses_quota_and_node_and_vmclient(monkeypatch):
     assert res.status_code == 201, res.content
 
     data = res.json()
-    assert data["container_id"].startswith("vm-new-")
     # Check DB object created with the ID from create_vm
     obj = Container.objects.get(pk=data["id"])
     assert obj.node == node
     assert obj.memory_mb == 256
     assert obj.vcpus == 1
     assert obj.disk_gib == 10
+    assert obj.container_id.startswith("vm-new-")
 
 
 def test_destroy_container_calls_vm_delete(monkeypatch):

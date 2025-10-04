@@ -26,8 +26,7 @@ class ContainerSerializer(serializers.ModelSerializer):
             "user",
             "username",
             "desired_state",
-            "container_id",
-            "container_type",
+            "container_type_name",
             "memory_mb",
             "vcpus",
             "disk_gib",
@@ -38,18 +37,23 @@ class ContainerSerializer(serializers.ModelSerializer):
             "base_image",
             "created_at",
             "status",
-            "container_id",
-            "container_type",
+            "container_type_name",
             "memory_mb",
             "vcpus",
             "disk_gib",
         ]
 
-    username = serializers.SerializerMethodField("get_username", read_only=True)
+    username = serializers.SerializerMethodField(read_only=True)
+    container_type_name = serializers.SerializerMethodField(read_only=True)
 
-    def get_username(self, obj) -> str:
+    def get_username(self, obj: Container) -> str:
         """Get the username for the container"""
         return obj.user.username
+
+    def get_container_type_name(self, obj: Container) -> str:
+        if not obj.container_type:
+            return "Not yet"
+        return obj.container_type.container_type_name
 
 
 class ContainerTypeSerializer(serializers.ModelSerializer):

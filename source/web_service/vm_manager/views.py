@@ -93,6 +93,7 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
         # Resolve requested container type (if any)
         ct_id = cast(str | None, request.data.get("container_type"))
+        ct_name = cast(str | None, request.data.get("container_name"))
 
         if not ct_id:
             audit_log_http(
@@ -106,10 +107,23 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
                 "Invalid container type", status=status.HTTP_400_BAD_REQUEST
             )
 
-        ct = None
+        ct: ContainerType | None = None
         try:
             ct = ContainerType.objects.get(pk=int(ct_id))
         except:
+            audit_log_http(
+                request,
+                action="container.create",
+                message="Invalid container type",
+                metadata={"container_type": ct_id},
+                success=False,
+            )
+            return Response(
+                "Invalid container type", status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # This will not happen
+        if not ct or not isinstance(ct, ContainerType):
             audit_log_http(
                 request,
                 action="container.create",
@@ -151,12 +165,9 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Determine requested resources from type or legacy quota defaults
-        vcpus = int(ct.vcpus) if ct else int(getattr(quota, "vcpus", 2))
-        mem_mb = int(ct.memory_mb) if ct else int(getattr(quota, "max_memory_mb", 256))
-        disk_gib = (
-            int(ct.disk_gib) if ct else int(getattr(quota, "default_disk_gib", 10))
-        )
+        vcpus = int(ct.vcpus)
+        mem_mb = int(ct.memory_mb)
+        disk_gib = int(ct.disk_gib)
 
         node = self.choose_node(vcpus, mem_mb)
 
@@ -184,6 +195,7 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         )
 
         c = Container.objects.create(
+            name=ct_name,
             user=request.user,
             container_id=vm["id"],
             base_image="",
@@ -195,14 +207,12 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             container_type=ct,
         )
 
-        metadata = {"container_id": c.container_id, "image": c.base_image}
-        if ct:
-            metadata.update(
-                {
-                    "container_type": ct.pk,
-                    "credits_cost": getattr(ct, "credits_cost", None),
-                }
-            )
+        metadata: dict[str, object] = {
+            "container_id": str(c.container_id),
+            "image": str(c.base_image),
+            "container_type": str(ct.pk),
+            "credits_cost": getattr(ct, "credits_cost", None),
+        }
 
         audit_log_http(
             request,

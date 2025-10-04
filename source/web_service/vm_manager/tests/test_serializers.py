@@ -31,23 +31,35 @@ pytestmark = pytest.mark.django_db
 def test_container_serializer_serializes_username_and_basic_fields():
     user = create_user(username="bob")
     node = create_node()
-    c = create_container(user=user, node=node, container_id="vm-001")
+    type = create_container_type(memory_mb=512, vcpus=2, disk_gib=10)
+    c = create_container(user=user, node=node, container_id="vm-001", container_type=type)
 
     ser = ContainerSerializer(instance=c)
     data = ser.data
 
+    assert c.container_id == "vm-001"
+
     assert data["id"] == c.id
     assert data["name"] == "my-container"
-    assert data["container_id"] == "vm-001"
     assert data["status"] == Container.Status.RUNNING
     assert data["desired_state"] == Container.DesirableStatus.RUNNING
     assert data["memory_mb"] == 512
     assert data["vcpus"] == 2
     assert data["disk_gib"] == 10
-    # container_type should be present and None by default
-    assert data["container_type"] is None
     # SerializerMethodField
+    assert data["container_type_name"] == "default"
     assert data["username"] == "bob"
+
+def test_container_serializer_serializes_null_container_type():
+    user = create_user(username="bob")
+    node = create_node()
+    c = create_container(user=user, node=node, container_id="vm-001")
+
+    ser = ContainerSerializer(instance=c)
+    data = ser.data
+
+    assert c.container_id == "vm-001"
+    assert data["container_type_name"] == "Not yet"
 
 
 def test_container_serializer_read_only_fields_are_ignored_on_update():

@@ -47,41 +47,31 @@ This project was created to give community members a slice of my servers where t
 
 ### 1. Prepare base qcow2 image
 
-For **Debian 12 (x86)**:
+Follow the [qcow2 creation steps](create-image.md) if you don't already have a qcow2 image.
 
+Move your image into source/vm_data/base/ (relative to the repository root).
 ```bash
-sudo apt-get update
-sudo apt-get install -y qemu-kvm qemu-utils cloud-image-utils genisoimage \
-                        libvirt-daemon-system libvirt-clients libvirt libguestfs-tools
-curl -LO https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
-mv debian-12-genericcloud-amd64.qcow2 debian-raw.qcow2
-sudo virt-customize -a debian-raw.qcow2 --install docker-ce,python3,git
-sudo qemu-img convert -O qcow2 debian-raw.qcow2 debian12-golden.qcow2
-```
-
-For **ARM64 boards (Raspberry Pi, Orange Pi, etc.)**, follow [ARM qcow2 creation steps](docs/ARM.md) (similar to above, but using `qemu-system-arm`).
-
-Finally, move your golden image to:
-
-```bash
-mv debian12-golden.qcow2 ./vm_data/base/
+mv debian12-golden.qcow2 ./source/vm_data/base/
 ```
 
 ### 2. Clone the repository
 
 ```bash
-git clone https://github.com/yourname/pequeroku.git
+git clone https://github.com/HectorPulido/pequeroku.git
 cd pequeroku
 ```
 
 ### 3. Configure environment
 
-* Copy `.env.example` to `.env` and adjust values (DB credentials, auth token, allowed hosts).
-* Ensure your SSH key is mounted in `docker-compose.yaml`.
+* Per service, copy the env template to `.env` and adjust values:
+  * `source/web_service/.env.template` → `source/web_service/.env` (DB credentials, allowed hosts, auth, etc.)
+  * `source/vm_service/.env.template` → `source/vm_service/.env` (AUTH_TOKEN, Redis, base image overrides, etc.)
+* Ensure your SSH key mapping in `source/docker-compose.yaml` under `vm_services` matches your host key path.
 
 ### 4. Start services
 
 ```bash
+cd source
 docker compose up --build
 ```
 
@@ -92,7 +82,7 @@ The stack includes:
 * VM manager (FastAPI).
 * Web service (Django + DRF).
 * Redis + Postgres.
-* Nginx (serves frontend + static files).
+* Nginx (serves frontend + static files; routes `/` to dashboard, `/ide/` to IDE, `/metrics/` to metrics).
 
 
 
@@ -101,9 +91,13 @@ The stack includes:
 ![brief animation on how create a discord server on Pequeroku](img/DiscordExample.gif)
 
 1. Open the web UI at [http://localhost](http://localhost).
-2. Login with your user (create via Django superuser or API).
+2. Log in with your user. If you don't have one, create an admin in the web container:
+   ```bash
+   cd source
+   docker compose exec web python manage.py createsuperuser
+   ```
 3. Create a container (VM).
-4. Open it in the IDE:
+4. Open it in the IDE (or navigate directly to `/ide/` for the IDE, `/metrics/` for metrics):
    * Edit code with Monaco.
    * Run commands in the terminal.
    * Upload/download files.
@@ -114,7 +108,7 @@ The stack includes:
 
 ## 🤖 AI Features
 
-Pequeroku is capable to generate complete projects from scratch using OpenAI compatible services. More ways to use the AI comming soon...
+PequeRoku can generate complete projects from scratch using OpenAI‑compatible services. More ways to use the AI coming soon...
 
 ![brief animation on how the AI part works](img/AI.gif)
 
