@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-import os
 import threading
 import uuid
 import shlex
 
+from typing import cast
+
+import paramiko
 from fastapi import HTTPException, Depends, APIRouter, Query
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from implementations.read_from_vm import list_dirs
 import settings
@@ -39,7 +41,7 @@ from implementations import (
 )
 
 from implementations.ssh_cache import cache_ssh_and_sftp
-from security import verify_bearer_token
+from middleware import verify_bearer_token
 
 
 store = RedisStore(settings.REDIS_URL, settings.REDIS_PREFIX)
@@ -48,7 +50,7 @@ runner = Runner(store, settings.NODE_NAME)
 vms_router = APIRouter(prefix="/vms", dependencies=[Depends(verify_bearer_token)])
 
 
-# ---- Endpoints REST ----
+# ---- REST Endpoints ----
 @vms_router.post("/", response_model=VMOut, status_code=201)
 async def create_vm(req: VMCreate) -> VMOut:
     vm_id = str(uuid.uuid4())
@@ -170,25 +172,6 @@ async def delete_vm(vm_id: str) -> VMOut:
     return VMOut.from_record(vm, runner)
 
 
-@vms_router.get("/{vm_id}/console/tail")
-async def tail_console(vm_id: str, lines: int = 120) -> JSONResponse:
-    try:
-        vm: "VMRecord" = store.get(vm_id)
-    except KeyError as e:
-        raise HTTPException(404, "VM not found") from e
-    log = getattr(vm.proc, "console_log", None) if vm.proc else None
-    out = ""
-    if log and os.path.exists(log):
-        try:
-            # tail naive
-            with open(log, "r", encoding="utf-8", errors="ignore") as f:
-                data = f.readlines()
-            out = "".join(data[-lines:])
-        except Exception:
-            out = ""
-    return JSONResponse({"vm_id": vm_id, "lines": lines, "console": out})
-
-
 @vms_router.post("/{vm_id}/search", response_model=list[SearchHit])
 async def search_in_vm(vm_id: str, req: SearchRequest) -> list[SearchHit]:
     try:
@@ -200,9 +183,12 @@ async def search_in_vm(vm_id: str, req: SearchRequest) -> list[SearchHit]:
 
     try:
         val = cache_ssh_and_sftp(vm)
-        cli = val["cli"]
+        cli = cast(paramiko.SSHClient | None, val["cli"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"SSH error: {e}")
+
+    if not cli:
+        raise HTTPException(status_code=500, detail="No cli available")
 
     cmd_parts = [
         "grep",
@@ -222,9 +208,8 @@ async def search_in_vm(vm_id: str, req: SearchRequest) -> list[SearchHit]:
     cmd_parts.extend(["-e", req.pattern, req.root])
     command = " ".join(shlex.quote(p) for p in cmd_parts)
     try:
-        stdin, stdout, stderr = cli.exec_command(command)
+        _, stdout, _ = cli.exec_command(command)
         stdout.channel.settimeout(req.timeout_seconds)
-        err = stderr.read().decode("utf-8", errors="replace")
         out_bytes = stdout.read()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Remote exec error: {e}")
@@ -268,11 +253,15 @@ async def execute_sh(vm_id: str, vm_command: VMSh) -> ElementResponse:
     output = ""
     try:
         val = cache_ssh_and_sftp(vm)
-        cli = val["cli"]
-        stdin, stdout, stderr = cli.exec_command(command)
+        cli = cast(paramiko.SSHClient, val["cli"])
+
+        if not cli:
+            return ElementResponse(ok=False, reason="Not valid client")
+
+        _, stdout, stderr = cli.exec_command(command)
         stdout.channel.settimeout(5)
-        out: str = stdout.read().decode()
-        err: str = stderr.read().decode()
+        out = cast(str, stdout.read().decode())
+        err = cast(str, stderr.read().decode())
 
         if len(out.strip()) > 0:
             output += f"Result: {out}\n"

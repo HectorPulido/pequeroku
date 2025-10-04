@@ -327,10 +327,10 @@ def test_retry_on_exception_sync_behavior():
         calls["n"] += 1
         raise ValueError("nope")
 
-    with pytest.raises(ValueError):
-        boom(1)
-    # Called once (no retries due to immediate raise in impl)
-    assert calls["n"] == 1
+    res = boom(1)
+    assert res is None
+    # Called twice (retries == len(delays))
+    assert calls["n"] == 2
 
     @retry_on_exception(delays=[0.01])
     def ok(x):
@@ -350,9 +350,9 @@ def test_retry_on_exception_async_behavior():
             calls["n"] += 1
             raise RuntimeError("explode")
 
-        with pytest.raises(RuntimeError):
-            await async_boom()
-        assert calls["n"] == 1
+        res = await async_boom()
+        assert res is None
+        assert calls["n"] == 2
 
         @retry_on_exception(delays=[0.01])
         async def async_ok():

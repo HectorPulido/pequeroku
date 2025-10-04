@@ -1,13 +1,16 @@
 import os
 import shlex
 import mimetypes
+from typing import Any
 import paramiko
 
 from models import VMRecord, ListDirItem, FileContent
 from .ssh_cache import open_ssh, open_sftp
 
 
-def _execute_list(root: str, cli: paramiko.SSHClient, depth: int = 1):
+def _execute_list(
+    root: str, cli: paramiko.SSHClient, depth: int = 1
+) -> list[ListDirItem]:
     items: list[ListDirItem] = []
     try:
         cmd = f"find {shlex.quote(root)} -maxdepth {depth} -printf '%p||%y\\n' 2>/dev/null || true"
@@ -46,7 +49,7 @@ def list_dir(container: VMRecord, path: str) -> list[ListDirItem]:
     return list_dirs(container, [path], 1)
 
 
-def read_file(container: VMRecord, path: str):
+def read_file(container: VMRecord, path: str) -> FileContent:
     sftp = open_sftp(container)
 
     data = ""
@@ -69,7 +72,7 @@ def read_file(container: VMRecord, path: str):
     )
 
 
-def download_file(vm: VMRecord, path: str):
+def download_file(vm: VMRecord, path: str) -> dict[str, Any] | None:
     sftp = open_sftp(vm)
     if not sftp:
         print("Issue downloading...", "issue with sftp")
@@ -108,7 +111,9 @@ def _zip_available(cli: paramiko.SSHClient) -> bool:
     return out.read().decode().strip() == "OK"
 
 
-def download_folder(vm: VMRecord, root: str, prefer_fmt: str = "zip"):
+def download_folder(
+    vm: VMRecord, root: str, prefer_fmt: str = "zip"
+) -> dict[str, Any] | None:
     cli = open_ssh(vm)
     if not cli:
         print("Error generating zip folder", "SSH unavailable")

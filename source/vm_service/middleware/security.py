@@ -1,9 +1,5 @@
 from fastapi import (
-    FastAPI,
     HTTPException,
-    WebSocket,
-    WebSocketDisconnect,
-    Depends,
     Security,
 )
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -25,9 +21,9 @@ def _forbidden() -> HTTPException:
 
 
 async def verify_bearer_token(
-    credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Security(bearer_scheme),
 ) -> None:
-    if credentials is None or credentials.scheme.lower() != "bearer":
+    if not credentials or credentials.scheme.lower() != "bearer":
         raise _unauthorized()
     token = credentials.credentials
     if token != settings.AUTH_TOKEN:

@@ -19,8 +19,7 @@ from implementations import (
     Runner,
 )
 
-from metrics import router_metrics
-from vms import vms_router
+from routes import router_metrics, vms_router
 
 
 store = RedisStore(settings.REDIS_URL, settings.REDIS_PREFIX)

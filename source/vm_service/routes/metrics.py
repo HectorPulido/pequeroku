@@ -1,8 +1,10 @@
 import os
 import time
+from typing import Callable
+from typing_extensions import Any
 import psutil
 from fastapi import HTTPException, APIRouter, Depends
-from security import verify_bearer_token
+from middleware import verify_bearer_token
 from implementations import RedisStore, Runner
 import settings
 
@@ -26,7 +28,7 @@ def human_bytes(n: float | None) -> str:
     return "-"
 
 
-def safe(call, default=None):
+def safe(call: Callable[..., Any], default: None | Any = None) -> Any:
     try:
         return call()
     except (psutil.AccessDenied, psutil.ZombieProcess, psutil.NoSuchProcess):
@@ -51,7 +53,7 @@ async def get_vms(vm_id: str) -> MachineMetrics:
 
     try:
         p = psutil.Process(pid)
-        p.cpu_percent(interval=None)
+        _ = p.cpu_percent(interval=None)
     except Exception as e:
         print("Error with PID", e)
         raise HTTPException(500, "Error with PID, something went wrong")

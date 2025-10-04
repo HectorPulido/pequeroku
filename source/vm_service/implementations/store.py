@@ -67,9 +67,15 @@ class RedisStore:
                 )
                 else int(str(d["ssh_port"]))
             ),
-            ssh_user=str(d.get("ssh_user")),
-            key_ref=str(d.get("key_ref")),
-            error_reason=str(d.get("error_reason")),
+            ssh_user=(
+                None if d.get("ssh_user") in (None, "") else str(d.get("ssh_user"))
+            ),
+            key_ref=(None if d.get("key_ref") in (None, "") else str(d.get("key_ref"))),
+            error_reason=(
+                None
+                if d.get("error_reason") in (None, "")
+                else str(d.get("error_reason"))
+            ),
             created_at=float(str(d["created_at"])),
             updated_at=float(str(d["updated_at"])),
         )
@@ -86,7 +92,11 @@ class RedisStore:
             return False
 
     def _reconcile(self, vm: VMRecord):
-        if vm.state == VMState.running and not self._ssh_alive(vm.ssh_port):
+        if (
+            vm.state == VMState.running
+            and vm.ssh_port is not None
+            and not self._ssh_alive(vm.ssh_port)
+        ):
             self.set_status(
                 vm, VMState.stopped, error_reason="reconciled: ssh port not reachable"
             )
