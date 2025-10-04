@@ -21,27 +21,27 @@ class AIUsageLogAdmin(admin.ModelAdmin):
     list_display = (
         "user",
         "query",
-        "created_at",
         "prompt_tokens",
         "completion_tokens",
         "total_cost",
+        "created_at",
     )
     readonly_fields = ("cost_input", "cost_output", "total_cost")
 
     def cost_input(self, obj):
         if not obj:
-            return 0
-        return obj.get_request_price().get("cost_input", 0)
+            return f"${0:.2f}"
+        return f"${obj.get_request_price().get('cost_input', 0):.4f}"
 
     def cost_output(self, obj):
         if not obj:
-            return 0
-        return obj.get_request_price().get("cost_output", 0)
+            return f"${0:.2f}"
+        return f"${obj.get_request_price().get('cost_output', 0):.4f}"
 
     def total_cost(self, obj):
         if not obj:
-            return 0
-        return obj.get_request_price().get("total_cost", 0)
+            return f"${0:.2f}"
+        return f"${obj.get_request_price().get('total_cost', 0):.4f}"
 
     cost_input.short_description = "Cost input"
     cost_output.short_description = "Cost output"
