@@ -127,19 +127,19 @@ main {
 }
 
 .container-type-card {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 }
 
 #create-modal-header {
-    width: 50%;
+	width: 50%;
 }
 
 #create-modal-body {
-    width: 50%;
-    height: auto;
-    padding: 10px;
+	width: 50%;
+	height: auto;
+	padding: 10px;
 }
 
 .console-header {

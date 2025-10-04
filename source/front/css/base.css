@@ -96,7 +96,7 @@ body {
 #templates-modal,
 #metrics-modal,
 #github-modal,
-#create-modal{
+#create-modal {
 	position: fixed;
 	top: 0;
 	left: 0;

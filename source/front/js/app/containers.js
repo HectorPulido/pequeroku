@@ -241,29 +241,34 @@ export function setupContainers() {
 			}
 
 			// Render available types
-			createModalBody.innerHTML = renderContainerTypes(containerTypes, currentCredits);
+			createModalBody.innerHTML = renderContainerTypes(
+				containerTypes,
+				currentCredits,
+			);
 
 			// Wire actions
-			Array.from(createModalBody.querySelectorAll("[data-type-id]")).forEach((btn) => {
-				btn.onclick = async () => {
-					const typeId = Number(btn.getAttribute("data-type-id"));
-					try {
-						await makeApi("/api/containers")("/", {
-							method: "POST",
-							credentials: "same-origin",
-							body: JSON.stringify({ container_type: typeId }),
-						});
-						createCtrl?.close?.();
-						await fetchContainers();
-						// Update credits shown in header (best-effort)
+			Array.from(createModalBody.querySelectorAll("[data-type-id]")).forEach(
+				(btn) => {
+					btn.onclick = async () => {
+						const typeId = Number(btn.getAttribute("data-type-id"));
 						try {
-							await fetchUserData();
-						} catch {}
-					} catch (e) {
-						addAlert(e.message, "error");
-					}
-				};
-			});
+							await makeApi("/api/containers")("/", {
+								method: "POST",
+								credentials: "same-origin",
+								body: JSON.stringify({ container_type: typeId }),
+							});
+							createCtrl?.close?.();
+							await fetchContainers();
+							// Update credits shown in header (best-effort)
+							try {
+								await fetchUserData();
+							} catch {}
+						} catch (e) {
+							addAlert(e.message, "error");
+						}
+					};
+				},
+			);
 
 			createCtrl.open({ title: "Create container" });
 		} catch (e) {
@@ -277,7 +282,9 @@ export function setupContainers() {
 			const items = types
 				.map((t) => {
 					const canAfford =
-						typeof t.credits_cost === "number" ? credits_left >= t.credits_cost : true;
+						typeof t.credits_cost === "number"
+							? credits_left >= t.credits_cost
+							: true;
 					const disabled = !canAfford ? "disabled" : "";
 					const note =
 						typeof t.credits_cost === "number"
