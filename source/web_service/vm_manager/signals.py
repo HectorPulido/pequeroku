@@ -4,7 +4,13 @@ from django.dispatch import receiver
 from django.db.models.signals import post_save, post_migrate
 
 from internal_config.models import Config
-from .models import ResourceQuota, FileTemplate, FileTemplateItem, Container, Node
+from .models import (
+    ResourceQuota,
+    FileTemplate,
+    FileTemplateItem,
+    Node,
+    ContainerType,
+)
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
@@ -14,22 +20,17 @@ def create_user_quota(sender, instance, created, **kwargs):
     """
     default_values = Config.get_config_values(
         [
-            "default_vcpus",
-            "default_mem_mib",
-            "default_disk_gib",
-            "max_containers",
             "default_ai_use_per_day",
+            "default_credits",
         ]
     )
 
     ResourceQuota.objects.get_or_create(
         user=instance,
         defaults={
-            "vcpus": int(default_values.get("default_vcpus", "1")),
-            "max_containers": int(default_values.get("max_containers", "1")),
-            "max_memory_mb": int(default_values.get("default_mem_mib", "1024")),
             "ai_use_per_day": int(default_values.get("default_ai_use_per_day", "5")),
-            "default_disk_gib": int(default_values.get("default_disk_gib", "10")),
+            "credits": int(default_values.get("default_credits", "3")),
+            "active": True,
         },
     )
 
@@ -108,3 +109,44 @@ def create_default_file_templates(sender, **kwargs):
                         "order": int(i.get("order", 0)),
                     },
                 )
+
+
+@receiver(post_migrate)
+def create_default_container_types(sender, **kwargs):
+    """
+    Seed default ContainerType instances if none exist.
+    - small: 1GB RAM, 1 vCPU, 5GB disk
+    - medium: 2GB RAM, 2 vCPU, 10GB disk
+    - large: 4GB RAM, 4 vCPU, 25GB disk
+    """
+    if getattr(sender, "name", None) != "vm_manager":
+        return
+
+    if ContainerType.objects.exists():
+        return
+
+    specs = [
+        {
+            "container_type_name": "small",
+            "memory_mb": 1024,
+            "vcpus": 1,
+            "disk_gib": 5,
+            "credits_cost": 1,
+        },
+        {
+            "container_type_name": "medium",
+            "memory_mb": 2048,
+            "vcpus": 2,
+            "disk_gib": 10,
+            "credits_cost": 2,
+        },
+        {
+            "container_type_name": "large",
+            "memory_mb": 4096,
+            "vcpus": 4,
+            "disk_gib": 25,
+            "credits_cost": 4,
+        },
+    ]
+    for s in specs:
+        ContainerType.objects.create(**s)

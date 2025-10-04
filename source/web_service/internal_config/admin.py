@@ -18,7 +18,34 @@ class ConfigAdmin(admin.ModelAdmin):
 
 @admin.register(AIUsageLog)
 class AIUsageLogAdmin(admin.ModelAdmin):
-    list_display = ("user", "query", "created_at")
+    list_display = (
+        "user",
+        "query",
+        "created_at",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_cost",
+    )
+    readonly_fields = ("cost_input", "cost_output", "total_cost")
+
+    def cost_input(self, obj):
+        if not obj:
+            return 0
+        return obj.get_request_price().get("cost_input", 0)
+
+    def cost_output(self, obj):
+        if not obj:
+            return 0
+        return obj.get_request_price().get("cost_output", 0)
+
+    def total_cost(self, obj):
+        if not obj:
+            return 0
+        return obj.get_request_price().get("total_cost", 0)
+
+    cost_input.short_description = "Cost input"
+    cost_output.short_description = "Cost output"
+    total_cost.short_description = "Total cost"
 
 
 @admin.register(AuditLog)

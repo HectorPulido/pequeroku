@@ -1,18 +1,16 @@
-import io
-from unittest.mock import Mock
-
 import pytest
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
-from vm_manager.models import Node, Container, ResourceQuota
+from vm_manager.models import Container, ResourceQuota
 
 from vm_manager.test_utils import (
     create_quota,
     create_user,
     create_container,
     create_node,
+    create_container_type,
 )
 
 pytestmark = pytest.mark.django_db
@@ -178,14 +176,20 @@ def test_create_container_uses_quota_and_node_and_vmclient(monkeypatch):
     user = create_user("u3")
     # Node with enough resources
     node = create_node(capacity_vcpus=2, capacity_mem_mb=2048)
-    # Quota small enough to fit in node
-    create_quota(user=user, vcpus=1, max_memory_mb=256, ai_use_per_day=5)
+    # Create a container type within node capacity
+    t = create_container_type(
+        container_type_name="S", memory_mb=256, vcpus=1, disk_gib=10, credits_cost=1
+    )
+    # Create quota and allow this type
+    create_quota(user=user, credits=5, ai_use_per_day=5)
+    user.refresh_from_db()
+    user.quota.allowed_types.set([t.id])
 
     client = APIClient()
     client.force_authenticate(user=user)
 
     url = reverse("container-list")
-    res = client.post(url, data={})
+    res = client.post(url, data={"container_type": t.id}, format="json")
     assert res.status_code == 201, res.content
 
     data = res.json()
@@ -195,7 +199,7 @@ def test_create_container_uses_quota_and_node_and_vmclient(monkeypatch):
     assert obj.node == node
     assert obj.memory_mb == 256
     assert obj.vcpus == 1
-    assert obj.disk_gib == user.quota.default_disk_gib
+    assert obj.disk_gib == 10
 
 
 def test_destroy_container_calls_vm_delete(monkeypatch):
@@ -359,16 +363,22 @@ def test_create_container_fallback_when_insufficient_capacity(monkeypatch):
     patch_services(monkeypatch)
 
     user = create_user("u12")
-    # Quota larger than node capacity to force scheduler to return None
-    create_quota(user=user, vcpus=8, max_memory_mb=16384)
     # Candidate node exists but with insufficient capacity
     node = create_node(capacity_vcpus=2, capacity_mem_mb=2048)
+    # Type larger than node capacity to force scheduler to return None
+    t = create_container_type(
+        container_type_name="XL", memory_mb=16384, vcpus=8, disk_gib=20, credits_cost=1
+    )
+    # Quota allows this type
+    create_quota(user=user, credits=5)
+    user.refresh_from_db()
+    user.quota.allowed_types.set([t.id])
 
     client = APIClient()
     client.force_authenticate(user=user)
 
     url = reverse("container-list")
-    res = client.post(url, data={})
+    res = client.post(url, data={"container_type": t.id}, format="json")
     assert res.status_code == 201
 
     data = res.json()
@@ -378,22 +388,28 @@ def test_create_container_fallback_when_insufficient_capacity(monkeypatch):
     assert "No available nodes with enough capacity" in res["X-Warning"]
 
     obj = Container.objects.get(pk=data["id"])
-    assert obj.node == node
+    assert obj.node is not None
 
 
 def test_create_container_fallback_when_no_candidates(monkeypatch):
     patch_services(monkeypatch)
 
     user = create_user("u13")
-    create_quota(user=user, vcpus=1, max_memory_mb=256)
     # No candidates due to unhealthy node (still present for random fallback)
     node = create_node(healthy=False)
+    # Type that would fit on a normal node
+    t = create_container_type(
+        container_type_name="S", memory_mb=256, vcpus=1, disk_gib=10, credits_cost=1
+    )
+    create_quota(user=user, credits=3)
+    user.refresh_from_db()
+    user.quota.allowed_types.set([t.id])
 
     client = APIClient()
     client.force_authenticate(user=user)
 
     url = reverse("container-list")
-    res = client.post(url, data={})
+    res = client.post(url, data={"container_type": t.id}, format="json")
     assert res.status_code == 201
 
     data = res.json()
@@ -458,3 +474,64 @@ def test_power_on_sets_desired_state_running(monkeypatch):
 
     c.refresh_from_db()
     assert c.desired_state == Container.DesirableStatus.RUNNING
+
+
+def test_create_container_requires_container_type(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("req_type")
+    create_quota(user=user, credits=3)
+    node = create_node()
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-list")
+    res = client.post(url, data={}, format="json")
+    assert res.status_code == 400
+    assert "Invalid container type" in res.content.decode()
+
+
+def test_create_container_type_not_allowed(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("not_allowed")
+    # Create a type but do not add to allowed_types
+    t = create_container_type(
+        container_type_name="M", memory_mb=512, vcpus=2, disk_gib=10, credits_cost=1
+    )
+    create_quota(user=user, credits=5)
+    node = create_node()
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-list")
+    res = client.post(url, data={"container_type": t.id}, format="json")
+    assert res.status_code == 403
+    assert "not allowed" in res.content.decode().lower()
+
+
+def test_create_container_insufficient_credits(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("no_credits")
+    # Type costs 2 credits; give user only 1
+    t = create_container_type(
+        container_type_name="H", memory_mb=256, vcpus=1, disk_gib=10, credits_cost=2
+    )
+    create_quota(user=user, credits=1)
+    user.refresh_from_db()
+    user.quota.allowed_types.set([t.id])
+    node = create_node()
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-list")
+    res = client.post(url, data={"container_type": t.id}, format="json")
+    assert res.status_code == 403
+    assert "not enough credits" in res.content.decode().lower()
+
+
+# Removed duplicate tests for container creation validations

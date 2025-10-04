@@ -14,11 +14,10 @@ def create_default_configs(sender, **kwargs):
     print("Generating base configs...")
 
     defaults = [
+        {"name": "token_output_price", "value": "7.5e-7", "description": ""},
+        {"name": "token_input_price", "value": "1.5e-7", "description": ""},
         {"name": "default_ai_use_per_day", "value": "5", "description": ""},
-        {"name": "max_containers", "value": "2", "description": ""},
-        {"name": "default_disk_gib", "value": "10", "description": ""},
-        {"name": "default_mem_mib", "value": "2048", "description": ""},
-        {"name": "default_vcpus", "value": "2", "description": ""},
+        {"name": "default_credits", "value": "3", "description": ""},
         {"name": "openai_model", "value": "openai/gpt-oss-120b", "description": ""},
         {
             "name": "openai_api_url",

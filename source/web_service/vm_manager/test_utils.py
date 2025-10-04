@@ -6,6 +6,7 @@ from vm_manager.models import (
     ResourceQuota,
     FileTemplate,
     FileTemplateItem,
+    ContainerType,
 )
 from vm_manager.serializers import (
     ContainerSerializer,
@@ -31,17 +32,52 @@ def create_user(username="alice", password="pass1234", is_superuser=False):
 def create_quota(user=None, **kwargs):
     if user is None:
         user = create_user()
+    # Drop legacy kwargs that no longer exist on the model
+    legacy_keys = ["max_containers", "max_memory_mb", "vcpus", "default_disk_gib"]
+    for k in legacy_keys:
+        kwargs.pop(k, None)
+    # Accept optional allowed_types to assign M2M after creation
+    allowed_types = kwargs.pop("allowed_types", None)
+
     defaults = dict(
-        max_containers=1, max_memory_mb=256, vcpus=2, ai_use_per_day=5, active=True
+        ai_use_per_day=5,
+        credits=3,
+        active=True,
     )
     defaults.update(kwargs)
 
     obj, _ = ResourceQuota.objects.update_or_create(user=user, defaults=defaults)
 
+    # Assign allowed container types if provided
+    if allowed_types is not None:
+        ids = []
+        for t in allowed_types:
+            if isinstance(t, int):
+                ids.append(t)
+            else:
+                try:
+                    ids.append(t.pk)
+                except AttributeError:
+                    continue
+        obj.allowed_types.set(ids)
+
+    # Bust OneToOne cached relation to ensure fresh DB read in tests
     if hasattr(user, "__dict__") and "quota" in user.__dict__:
         user.__dict__.pop("quota", None)
 
     return obj
+
+
+def create_container_type(
+    container_type_name="default", memory_mb=256, vcpus=1, disk_gib=10, credits_cost=1
+):
+    return ContainerType.objects.create(
+        container_type_name=container_type_name,
+        memory_mb=memory_mb,
+        vcpus=vcpus,
+        disk_gib=disk_gib,
+        credits_cost=credits_cost,
+    )
 
 
 def create_node(
@@ -68,7 +104,12 @@ def create_node(
 
 
 def create_container(
-    user=None, node=None, with_quota=True, container_id="vm-123", **kwargs
+    user=None,
+    node=None,
+    with_quota=True,
+    container_id=None,
+    container_type=None,
+    **kwargs,
 ):
     if user is None:
         user = create_user()
@@ -76,6 +117,8 @@ def create_container(
         node = create_node()
     if with_quota and not hasattr(user, "quota"):
         create_quota(user=user)
+    if container_id is None:
+        container_id = f"vm-{int(timezone.now().timestamp()*1_000_000_000)}"
     defaults = dict(
         name="my-container",
         base_image="",
@@ -85,6 +128,8 @@ def create_container(
         status=Container.Status.RUNNING,
         desired_state=Container.DesirableStatus.RUNNING,
     )
+    if container_type is not None:
+        defaults["container_type"] = container_type
     defaults.update(kwargs)
     return Container.objects.create(
         user=user,

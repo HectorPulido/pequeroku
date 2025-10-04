@@ -1,6 +1,7 @@
 import os
 import base64
 from dataclasses import asdict
+from typing import cast
 
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -21,8 +22,9 @@ from .serializers import (
     FileTemplateSerializer,
     ApplyTemplateRequestSerializer,
     ApplyTemplateResponseSerializer,
+    ContainerTypeSerializer,
 )
-from .models import Container, FileTemplate, Node
+from .models import Container, FileTemplate, Node, ContainerType
 from .vm_client import VMServiceClient, VMCreate, VMAction, VMUploadFiles, VMFile
 
 from .templates import (
@@ -89,40 +91,95 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             )
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
-        if not quota.can_create_container(request.user):
+        # Resolve requested container type (if any)
+        ct_id = cast(str | None, request.data.get("container_type"))
+
+        if not ct_id:
             audit_log_http(
                 request,
                 action="container.create",
-                message="Quota exceeded for container creation",
+                message="Invalid container type",
+                metadata={"container_type": ct_id},
+                success=False,
+            )
+            return Response(
+                "Invalid container type", status=status.HTTP_400_BAD_REQUEST
+            )
+
+        ct = None
+        try:
+            ct = ContainerType.objects.get(pk=int(ct_id))
+        except:
+            audit_log_http(
+                request,
+                action="container.create",
+                message="Invalid container type",
+                metadata={"container_type": ct_id},
+                success=False,
+            )
+            return Response(
+                "Invalid container type", status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not quota.allowed_types.filter(pk=ct.pk).exists():
+            audit_log_http(
+                request,
+                action="container.create",
+                message="Container type not allowed for this quota",
+                metadata={"container_type": ct.pk},
+                success=False,
+            )
+            return Response(
+                "Container type not allowed for this quota",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        can_create = quota.can_create_container(container_type=ct)
+        if not can_create:
+            audit_log_http(
+                request,
+                action="container.create",
+                message="Not enough credits for selected type",
                 metadata={
-                    "max_containers": quota.max_containers,
+                    "container_type": cast(int, ct.pk),
+                    "credits_cost": getattr(ct, "credits_cost", None),
                 },
                 success=False,
             )
-            return Response("Quota exceeded", status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                "Not enough credits for selected type",
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
-        node = self.choose_node(quota.vcpus, quota.max_memory_mb)
+        # Determine requested resources from type or legacy quota defaults
+        vcpus = int(ct.vcpus) if ct else int(getattr(quota, "vcpus", 2))
+        mem_mb = int(ct.memory_mb) if ct else int(getattr(quota, "max_memory_mb", 256))
+        disk_gib = (
+            int(ct.disk_gib) if ct else int(getattr(quota, "default_disk_gib", 10))
+        )
+
+        node = self.choose_node(vcpus, mem_mb)
 
         warn_msg = None
         if not node:
-            print(
-                f"quota.vcpus: {quota.vcpus}, quota.max_memory_mb: {quota.max_memory_mb}"
-            )
-            # Best-effort fallback: pick a node even if capacity appears full
-            candidates = self._candidate_nodes(heartbeat_ttl_s=3600)
-            if candidates:
-                node = max(candidates, key=lambda n: n.get_node_score())
-            else:
-                node = Node.get_random_node()
+            node = Node.get_random_node()
             warn_msg = "No available nodes with enough capacity; proceeding on best-effort node"
+            print(f"requested vcpus: {vcpus}, requested mem_mb: {mem_mb}")
+            print(warn_msg)
+
+        if not node:
+            return Response(
+                "No node available",
+                status=status.HTTP_501_NOT_IMPLEMENTED,
+            )
 
         service = VMServiceClient(node)
 
         vm = service.create_vm(
             VMCreate(
-                vcpus=quota.vcpus,
-                mem_mib=quota.max_memory_mb,
-                disk_gib=quota.default_disk_gib,
+                vcpus=vcpus,
+                mem_mib=mem_mb,
+                disk_gib=disk_gib,
             )
         )
 
@@ -131,11 +188,21 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             container_id=vm["id"],
             base_image="",
             status="creating",
-            memory_mb=quota.max_memory_mb,
-            vcpus=quota.vcpus,
-            disk_gib=quota.default_disk_gib,
+            memory_mb=mem_mb,
+            vcpus=vcpus,
+            disk_gib=disk_gib,
             node=node,
+            container_type=ct,
         )
+
+        metadata = {"container_id": c.container_id, "image": c.base_image}
+        if ct:
+            metadata.update(
+                {
+                    "container_type": ct.pk,
+                    "credits_cost": getattr(ct, "credits_cost", None),
+                }
+            )
 
         audit_log_http(
             request,
@@ -143,7 +210,7 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             target_type="container",
             target_id=c.pk,
             message="Container record created and VM boot scheduled",
-            metadata={"container_id": c.container_id, "image": c.base_image},
+            metadata=metadata,
             success=True,
         )
 
@@ -571,3 +638,19 @@ class FileTemplateViewSet(viewsets.ModelViewSet):
         }
 
         return Response(ApplyTemplateResponseSerializer(payload).data)
+
+
+class ContainerTypeViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only viewset to list and retrieve available container types.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ContainerTypeSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        quota = getattr(user, "quota", None)
+        if quota and quota.allowed_types.exists():
+            return quota.allowed_types.all()
+        return ContainerType.objects.none()

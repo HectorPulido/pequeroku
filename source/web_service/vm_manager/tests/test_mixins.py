@@ -5,7 +5,7 @@ from django.utils import timezone
 from vm_manager.mixin import VMSyncMixin
 from vm_manager.models import Node, Container
 
-from vm_manager.test_utils import create_quota, create_user
+from vm_manager.test_utils import create_user
 
 pytestmark = pytest.mark.django_db
 

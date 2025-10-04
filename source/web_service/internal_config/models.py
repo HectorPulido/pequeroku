@@ -1,11 +1,12 @@
 from django.db import models
-from django.conf import settings
 from vm_manager.models import Container
+
+from django.contrib.auth.models import User
 
 
 class AIUsageLog(models.Model):
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ai_usage_logs"
+        User, on_delete=models.CASCADE, related_name="ai_usage_logs"
     )
     container = models.ForeignKey(
         Container,
@@ -31,11 +32,23 @@ class AIUsageLog(models.Model):
             models.Index(fields=["user", "created_at"]),
         ]
 
+    def get_request_price(self):
+        pricing = Config.get_config_values(["token_input_price", "token_output_price"])
+        token_input_price = float(pricing.get("token_input_price", 0))
+        token_output_price = float(pricing.get("token_output_price", 0))
+
+        cost_input = int(self.prompt_tokens) * token_input_price
+        cost_output = int(self.completion_tokens) * token_output_price
+        cost_total = cost_input + cost_output
+        return {
+            "cost_input": cost_input,
+            "cost_output": cost_output,
+            "total_cost": cost_total,
+        }
+
 
 class AIMemory(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="user"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="user")
     container = models.ForeignKey(
         Container, on_delete=models.CASCADE, related_name="container"
     )
@@ -80,9 +93,7 @@ class AuditLog(models.Model):
         ("agent_tool.read_from_internet", "Agent tool read_from_internet"),
     ]
 
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
-    )
+    user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
     action = models.CharField(max_length=64, choices=ACTION_CHOICES)
     target_type = models.CharField(max_length=64, blank=True, default="")
     target_id = models.CharField(max_length=64, blank=True, default="")

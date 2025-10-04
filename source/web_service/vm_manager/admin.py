@@ -10,7 +10,19 @@ from .models import (
     Node,
     Team,
     TeamMembership,
+    ContainerType,
 )
+
+
+@admin.register(ContainerType)
+class ContainerTypeAdmin(admin.ModelAdmin):
+    list_display = (
+        "container_type_name",
+        "memory_mb",
+        "vcpus",
+        "disk_gib",
+        "credits_cost",
+    )
 
 
 class TeamMembershipItemInline(admin.TabularInline):
@@ -152,7 +164,7 @@ class ContainersInline(admin.TabularInline):
 
 @admin.register(ResourceQuota)
 class ResourceQuotaAdmin(admin.ModelAdmin):
-    list_display = ("user", "max_containers", "max_memory_mb", "vcpus")
+    list_display = ("user", "ai_use_per_day", "credits", "active")
     readonly_fields = ("logs", "ai_logs")
     inlines = [ContainersInline]
 

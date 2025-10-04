@@ -2,7 +2,6 @@ import pytest
 
 from vm_manager.models import (
     Container,
-    ResourceQuota,
     FileTemplate,
     FileTemplateItem,
 )
@@ -15,6 +14,7 @@ from vm_manager.serializers import (
     ApplyTemplateResponseSerializer,
     ApplyAICodeRequestSerializer,
     ApplyAICodeResponseSerializer,
+    ContainerTypeSerializer,
 )
 
 from vm_manager.test_utils import (
@@ -22,6 +22,7 @@ from vm_manager.test_utils import (
     create_user,
     create_node,
     create_container,
+    create_container_type,
 )
 
 pytestmark = pytest.mark.django_db
@@ -43,6 +44,8 @@ def test_container_serializer_serializes_username_and_basic_fields():
     assert data["memory_mb"] == 512
     assert data["vcpus"] == 2
     assert data["disk_gib"] == 10
+    # container_type should be present and None by default
+    assert data["container_type"] is None
     # SerializerMethodField
     assert data["username"] == "bob"
 
@@ -85,6 +88,10 @@ def test_resource_quota_serializer_ai_uses_left_today_equals_total_when_unused()
     # No AIUsageLog entries yet, so left == total
     assert data["ai_uses_left_today"] == 7
     assert data["active"] is True
+    # New fields
+    assert data["credits"] == quota.credits
+    assert isinstance(data["allowed_types"], list)
+    # allowed_types may include public types auto-assigned by default
 
 
 def test_user_info_serializer_without_quota_returns_defaults():
@@ -102,17 +109,27 @@ def test_user_info_serializer_without_quota_returns_defaults():
 
     assert data["username"] == "erin"
     assert data["has_quota"] is False
-    assert data["quota"]["max_containers"] == 0
-    assert data["quota"]["max_memory_mb"] == 0
-    assert data["quota"]["vcpus"] == 0
+    # New default quota fields
+    assert data["quota"]["credits"] == 0
     assert data["quota"]["ai_use_per_day"] == 0
     assert data["quota"]["ai_uses_left_today"] == 0
+    assert data["quota"]["allowed_types"] == []
 
 
 def test_user_info_serializer_with_quota_embeds_serialized_quota():
     user = create_user(username="frank")
+    t1 = create_container_type(
+        container_type_name="Small", memory_mb=256, vcpus=1, disk_gib=10, credits_cost=1
+    )
+    t2 = create_container_type(
+        container_type_name="Medium",
+        memory_mb=1024,
+        vcpus=2,
+        disk_gib=20,
+        credits_cost=2,
+    )
     quota = create_quota(
-        user=user, max_containers=3, max_memory_mb=1024, vcpus=4, ai_use_per_day=10
+        user=user, credits=5, ai_use_per_day=10, allowed_types=[t1, t2]
     )
 
     payload = {
@@ -126,11 +143,17 @@ def test_user_info_serializer_with_quota_embeds_serialized_quota():
     data = ser.data
 
     assert data["has_quota"] is True
-    assert data["quota"]["max_containers"] == 3
-    assert data["quota"]["max_memory_mb"] == 1024
-    assert data["quota"]["vcpus"] == 4
+    assert data["quota"]["credits"] == 5
     assert data["quota"]["ai_use_per_day"] == 10
     assert data["quota"]["ai_uses_left_today"] == 10
+    assert isinstance(data["quota"]["allowed_types"], list)
+    assert len(data["quota"]["allowed_types"]) == 2
+    ids = sorted([it["id"] for it in data["quota"]["allowed_types"]])
+    assert ids == sorted([t1.id, t2.id])
+    # Ensure legacy fields are not present
+    assert "max_containers" not in data["quota"]
+    assert "max_memory_mb" not in data["quota"]
+    assert "vcpus" not in data["quota"]
 
 
 def test_file_template_serializer_includes_items_in_order():
@@ -223,3 +246,40 @@ def test_apply_ai_code_response_serializer_schema():
     ser = ApplyAICodeResponseSerializer(data=payload)
     assert ser.is_valid(), ser.errors
     assert ser.validated_data == payload
+
+
+def test_container_type_serializer_serializes_fields():
+    t = create_container_type(
+        container_type_name="Small", memory_mb=256, vcpus=1, disk_gib=10, credits_cost=1
+    )
+    ser = ContainerTypeSerializer(instance=t)
+    d = ser.data
+    assert d["id"] == t.id
+    assert d["container_type_name"] == "Small"
+    assert d["memory_mb"] == 256
+    assert d["vcpus"] == 1
+    assert d["disk_gib"] == 10
+    assert d["credits_cost"] == 1
+
+
+def test_resource_quota_serializer_includes_allowed_types():
+    user = create_user(username="zoe")
+    t1 = create_container_type(
+        container_type_name="Small", memory_mb=256, vcpus=1, disk_gib=10, credits_cost=1
+    )
+    t2 = create_container_type(
+        container_type_name="Medium",
+        memory_mb=1024,
+        vcpus=2,
+        disk_gib=20,
+        credits_cost=2,
+    )
+    quota = create_quota(user=user, credits=5, allowed_types=[t1, t2], ai_use_per_day=3)
+
+    ser = ResourceQuotaSerializer(instance=quota)
+    d = ser.data
+    assert d["credits"] == 5
+    assert d["ai_use_per_day"] == 3
+    assert len(d["allowed_types"]) == 2
+    ids = sorted([it["id"] for it in d["allowed_types"]])
+    assert ids == sorted([t1.id, t2.id])

@@ -1,5 +1,11 @@
 from rest_framework import serializers
-from .models import Container, ResourceQuota, FileTemplate, FileTemplateItem
+from .models import (
+    Container,
+    ResourceQuota,
+    FileTemplate,
+    FileTemplateItem,
+    ContainerType,
+)
 
 
 class ContainerSerializer(serializers.ModelSerializer):
@@ -21,6 +27,7 @@ class ContainerSerializer(serializers.ModelSerializer):
             "username",
             "desired_state",
             "container_id",
+            "container_type",
             "memory_mb",
             "vcpus",
             "disk_gib",
@@ -32,6 +39,7 @@ class ContainerSerializer(serializers.ModelSerializer):
             "created_at",
             "status",
             "container_id",
+            "container_type",
             "memory_mb",
             "vcpus",
             "disk_gib",
@@ -44,25 +52,44 @@ class ContainerSerializer(serializers.ModelSerializer):
         return obj.user.username
 
 
+class ContainerTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContainerType
+        fields = [
+            "id",
+            "container_type_name",
+            "memory_mb",
+            "vcpus",
+            "disk_gib",
+            "credits_cost",
+        ]
+        read_only_fields = fields
+
+
 class ResourceQuotaSerializer(serializers.ModelSerializer):
     """
     Serializer for ResourceQuota
     """
 
     ai_uses_left_today = serializers.SerializerMethodField()
+    credits_left = serializers.SerializerMethodField()
+    allowed_types = ContainerTypeSerializer(many=True, read_only=True)
 
     class Meta:
         """Serializer meta"""
 
         model = ResourceQuota
         fields = (
-            "max_containers",
-            "max_memory_mb",
-            "vcpus",
+            "credits",
+            "credits_left",
             "ai_use_per_day",
             "ai_uses_left_today",
             "active",
+            "allowed_types",
         )
+
+    def get_credits_left(self, obj) -> int:
+        return obj.credits_left()
 
     def get_ai_uses_left_today(self, obj) -> int:
         """
@@ -88,11 +115,10 @@ class UserInfoSerializer(serializers.Serializer):
         if quota:
             return dict(ResourceQuotaSerializer(quota).data)
         return {
-            "max_containers": 0,
-            "max_memory_mb": 0,
-            "vcpus": 0,
+            "credits": 0,
             "ai_use_per_day": 0,
             "ai_uses_left_today": 0,
+            "allowed_types": [],
         }
 
 
