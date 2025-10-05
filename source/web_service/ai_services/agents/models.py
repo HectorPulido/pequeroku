@@ -43,7 +43,7 @@ class AgentTool:
         response = ""
 
         for tool in tools:
-            response += f"tool {tool.name}> \n{AgentParameter.render_parameters(tool.parameters)}"
+            response += f"tool {tool.name}> \nParamters:\n{AgentParameter.render_parameters(tool.parameters)}"
             response += "\n---\n"
 
         return response
@@ -196,4 +196,17 @@ class DedupPolicy:
 
 
 ToolResult = dict[str, object] | dict[str, dict[str, str]]
-TokenUsage = dict[str, int]
+
+
+@dataclass
+class TokenUsage:
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+    def add_usage(self, token_usage: TokenUsage) -> TokenUsage:
+        return TokenUsage(
+            prompt_tokens=self.prompt_tokens + token_usage.prompt_tokens,
+            completion_tokens=self.completion_tokens + token_usage.completion_tokens,
+            total_tokens=self.total_tokens + token_usage.total_tokens,
+        )

@@ -110,9 +110,35 @@ def test_ai_consumer_with_mocked_agent_streams_and_updates_quota(monkeypatch):
 
     # Patch the consumer module and inject our FakeAgent instance
     import ai_services.ai_consumers as ai_consumers
+    import ai_services.ai_engineer as ai_engineer
 
     fake_agent = FakeAgent(chunks=["Hola", " mundo", "!"], final_text="Hola mundo!")
+    # Patch both consumer-level and ai_engineer agent to avoid real API calls
     monkeypatch.setattr(ai_consumers, "agent", fake_agent)
+    monkeypatch.setattr(ai_engineer, "agent", fake_agent)
+
+    # Fake run_pipeline to simulate streaming and avoid network usage
+    async def fake_run_pipeline(
+        query,
+        messages,
+        container_obj,
+        on_chunk,
+        on_tool_call,
+        on_start_chunking,
+        on_finish_chunking,
+    ):
+        new_messages = list(messages)
+        new_messages.append({"role": "user", "content": query})
+        # start stream event
+        await on_start_chunking()
+        # stream chunks and finish
+        streamed_messages, _ = await fake_agent.get_response_no_tools(
+            new_messages, False, on_chunk=on_chunk, on_finish=on_finish_chunking
+        )
+        # return messages and a dummy token usage
+        return streamed_messages, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    monkeypatch.setattr(ai_consumers, "run_pipeline", fake_run_pipeline, raising=True)
 
     # Patch static DB helpers to avoid cross-thread issues and to simulate quota decrease
     calls = {"uses": 3, "memory": []}

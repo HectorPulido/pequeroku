@@ -1,6 +1,6 @@
 from __future__ import annotations
 import time
-from typing import cast
+from typing import Any, cast
 from vm_manager.models import Container, Node
 from vm_manager.vm_client import (
     VMPaths,
@@ -21,9 +21,7 @@ def _get_service(obj: Container) -> VMServiceClient:
 
 @sync_to_async
 def read_workspace(
-    dedup_policy: DedupPolicy | None,
-    container: Container,
-    subdir: str | None = None,
+    container: Container, subdir: str | None = None, **_: dict[str, Any]
 ) -> ToolResult:
     start = time.monotonic()
     path = f"/app/{subdir}".replace("//", "/").replace("/app/app", "/app")
@@ -52,6 +50,7 @@ def create_file(
     container: Container,
     path: str,
     content: str,
+    **_: dict[str, Any],
 ) -> ToolResult:
     start = time.monotonic()
     subdir = f"/app/{path}".replace("//", "/").replace("/app/app/", "/app/")
@@ -99,7 +98,7 @@ def create_file(
 
 
 @sync_to_async
-def read_file(dedup_policy: DedupPolicy, container: Container, path: str) -> ToolResult:
+def read_file(container: Container, path: str, **_: dict[str, Any]) -> ToolResult:
     start = time.monotonic()
     subdir = f"/app/{path}".replace("//", "/").replace("/app/app/", "/app/")
     if len(path.strip()) == 0:
@@ -263,7 +262,10 @@ Additional notes:
 
 @sync_to_async
 def create_full_project(
-    dedup_policy: DedupPolicy, container: Container, full_description: str
+    dedup_policy: DedupPolicy,
+    container: Container,
+    full_description: str,
+    **_: dict[str, Any],
 ) -> ToolResult:
     import os
     from django.conf import settings
@@ -348,7 +350,7 @@ def create_full_project(
         container_id, "cd /app && python3 build_from_gencode.py"
     )
     response["finished"] = True
-    response["workspace"] = read_workspace(None, container)
+    response["workspace"] = read_workspace(container, None)
 
     dedup_policy.logs["create_full_project"] = response
 
@@ -365,9 +367,7 @@ def create_full_project(
 
 
 @sync_to_async
-def exec_command(
-    dedup_policy: DedupPolicy, container: Container, command: str
-) -> ToolResult:
+def exec_command(container: Container, command: str, **_: dict[str, Any]) -> ToolResult:
     start = time.monotonic()
     service = _get_service(container)
 
@@ -392,7 +392,7 @@ def exec_command(
 
 @sync_to_async
 def search(
-    dedup_policy: DedupPolicy, container: Container, pattern: str, root: str
+    container: Container, pattern: str, root: str, **_: dict[str, Any]
 ) -> ToolResult:
     start = time.monotonic()
     service = _get_service(container)
@@ -423,7 +423,10 @@ def search(
 
 @sync_to_async
 def search_on_internet(
-    dedup_policy: DedupPolicy, container: Container, search_query: str
+    dedup_policy: DedupPolicy,
+    container: Container,
+    search_query: str,
+    **_: dict[str, Any],
 ) -> ToolResult:
     start = time.monotonic()
     from ddgs import DDGS
@@ -462,7 +465,7 @@ def search_on_internet(
 
 @sync_to_async
 def read_from_internet(
-    dedup_policy: DedupPolicy, container: Container, url: str
+    dedup_policy: DedupPolicy, container: Container, url: str, **_: dict[str, Any]
 ) -> ToolResult:
     start = time.monotonic()
 

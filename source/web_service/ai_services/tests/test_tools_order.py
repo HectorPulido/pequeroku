@@ -35,7 +35,7 @@ def test_read_workspace_order(monkeypatch):
 
     # Act
     async def _run():
-        out = await tools_mod.read_workspace(None, container, subdir="src")
+        out = await tools_mod.read_workspace(container, subdir="src")
         return out
 
     out = asyncio.run(_run())
@@ -131,7 +131,7 @@ def test_read_file_order(monkeypatch):
 
     # Act
     async def _run():
-        return await tools_mod.read_file(DedupPolicy(), container, path="README.md")
+        return await tools_mod.read_file(container, path="README.md")
 
     out = asyncio.run(_run())
 
@@ -167,7 +167,7 @@ def test_exec_command_order(monkeypatch):
 
     # Act
     async def _run():
-        return await tools_mod.exec_command(DedupPolicy(), container, command="echo ok")
+        return await tools_mod.exec_command(container, command="echo ok")
 
     out = asyncio.run(_run())
 
@@ -205,7 +205,7 @@ def test_search_order(monkeypatch):
     # Act
     async def _run():
         return await tools_mod.search(
-            DedupPolicy(), container, pattern="README", root="/app"
+            container, pattern="README", root="/app"
         )
 
     out = asyncio.run(_run())
@@ -313,7 +313,7 @@ def test_create_full_project_order(monkeypatch):
     monkeypatch.setattr(tools_mod, "audit_agent_tool", fake_audit_agent_tool)
 
     # Patch read_workspace to return a dict synchronously (tools.create_full_project calls it without await)
-    def fake_read_workspace(_d, _c):
+    def fake_read_workspace(_c, _):
         call_order.append(("read_workspace", _c.container_id))
         return {"path": "/app", "entries": []}
 

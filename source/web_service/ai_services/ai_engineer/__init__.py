@@ -1,5 +1,3 @@
-from .ai_engineer import agent
+from .ai_engineer import agent, run_pipeline
 
-__all__ = [
-    "agent",
-]
+__all__ = ["agent", "run_pipeline"]

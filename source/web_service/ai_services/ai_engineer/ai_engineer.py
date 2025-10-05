@@ -1,5 +1,14 @@
+from typing import Any, Callable, cast
+from ai_services.agents.models import OpenAIMessage
 from internal_config.models import Config
-from ai_services.agents import Agent, AgentTool, AgentParameter
+from ai_services.agents import (
+    Agent,
+    AgentTool,
+    AgentParameter,
+    OpenAIChatMessage,
+    TokenUsage,
+)
+from vm_manager.models import Container
 from .tools import (
     read_workspace,
     create_file,
@@ -190,3 +199,34 @@ Tool usage:
 """.strip()
 
 agent = Agent(client, model, tools, SYSTEM_TOOLS_PROMPT_EN, SYSTEM_PROMPT_EN)
+
+
+async def run_pipeline(
+    query: str,
+    messages: list[OpenAIChatMessage],
+    container_obj: "Container",
+    on_chunk: Callable[..., Any],
+    on_tool_call: Callable[..., Any],
+    on_start_chunking: Callable[..., Any],
+    on_finish_chunking: Callable[..., Any],
+):
+    new_messages = messages.copy()
+    new_messages.append(OpenAIMessage.get_user_message(query))
+
+    new_messages, tu = await agent.run_tool_loop(
+        new_messages, True, on_tool_call, container=container_obj
+    )
+
+    messages.append(new_messages[-1])
+    messages.append(OpenAIMessage.get_user_message(query))
+
+    await on_start_chunking()
+
+    messages, ru = cast(
+        tuple[list[OpenAIChatMessage], TokenUsage],
+        await agent.get_response_no_tools(
+            messages, False, on_chunk, on_finish_chunking
+        ),
+    )
+
+    return messages, tu.add_usage(ru)

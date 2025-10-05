@@ -39,11 +39,7 @@ def _safe_preview(obj: Any, *, maxlen: int = 120) -> str:
 def _usage(resp: Any) -> TokenUsage:
     usage = getattr(resp, "usage", None)
     if usage is None:
-        return {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-        }
+        return TokenUsage()
 
     prompt_tokens: int = getattr(usage, "prompt_tokens", 0)
     completion_tokens: int = getattr(usage, "completion_tokens", 0)
@@ -51,11 +47,13 @@ def _usage(resp: Any) -> TokenUsage:
         usage, "total_tokens", prompt_tokens + completion_tokens
     )
 
-    return {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": total_tokens,
-    }
+    return TokenUsage(
+        **{
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+        }
+    )
 
 
 async def _maybe_await(
@@ -96,7 +94,7 @@ class Agent:
     """.strip()
 
     PROMPT_PLANNER: str = """
-    Before taking actions, briefly outline a 1–{max_rounds} step plan, then proceed to call tools.
+    Before taking actions or call tools, briefly outline a 1–{max_rounds} step plan, then proceed to call tools.
     Group multiple calls if possible, ask for permission if something is not safe, and keep edits and change minimal.
     """.strip()
 
@@ -197,11 +195,7 @@ class Agent:
         calls: list[dict[str, str]] = []
         dedup_policy = DedupPolicy()
 
-        total_usage: TokenUsage = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-        }
+        total_usage = TokenUsage()
 
         for _ in range(self.max_rounds):
             resp = cast(
@@ -213,9 +207,7 @@ class Agent:
 
             _, finish_reason, tool_calls, content, usage = resp
 
-            total_usage["prompt_tokens"] += usage["prompt_tokens"]
-            total_usage["completion_tokens"] += usage["completion_tokens"]
-            total_usage["total_tokens"] += usage["total_tokens"]
+            total_usage = total_usage.add_usage(usage)
 
             if content:
                 calls.append(
@@ -277,9 +269,7 @@ class Agent:
                 tuple[str, TokenUsage],
                 await self.get_response_summary(calls, messages[-1]["content"]),
             )
-            total_usage["prompt_tokens"] += usage["prompt_tokens"]
-            total_usage["completion_tokens"] += usage["completion_tokens"]
-            total_usage["total_tokens"] += usage["total_tokens"]
+            total_usage = total_usage.add_usage(usage)
         else:
             summary = self._render_parts(calls)
 
@@ -318,13 +308,7 @@ class Agent:
             tuple[list[OpenAIChatMessage], TokenUsage],
             await self.get_response_no_tools(messages, False, on_chunk, None),
         )
-
-        total_usage: TokenUsage = {
-            "prompt_tokens": lu["prompt_tokens"] + ru["prompt_tokens"],
-            "completion_tokens": lu["completion_tokens"] + ru["completion_tokens"],
-            "total_tokens": lu["total_tokens"] + ru["total_tokens"],
-        }
-
+        total_usage = lu.add_usage(ru)
         return messages, total_usage
 
     @retry_on_exception(delays=DELAYS)
@@ -363,6 +347,24 @@ class Agent:
         return resp, finish_reason, tool_calls, content, _usage(resp)
 
     @retry_on_exception(delays=DELAYS)
+    async def get_response_no_tools_no_streaming(
+        self, new_messages: list[OpenAIChatMessage]
+    ):
+        new_messages = self._system_prompt_wo_tools(new_messages.copy())
+        resp = self.client.chat.completions.create(
+            messages=cast(Any, new_messages),
+            model=self.model,
+            response_format={"type": "text"},
+            stream_options={"include_usage": True},
+        )
+        content = resp.choices[0].message.content or ""
+
+        new_messages.append(OpenAIMessage.get_assistant_message(content))
+        del new_messages[0]
+
+        return new_messages, _usage(resp)
+
+    @retry_on_exception(delays=DELAYS)
     async def get_response_no_tools(
         self,
         messages: list[OpenAIChatMessage],
@@ -380,17 +382,11 @@ class Agent:
             stream_options={"include_usage": True},
         )
 
-        total_usage: TokenUsage = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-        }
+        total_usage = TokenUsage()
 
         for evt in stream:
             usage = _usage(evt)
-            total_usage["prompt_tokens"] += usage["prompt_tokens"]
-            total_usage["completion_tokens"] += usage["completion_tokens"]
-            total_usage["total_tokens"] += usage["total_tokens"]
+            total_usage = total_usage.add_usage(usage)
 
             if not evt or not evt.choices or len(evt.choices) == 0:
                 continue

@@ -11,7 +11,7 @@ from internal_config.models import Config, AIMemory
 from pequeroku.mixins import ContainerAccessMixin
 
 from .agents import OpenAIChatMessage, TokenUsage
-from .ai_engineer import agent
+from .ai_engineer import run_pipeline, agent
 
 
 class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
@@ -46,8 +46,8 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             response=response,
             container=container,
             model_used=agent.model,
-            prompt_tokens=token_usage["prompt_tokens"],
-            completion_tokens=token_usage["completion_tokens"],
+            prompt_tokens=token_usage.prompt_tokens,
+            completion_tokens=token_usage.completion_tokens,
         )
 
     @staticmethod
@@ -64,7 +64,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
         )
 
         if not created:
-            memory.memory = memory_data
+            memory.memory = cast(Any, memory_data)
             memory.save()
 
     @staticmethod
@@ -98,6 +98,9 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
                 "Some useful information to respond to the user query:"
             ):
                 continue
+            if msg["content"].startswith("This is the plan to follow:"):
+                continue
+
             if len(msg["content"].strip()) == 0:
                 continue
 
@@ -169,15 +172,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             {"event": "connected", "ai_uses_left_today": ai_uses_left_today}
         )
 
-    async def receive_json(self, content: dict[str, str], **kwargs):
-        user_text = content.get("text", "")[:3000]
-        if not user_text.strip():
-            return
-
-        if not agent or not self.container_obj or not self.user:
-            print("[AGENT]: Not agent found")
-            return
-
+    async def receive_json(self, content: dict[str, str], **kwargs: dict[str, Any]):
         async def send_text(text: str):
             await self.send_json({"event": "start_text"})
             await self.send_json(
@@ -192,6 +187,9 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             print(f"[on_tool_call] using: {tool} with {kwargs}")
             await send_text(f"Using {tool}...")
 
+        async def on_start_chunk():
+            await self.send_json({"event": "start_text"})
+
         async def on_chunk(chunk: str):
             await self.send_json({"event": "text", "content": chunk})
 
@@ -202,6 +200,16 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             print(f"[on_finish] {response}")
             await self.send_json({"event": "finish_text"})
 
+
+        user_text = content.get("text", "")[:3000]
+        if not user_text.strip():
+            return
+
+        if not agent or not self.container_obj or not self.user:
+            print("[AGENT]: Not agent found")
+            return
+
+
         quota, ai_uses_left_today = await self._get_quota(self.user_pk)
         if quota is None or ai_uses_left_today is None or ai_uses_left_today <= 0:
             await send_text("You have no available quota for today, try it tomorrow...")
@@ -209,6 +217,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             return
 
         if user_text == "/clear":
+            await self.send_json({"event": "clear"})
             await send_text("Memory clear...")
             self.messages = []
             await self._set_memory(self.user, self.container_obj, self.messages)
@@ -218,25 +227,16 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
         await self.send_json({"event": "text", "content": "..."})
 
         # Process LLM
-        self.messages.append({"role": "user", "content": user_text})
-
-        self.messages, t_u = await agent.run_tool_loop(
-            self.messages, True, on_tool_call, container=self.container_obj
+        self.messages, token_usage = await run_pipeline(
+            query=user_text,
+            messages=self.messages,
+            container_obj=self.container_obj,
+            on_chunk=on_chunk,
+            on_tool_call=on_tool_call,
+            on_start_chunking=on_start_chunk,
+            on_finish_chunking=on_finish,
         )
 
-        await self.send_json({"event": "start_text"})
-        self.messages, r_u = cast(
-            tuple[list[OpenAIChatMessage], TokenUsage],
-            await agent.get_response_no_tools(
-                self.messages, False, on_chunk, on_finish
-            ),
-        )
-
-        token_usage: TokenUsage = {
-            "prompt_tokens": t_u["prompt_tokens"] + r_u["prompt_tokens"],
-            "completion_tokens": t_u["completion_tokens"] + r_u["completion_tokens"],
-            "total_tokens": t_u["total_tokens"] + r_u["total_tokens"],
-        }
         await self._set_quota(
             self.user,
             user_text,

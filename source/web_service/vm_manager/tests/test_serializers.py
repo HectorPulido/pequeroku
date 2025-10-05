@@ -32,7 +32,9 @@ def test_container_serializer_serializes_username_and_basic_fields():
     user = create_user(username="bob")
     node = create_node()
     type = create_container_type(memory_mb=512, vcpus=2, disk_gib=10)
-    c = create_container(user=user, node=node, container_id="vm-001", container_type=type)
+    c = create_container(
+        user=user, node=node, container_id="vm-001", container_type=type
+    )
 
     ser = ContainerSerializer(instance=c)
     data = ser.data
@@ -49,6 +51,7 @@ def test_container_serializer_serializes_username_and_basic_fields():
     # SerializerMethodField
     assert data["container_type_name"] == "default"
     assert data["username"] == "bob"
+
 
 def test_container_serializer_serializes_null_container_type():
     user = create_user(username="bob")

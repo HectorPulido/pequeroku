@@ -251,9 +251,9 @@ def test_agent_run_tool_loop_calls_tool_and_inserts_summary():
         assert "Summary: All good" in out_messages[1]["content"]
 
         # Token usage is the sum of tool-turn usage + summary usage
-        assert usage["prompt_tokens"] == 3 + 2
-        assert usage["completion_tokens"] == 4 + 1
-        assert usage["total_tokens"] == (3 + 4) + (2 + 1)
+        assert usage.prompt_tokens == 3 + 2
+        assert usage.completion_tokens == 4 + 1
+        assert usage.total_tokens == (3 + 4) + (2 + 1)
 
     asyncio.run(_run())
 
@@ -309,9 +309,9 @@ def test_agent_get_response_no_tools_streaming_collects_chunks_and_usage():
 
         # Usage accumulates from stream events
         # There are 3 events, each adds completion_tokens=1
-        assert usage["prompt_tokens"] == 0
-        assert usage["completion_tokens"] == 3
-        assert usage["total_tokens"] == 3
+        assert usage.prompt_tokens == 0
+        assert usage.completion_tokens == 3
+        assert usage.total_tokens == 3
 
     asyncio.run(_run())
 
