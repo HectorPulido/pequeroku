@@ -204,9 +204,7 @@ def test_search_order(monkeypatch):
 
     # Act
     async def _run():
-        return await tools_mod.search(
-            container, pattern="README", root="/app"
-        )
+        return await tools_mod.search(container, pattern="README", root="/app")
 
     out = asyncio.run(_run())
 

@@ -57,6 +57,7 @@ const restartContainerBtn = $("#restart-container");
 const runCodeBtn = $("#run-code");
 const btnOpenSession = $("#btn-open-session");
 const btnCloseSession = $("#btn-close-session");
+const btnTogglePreview = $("#toggle-preview");
 
 const btnOpenAiModal = $("#btn-open-ai-modal");
 
@@ -193,7 +194,8 @@ function connectWs() {
 }
 
 const runCtrl = setupRunButton({
-	buttonEl: runCodeBtn,
+	runButtonEl: runCodeBtn,
+	browserButtonEl: btnTogglePreview,
 	loadRunConfig: () => loadRunConfig(apiReadFileWrapper),
 	saveCurrentFile: fileActions.saveCurrentFile,
 	wsSend: (payload) => wsCtrl?.send?.(payload),

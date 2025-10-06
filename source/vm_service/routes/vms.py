@@ -5,6 +5,7 @@ import uuid
 import shlex
 
 from typing import cast
+from zipfile import error
 
 import paramiko
 from fastapi import HTTPException, Depends, APIRouter, Query
@@ -28,6 +29,7 @@ from models import (
     VMSh,
     SearchHit,
     SearchRequest,
+    VMShResponse,
 )
 
 from implementations import (
@@ -240,41 +242,42 @@ async def search_in_vm(vm_id: str, req: SearchRequest) -> list[SearchHit]:
     return response
 
 
-@vms_router.post("/{vm_id}/execute-sh", response_model=ElementResponse)
-async def execute_sh(vm_id: str, vm_command: VMSh) -> ElementResponse:
+@vms_router.post("/{vm_id}/execute-sh", response_model=VMShResponse)
+async def execute_sh(vm_id: str, vm_command: VMSh) -> VMShResponse:
     try:
         vm: "VMRecord" = store.get(vm_id)
     except KeyError:
-        return ElementResponse(ok=False, reason="VM doesn't exist")
+        return VMShResponse(ok=False, reason="VM doesn't exist")
     if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
-        return ElementResponse(ok=False, reason="VM is not running")
+        return VMShResponse(ok=False, reason="VM is not running")
+
+    import base64
 
     command = vm_command.command
-    output = ""
     try:
         val = cache_ssh_and_sftp(vm)
         cli = cast(paramiko.SSHClient, val["cli"])
 
         if not cli:
-            return ElementResponse(ok=False, reason="Not valid client")
+            return VMShResponse(ok=False, reason="Not valid client")
 
         _, stdout, stderr = cli.exec_command(command)
-        stdout.channel.settimeout(5)
-        out = cast(str, stdout.read().decode())
-        err = cast(str, stderr.read().decode())
+        stdout.channel.settimeout(vm_command.timeout)
 
-        if len(out.strip()) > 0:
-            output += f"Result: {out}\n"
+        out = stdout.read()
+        err = stderr.read()
 
-        if len(err.strip()) > 0:
-            output += f"Error: {err}\n"
-
-        output = output.strip()
+        try:
+            return VMShResponse(ok=True, stdout=out.decode(), stderr=err.decode())
+        except:
+            out_b64 = base64.b64encode(out).decode("ascii")
+            err_txt = err.decode("utf-8", errors="replace")
+            return VMShResponse(ok=True, stdout=out_b64, stderr=err_txt)
 
     except Exception as e:
         print("Error sending data", e)
 
-    return ElementResponse(ok=True, reason=output)
+    return VMShResponse(ok=False, reason="Something went wrong")
 
 
 @vms_router.get("/{vm_id}/download-file")

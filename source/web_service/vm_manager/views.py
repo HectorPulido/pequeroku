@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout
+from django.views.decorators.clickjacking import xframe_options_exempt
 
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -16,6 +17,7 @@ from rest_framework.response import Response
 
 from internal_config.audit import audit_log_http
 
+from .proxy_browser_utils import parse_get
 from .serializers import (
     ContainerSerializer,
     UserInfoSerializer,
@@ -491,6 +493,23 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         if content_disposition:
             resp["Content-Disposition"] = content_disposition
         return resp
+
+    @xframe_options_exempt
+    @action(
+        detail=True, methods=["get"], url_path=r"curl/(?P<port>\d+)(?:/(?P<path>.*))?"
+    )
+    def internal_get(self, request, pk=None, port=None, path=None):
+        obj: Container = self.get_object()
+        service = self._get_service(obj)
+
+        if not port:
+            return Response("No port", status=status.HTTP_400_BAD_REQUEST)
+
+        scheme = request.scheme
+        host = request.get_host()
+        base_url = f"{scheme}://{host}/api/containers/{str(obj.pk)}/curl/{port}/"
+
+        return parse_get(port, path, obj, base_url, service)
 
 
 class UserViewSet(viewsets.ViewSet):

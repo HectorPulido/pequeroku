@@ -7,7 +7,7 @@ from django.apps import apps
 from django.contrib.auth.models import User
 
 from vm_manager.models import ResourceQuota, Container
-from internal_config.models import Config, AIMemory
+from internal_config.models import Config, AIMemory, AIUsageLog
 from pequeroku.mixins import ContainerAccessMixin
 
 from .agents import OpenAIChatMessage, TokenUsage
@@ -23,9 +23,8 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
     @staticmethod
     @sync_to_async
     def _get_quota(user_id: int):
-        resource_quota_mod = apps.get_model("vm_manager", "ResourceQuota")
         try:
-            quota = cast(ResourceQuota, resource_quota_mod.objects.get(user_id=user_id))
+            quota = cast(ResourceQuota, ResourceQuota.objects.get(user_id=user_id))
             return quota, quota.ai_uses_left_today()
         except ResourceQuota.DoesNotExist:
             return None, None
@@ -39,8 +38,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
         container: Container,
         token_usage: TokenUsage,
     ):
-        ai_usage_log_model = apps.get_model("internal_config", "AIUsageLog")
-        ai_usage_log_model.objects.create(
+        AIUsageLog.objects.create(
             user=user,
             query=query,
             response=response,
@@ -55,10 +53,9 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
     def _set_memory(
         user: User, container: Container, memory_data: list[OpenAIChatMessage]
     ):
-        ai_memory = apps.get_model("internal_config", "AIMemory")
         memory, created = cast(
             tuple[AIMemory, bool],
-            ai_memory.objects.get_or_create(
+            AIMemory.objects.get_or_create(
                 user=user, container=container, defaults={"memory": memory_data}
             ),
         )
@@ -70,17 +67,16 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
     @staticmethod
     @sync_to_async
     def _get_memory(user: User, container: Container) -> list[OpenAIChatMessage]:
-        ai_memory = apps.get_model("internal_config", "AIMemory")
         memory = cast(
             AIMemory | None,
-            ai_memory.objects.filter(
+            AIMemory.objects.filter(
                 user=user,
                 container=container,
             ).last(),
         )
         if not memory:
             return []
-        return cast(list[OpenAIChatMessage], memory.memory)
+        return cast(list[OpenAIChatMessage], cast(Any, memory.memory))
 
     @staticmethod
     @sync_to_async
@@ -200,7 +196,6 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             print(f"[on_finish] {response}")
             await self.send_json({"event": "finish_text"})
 
-
         user_text = content.get("text", "")[:3000]
         if not user_text.strip():
             return
@@ -208,7 +203,6 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
         if not agent or not self.container_obj or not self.user:
             print("[AGENT]: Not agent found")
             return
-
 
         quota, ai_uses_left_today = await self._get_quota(self.user_pk)
         if quota is None or ai_uses_left_today is None or ai_uses_left_today <= 0:

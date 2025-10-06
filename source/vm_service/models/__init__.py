@@ -18,6 +18,7 @@ from .control import (
     VMPath,
     VMPaths,
     VMUploadFiles,
+    VMShResponse,
 )
 
 from .metrics import MachineMetrics
@@ -41,4 +42,5 @@ __all__ = [
     "VMPaths",
     "VMUploadFiles",
     "MachineMetrics",
+    "VMShResponse",
 ]

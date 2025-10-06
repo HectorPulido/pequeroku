@@ -136,7 +136,11 @@ def test_ai_consumer_with_mocked_agent_streams_and_updates_quota(monkeypatch):
             new_messages, False, on_chunk=on_chunk, on_finish=on_finish_chunking
         )
         # return messages and a dummy token usage
-        return streamed_messages, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        return streamed_messages, {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
 
     monkeypatch.setattr(ai_consumers, "run_pipeline", fake_run_pipeline, raising=True)
 

@@ -1,5 +1,6 @@
 from collections import defaultdict
-from typing import Iterable, Any
+from collections.abc import Iterable
+from typing import Any
 
 from datetime import timedelta
 from django.utils import timezone

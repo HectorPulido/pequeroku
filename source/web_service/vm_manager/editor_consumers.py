@@ -2,14 +2,18 @@ from __future__ import annotations
 import shlex
 import re
 import asyncio
-from typing import cast
-from datetime import datetime
+from typing import Never, cast
+
+# from datetime import datetime, timezone
+
+from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.db import DatabaseError
-from asgiref.sync import sync_to_async
+from django.contrib.auth.models import User
 
 from pequeroku.mixins import ContainerAccessMixin, AuditMixin
 from pequeroku.redis import VersionStore
+
 from .vm_client import VMServiceClient, VMUploadFiles, VMFile, SearchRequest
 from .templates import first_start_of_container
 from .models import Container, Node
@@ -56,16 +60,16 @@ class EditorConsumer(
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.pk: int = -1
-        self.user: object | None = None
+        self.user: User | None = None
         self.container: Container | None = None
         self.node: Node | None = None
         self.client: VMServiceClient | None = None
         self.container_id: str = ""
-        self._watcher_task = None
-        self._last_digest = None
+        self._watcher_task: asyncio.Task[Never] | None = None
+        self._last_digest: str | None = None
 
     async def connect(self):
-        self.user = self.scope.get("user", None)
+        self.user = cast(User | None, self.scope.get("user", None))
         if not self.user or self.user.is_anonymous:
             await self.close(code=4401)
             return
@@ -74,7 +78,7 @@ class EditorConsumer(
             cast(str, self.scope.get("url_route", {}).get("kwargs", {}).get("pk", "-1"))
         )
         try:
-            allowed = await self._user_owns_container(self.pk, self.user.pk)
+            allowed = await self._user_owns_container(self.pk, cast(int, self.user.pk))
             if not allowed:
                 await self.close(code=4403)
                 return
@@ -99,7 +103,7 @@ class EditorConsumer(
         await self.send_json({"event": "connected"})
         # self._start_fs_watcher()
 
-    async def disconnect(self, code):
+    async def disconnect(self, code: int):
         try:
             await self.channel_layer.group_discard(
                 self._group_name(self.pk), self.channel_name
@@ -359,76 +363,77 @@ class EditorConsumer(
             success=True,
         )
 
-    async def _fs_digest(self, root: str = SAFE_ROOT) -> str:
-        root = self._check_path(root)
-        cmd = (
-            f"set -e; dir={shlex.quote(root)}; "
-            r"find \"$dir\" \( -path '*/.git/*' -o -path '*/.cache/*' -o -path '*/node_modules/*' \) -prune -o -printf '%y|%P|%s|%T@\n' "
-            r"| sort | sha256sum | cut -d' ' -f1"
-        )
-        if not self.client:
-            return ""
-        out = self.client.execute_sh(self.container_id, cmd)
-        return cast(str, out["reason"])
+    # async def _fs_digest(self, root: str = SAFE_ROOT) -> str:
+    #     root = self._check_path(root)
+    #     cmd = (
+    #         f"set -e; dir={shlex.quote(root)}; "
+    #         r"find \"$dir\" \( -path '*/.git/*' -o -path '*/.cache/*' -o -path '*/node_modules/*' \) -prune -o -printf '%y|%P|%s|%T@\n' "
+    #         r"| sort | sha256sum | cut -d' ' -f1"
+    #     )
+    #     if not self.client:
+    #         return ""
+    #     out = self.client.execute_sh(self.container_id, cmd)
+    #     return cast(str, out["stdout"])
 
-    async def _get_fs_digest_cached(self, path: str) -> str | int | None:
-        try:
-            return await VersionStore.get_rev(
-                cid=self.container_id, path=f"__fs_digest__:{path}"
-            )
-        except Exception:
-            return None
+    # async def _get_fs_digest_cached(self, path: str) -> str | int | None:
+    #     try:
+    #         return await VersionStore.get_rev(
+    #             cid=self.container_id, path=f"__fs_digest__:{path}"
+    #         )
+    #     except Exception:
+    #         return None
 
-    async def _set_fs_digest_cached(self, path: str) -> None:
-        try:
-            _ = await VersionStore.bump_rev(
-                cid=self.container_id, path=f"__fs_digest__:{path}"
-            )
-        except Exception:
-            pass
+    # async def _set_fs_digest_cached(self, path: str) -> None:
+    #     try:
+    #         _ = await VersionStore.bump_rev(
+    #             cid=self.container_id, path=f"__fs_digest__:{path}"
+    #         )
+    #     except Exception:
+    #         pass
 
-    # watcher principal
-    async def _watch_fs_loop(self, path: str = SAFE_ROOT, interval: float = 1.0):
-        try:
-            last = self._last_digest or await self._get_fs_digest_cached(path)
-            while True:
-                try:
-                    cur = await self._fs_digest(path)
-                    if cur and cur != last:
-                        ts = datetime.utcnow().isoformat() + "Z"
-                        await self.channel_layer.group_send(
-                            self._group_name(self.pk),
-                            {
-                                "type": "ws.broadcast",
-                                "payload": {
-                                    "event": "fs_changed",
-                                    "path": path,
-                                    "ts": ts,
-                                },
-                            },
-                        )
-                        self._last_digest = cur
-                        await self._set_fs_digest_cached(path)
-                        last = cur
-                    await asyncio.sleep(interval)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:
-                    await asyncio.sleep(interval)
-        finally:
-            pass
+    # # watcher principal
+    # async def _watch_fs_loop(self, path: str = SAFE_ROOT, interval: float = 1.0):
+    #     try:
+    #         last = self._last_digest or await self._get_fs_digest_cached(path)
+    #         while True:
+    #             try:
+    #                 cur = await self._fs_digest(path)
+    #                 if cur and cur != last:
+    #                     ts = datetime.now(timezone.utc).isoformat() + 'Z'
+    #                     # datetime.utcnow() + "Z"
+    #                     await self.channel_layer.group_send(
+    #                         self._group_name(self.pk),
+    #                         {
+    #                             "type": "ws.broadcast",
+    #                             "payload": {
+    #                                 "event": "fs_changed",
+    #                                 "path": path,
+    #                                 "ts": ts,
+    #                             },
+    #                         },
+    #                     )
+    #                     self._last_digest = cur
+    #                     await self._set_fs_digest_cached(path)
+    #                     last = cur
+    #                 await asyncio.sleep(interval)
+    #             except asyncio.CancelledError:
+    #                 raise
+    #             except Exception as e:
+    #                 await asyncio.sleep(interval)
+    #     finally:
+    #         pass
 
-    def _start_fs_watcher(self):
-        if self._watcher_task is None or self._watcher_task.done():
-            self._watcher_task = asyncio.create_task(
-                self._watch_fs_loop(SAFE_ROOT, 5.0)
-            )
+    # def _start_fs_watcher(self):
+    #     if self._watcher_task is None or self._watcher_task.done():
+    #         self._watcher_task = asyncio.create_task(
+    #             self._watch_fs_loop(SAFE_ROOT, 5.0)
+    #         )
 
-    async def _stop_fs_watcher(self):
-        if self._watcher_task and not self._watcher_task.done():
-            _ = self._watcher_task.cancel()
-            try:
-                await self._watcher_task
-            except asyncio.CancelledError:
-                pass
-        self._watcher_task = None
+    # async def _stop_fs_watcher(self):
+    #     if self._watcher_task and not self._watcher_task.done():
+    #         _ = self._watcher_task.cancel()
+    #         try:
+    #             await self._watcher_task
+    #         except asyncio.CancelledError:
+    #             pass
+    #     self._watcher_task = None

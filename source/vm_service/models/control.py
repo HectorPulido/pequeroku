@@ -6,7 +6,13 @@ from pydantic import BaseModel, Field
 
 class VMSh(BaseModel):
     command: str
+    timeout: int = 5
 
+class VMShResponse(BaseModel):
+    ok: bool
+    reason: str = ""
+    stdout: str | bytes = ""
+    stderr: str | bytes = ""
 
 class ListDirItem(BaseModel):
     path: str
