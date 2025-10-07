@@ -115,9 +115,18 @@ export function setupWSController({ containerId, consoleApi, onTabsChange }) {
 		}
 	}
 
-	function handleClose(sid) {
+	function handleClose(sid, ev, info) {
 		try {
-			consoleApi.addLine?.(`[disconnected sid=${sid}]`, sid);
+			const wait = info && typeof info.waitMs === "number" ? info.waitMs : null;
+			if (wait && wait > 0) {
+				const secs = Math.ceil(wait / 1000);
+				consoleApi.addLine?.(
+					`[disconnected sid=${sid}] reconnecting in ${secs}s`,
+					sid,
+				);
+			} else {
+				consoleApi.addLine?.(`[disconnected sid=${sid}]`, sid);
+			}
 			onTabsChange?.();
 		} catch {
 			// ignore
@@ -138,7 +147,7 @@ export function setupWSController({ containerId, consoleApi, onTabsChange }) {
 			sid,
 			onOpen: () => handleOpen(sid),
 			onMessage: (ev) => handleMessage(sid, ev),
-			onClose: () => handleClose(sid),
+			onClose: (ev, info) => handleClose(sid, ev, info),
 			onError: (ev) => handleError(sid, ev),
 		});
 		sockets.set(sid, sock);

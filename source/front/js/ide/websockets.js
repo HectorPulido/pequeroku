@@ -7,9 +7,11 @@ export function createWS(
 	const wsUrl = `${proto}://${location.host}/ws/containers/${containerId}/?sid=${encodeURIComponent(sid)}`;
 	const sock = createWSBase(wsUrl, {
 		binaryType: "arraybuffer",
+		autoReconnect: true,
+		backoff: { baseMs: 1000, maxMs: 30000 },
 		onOpen: (ws) => onOpen?.(ws, { sid }),
 		onMessage: (ev, ws) => onMessage?.(ev, ws, { sid }),
-		onClose: (ev, info) => onClose?.(ev, info, { sid }),
+		onClose: (ev, info) => onClose?.(ev, { ...info, waitMs: sock.getBackoffWait?.() }, { sid }),
 		onError: (ev) => onError?.(ev, { sid }),
 	});
 	return {
