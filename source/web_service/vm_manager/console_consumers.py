@@ -2,13 +2,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import base64
-from email import header
 from urllib.parse import parse_qs
 
 from typing import Any, cast
 
 import websockets
-from websockets import ClientConnection
+from websockets.asyncio.client import ClientConnection
 from django.db import DatabaseError
 from django.contrib.auth.models import User
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -84,8 +83,7 @@ class ConsoleConsumer(AsyncWebsocketConsumer, ContainerAccessMixin, AuditMixin):
         except DatabaseError:
             await self.close(code=1011)
             return
-
-        await self.accept()
+        # defer accept until upstream is ready
 
         upstream_url, headers = await self._build_upstream_url_and_headers(self.pk)
         if not upstream_url:
@@ -104,6 +102,8 @@ class ConsoleConsumer(AsyncWebsocketConsumer, ContainerAccessMixin, AuditMixin):
         if not upstream_ok:
             await self.close(code=4404)
             return
+
+        await self.accept()
 
         await self.audit_ws(
             action="ws.connect",
@@ -134,6 +134,9 @@ class ConsoleConsumer(AsyncWebsocketConsumer, ContainerAccessMixin, AuditMixin):
                 max_size=None,
             )
 
+            if not self._upstream:
+                return None
+
             await asyncio.sleep(1)
             data_bytes = self.FIRST_COMMAND.encode("utf-8", errors="ignore")
             enc = base64.b64encode(data_bytes).decode("ascii")
@@ -141,15 +144,14 @@ class ConsoleConsumer(AsyncWebsocketConsumer, ContainerAccessMixin, AuditMixin):
 
             return True
         except Exception as e:
-            await self.send(text_data=f"Proxy: upstream connect failed: {e}")
-            await self.close(code=1011)
+            print("[ConsoleConsumer] _open_upstream error", e)
             return False
 
-    async def disconnect(self, _code: int):
+    async def disconnect(self, code):
         # Stop pump
         with contextlib.suppress(Exception):
             if self._pump_task:
-                self._pump_task.cancel()
+                _ = self._pump_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await self._pump_task
         # Close upstream
@@ -160,7 +162,7 @@ class ConsoleConsumer(AsyncWebsocketConsumer, ContainerAccessMixin, AuditMixin):
 
     # Message routing: Frontend -> Upstream (base64 text)
     async def receive(
-        self, text_data: str | None = None, bytes_data: "ReadableBuffer" | None = None
+        self, text_data: str | None = None, bytes_data: bytes | None = None
     ):
         if not self._upstream:
             await self.send(text_data="[proxy] no upstream")
@@ -170,6 +172,8 @@ class ConsoleConsumer(AsyncWebsocketConsumer, ContainerAccessMixin, AuditMixin):
         try:
             if bytes_data is not None:
                 # Binary from frontend -> base64 text upstream
+                if isinstance(bytes_data, (bytearray, memoryview)):
+                    bytes_data = bytes(bytes_data)
                 enc = base64.b64encode(bytes_data).decode("ascii")
                 await self._upstream.send(enc)
                 return

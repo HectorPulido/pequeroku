@@ -38,23 +38,26 @@ async def health():
 
 @app.websocket("/vms/{vm_id}/tty")
 async def tty_ws(websocket: WebSocket, vm_id: str):
-    def _try_to_resize():
+    def _try_to_resize(raw: bytes):
         if not raw.startswith(b"__RESIZE__"):
             return False
         try:
             s = raw.decode("ascii", errors="ignore")
             # Extract first two integers in order (cols, rows)
             nums = [int(n) for n in re.findall(r"\d+", s)]
-            if len(nums) >= 2:
-                chan = getattr(bridge, "chan", None)
-                if chan is not None:
-                    try:
-                        chan.resize_pty(width=int(nums[0]), height=int(nums[1]))
-                    except Exception:
-                        return False
+            if len(nums) < 2:
+                return True
+            chan = getattr(bridge, "chan", None)
+            if chan is None:
+                return False
+            try:
+                chan.resize_pty(width=int(nums[0]), height=int(nums[1]))
+            except Exception as e:
+                print("Exception trying resizing", e)
+                return False
             return True
-        except Exception:
-            # Ignore parse errors, fallback to sending raw
+        except Exception as e:
+            print("Exception trying resizing", e)
             return False
 
     print("Initiating ws...")
@@ -83,9 +86,10 @@ async def tty_ws(websocket: WebSocket, vm_id: str):
             try:
                 raw = base64.b64decode(data, validate=True)
                 # Control message: __RESIZE__ <cols>x<rows> (flexible separators)
-                if _try_to_resize():
+                if _try_to_resize(raw):
                     continue
                 await bridge.send(raw)
+                continue
             except Exception:
                 # Not valid base64; fall through as plain text
                 pass

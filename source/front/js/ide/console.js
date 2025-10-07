@@ -217,8 +217,8 @@ export function setupConsole({ onSend }) {
 			const vRaw = inputEl.value;
 			let v = vRaw;
 			// Append newline so the shell executes the command
-			if·(!v.endsWith("\n"));
-			v = `${v}\n`;
+			if (!v.endsWith("\n"))
+			  v = `${v}\n`;
 			inputEl.value = "";
 			history.push(vRaw);
 			hIdx = history.length;
