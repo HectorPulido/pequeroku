@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import time
+import base64
 
 from fastapi import WebSocket
 import paramiko
@@ -30,7 +31,9 @@ class TTYBridge:
                         data = chan.recv(4096)
                         if not data:
                             break
-                        asyncio.run(self.ws.send_text(data.decode(errors="ignore")))
+                        asyncio.run(
+                            self.ws.send_text(base64.b64encode(data).decode("ascii"))
+                        )
                     except Exception:
                         time.sleep(0.02)
                 self._alive = False
@@ -43,19 +46,25 @@ class TTYBridge:
 
         threading.Thread(target=_run, daemon=True).start()
 
-    async def send(self, text: str) -> None:
+    async def send(self, data: bytes | str) -> None:
         if not self.chan or self.chan.closed:
             return
 
-        if text.strip() == "ctrlc":
+        if isinstance(data, (bytes, bytearray)):
+            self.chan.send(data)
+            return
+
+        s = data.strip()
+        if s == "ctrlc":
             self.chan.send(b"\x03")
             return
 
-        if text.strip() == "ctrld":
+        if s == "ctrld":
             self.chan.send(b"\x04")
             return
 
-        self.chan.send(text)
+        # Send as-is (no forced newline)
+        self.chan.send(data)
 
     def close(self) -> None:
         self._alive = False

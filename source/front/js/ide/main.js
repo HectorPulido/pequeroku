@@ -78,8 +78,30 @@ let slash = null;
 const dirty = createDirtyTracker({ onChange: () => fileTabs.update?.() });
 
 const consoleTabs = setupConsoleTabs({
-	onFocus: (sid) => wsCtrl?.focusSession?.(sid),
-	onClose: (sid) => wsCtrl?.closeSession?.(sid),
+	onFocus: (sid) => {
+		wsCtrl?.focusSession?.(sid);
+		try {
+			consoleApi?.focusSession?.(sid);
+		} catch {}
+		try {
+			ideStore.actions.console.focus(sid);
+		} catch {}
+		try {
+			consoleTabs.update?.();
+		} catch {}
+	},
+	onClose: (sid) => {
+		wsCtrl?.closeSession?.(sid);
+		try {
+			consoleApi?.closeSession?.(sid);
+		} catch {}
+		try {
+			ideStore.actions.console.close(sid);
+		} catch {}
+		try {
+			consoleTabs.update?.();
+		} catch {}
+	},
 });
 
 const fileTabs = setupFileTabs({
@@ -198,7 +220,7 @@ const runCtrl = setupRunButton({
 	browserButtonEl: btnTogglePreview,
 	loadRunConfig: () => loadRunConfig(apiReadFileWrapper),
 	saveCurrentFile: fileActions.saveCurrentFile,
-	wsSend: (payload) => wsCtrl?.send?.(payload),
+	wsSend: (payload) => wsCtrl?.sendInput?.(payload?.data ?? payload),
 	autoOpenUrl: true,
 	readFileApi: apiReadFileWrapper,
 });
@@ -293,8 +315,15 @@ const runCtrl = setupRunButton({
 			try {
 				wsCtrl?.openSession?.(sid);
 			} catch {}
-			ideStore.actions.console.open(sid, true);
-			consoleTabs.update?.();
+			try {
+				consoleApi?.openSession?.(sid, true);
+			} catch {}
+			try {
+				ideStore.actions.console.open(sid, true);
+			} catch {}
+			try {
+				consoleTabs.update?.();
+			} catch {}
 		});
 	}
 	if (btnCloseSession) {
@@ -304,8 +333,15 @@ const runCtrl = setupRunButton({
 				try {
 					wsCtrl?.closeSession?.(sid);
 				} catch {}
-				ideStore.actions.console.close(sid);
-				consoleTabs.update?.();
+				try {
+					consoleApi?.closeSession?.(sid);
+				} catch {}
+				try {
+					ideStore.actions.console.close(sid);
+				} catch {}
+				try {
+					consoleTabs.update?.();
+				} catch {}
 			}
 		});
 	}
@@ -392,17 +428,41 @@ const runCtrl = setupRunButton({
 		// - Ctrl/Cmd+Shift+N: open new session (sN)
 		if (mod && e.shiftKey && e.key.toLowerCase() === "n") {
 			e.preventDefault();
-			const list = consoleApi.listSessions?.() || [];
+			const list = ideStore.get().console.sessions || [];
 			let i = 1;
 			while (list.includes(`s${i}`)) i++;
 			const sid = `s${i}`;
-			wsCtrl?.openSession?.(sid);
+			try {
+				wsCtrl?.openSession?.(sid);
+			} catch {}
+			try {
+				consoleApi?.openSession?.(sid, true);
+			} catch {}
+			try {
+				ideStore.actions.console.open(sid, true);
+			} catch {}
+			try {
+				consoleTabs.update?.();
+			} catch {}
 		}
 		// - Ctrl/Cmd+Shift+W: close active session
 		if (mod && e.shiftKey && e.key.toLowerCase() === "w") {
 			e.preventDefault();
-			const sid = consoleApi.getActive?.();
-			if (sid) wsCtrl?.closeSession?.(sid);
+			const sid = ideStore.get().console.active || consoleApi.getActive?.();
+			if (sid) {
+				try {
+					wsCtrl?.closeSession?.(sid);
+				} catch {}
+				try {
+					consoleApi?.closeSession?.(sid);
+				} catch {}
+				try {
+					ideStore.actions.console.close(sid);
+				} catch {}
+				try {
+					consoleTabs.update?.();
+				} catch {}
+			}
 		}
 	});
 

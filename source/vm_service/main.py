@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import base64
+import re
 import uvicorn
 from fastapi import (
     FastAPI,
@@ -36,6 +38,25 @@ async def health():
 
 @app.websocket("/vms/{vm_id}/tty")
 async def tty_ws(websocket: WebSocket, vm_id: str):
+    def _try_to_resize():
+        if not raw.startswith(b"__RESIZE__"):
+            return False
+        try:
+            s = raw.decode("ascii", errors="ignore")
+            # Extract first two integers in order (cols, rows)
+            nums = [int(n) for n in re.findall(r"\d+", s)]
+            if len(nums) >= 2:
+                chan = getattr(bridge, "chan", None)
+                if chan is not None:
+                    try:
+                        chan.resize_pty(width=int(nums[0]), height=int(nums[1]))
+                    except Exception:
+                        return False
+            return True
+        except Exception:
+            # Ignore parse errors, fallback to sending raw
+            return False
+
     print("Initiating ws...")
     await websocket.accept()
     try:
@@ -58,8 +79,17 @@ async def tty_ws(websocket: WebSocket, vm_id: str):
     try:
         while True:
             data = await websocket.receive_text()
-            if not data.endswith("\n"):
-                data += "\n"
+            # Try base64 path (frontend -> django -> vm-service uses base64 text frames)
+            try:
+                raw = base64.b64decode(data, validate=True)
+                # Control message: __RESIZE__ <cols>x<rows> (flexible separators)
+                if _try_to_resize():
+                    continue
+                await bridge.send(raw)
+            except Exception:
+                # Not valid base64; fall through as plain text
+                pass
+            # Fallback: treat as plain text (do not force newline)
             await bridge.send(data)
     except WebSocketDisconnect:
         bridge.close()

@@ -1,37 +1,25 @@
 /**
- * WebSocket controller for PequeRoku IDE
+ * WS Controller: one WebSocket per console session (sid)
  *
- * Encapsulates WebSocket setup and multi-console session lifecycle,
- * reducing responsibilities in main.js.
+ * - Frontend <-> Django: raw frames
+ *   - Outgoing: text (keystrokes/strings) or binary (Uint8Array/ArrayBuffer)
+ *   - Incoming: binary (ArrayBuffer) -> write to xterm, or text -> write as-is
+ * - sid is passed via query string (?sid=sN)
  *
- * Responsibilities:
- * - Manage WebSocket connection creation and teardown
- * - Route backend stream/info/error frames to the console UI
- * - Keep ideStore console state in sync (sessions list and active session)
- * - Provide helpers for session control (open/close/focus) and sending input
- *
- * Usage:
- *   import { setupWSController } from "./wsController.js";
- *
- *   const wsCtrl = setupWSController({
- *     containerId,
- *     consoleApi,
- *     onTabsChange: () => fileTabs.update?.(), // optional: refresh UI tabs
- *   });
- *
- *   wsCtrl.connect();
- *   wsCtrl.openSession("s2");
- *   wsCtrl.sendInput("ls -la\n");
- *   wsCtrl.close();
+ * Public API:
+ *   const wsCtrl = setupWSController({ containerId, consoleApi, onTabsChange });
+ *   wsCtrl.connect();                 // ensure s1 is connected
+ *   wsCtrl.openSession("s2");         // open extra session socket
+ *   wsCtrl.focusSession("s2");        // set active session
+ *   wsCtrl.sendInput("ls -la");       // send to active session as text
+ *   wsCtrl.closeSession("s2");        // close a session socket
+ *   wsCtrl.close();                   // close all sockets
  */
-
-import { notifyAlert } from "../core/alerts.js";
-import { ideStore } from "../core/store.js";
 import { createWS } from "./websockets.js";
 
 /**
  * @typedef {Object} WSControllerOptions
- * @property {string} containerId
+ * @property {string|number} containerId
  * @property {{
  *   getActive?: () => string | null,
  *   listSessions?: () => string[],
@@ -47,14 +35,14 @@ import { createWS } from "./websockets.js";
  */
 
 /**
- * Create a WS Controller instance
+ * Create a WS Controller instance with one socket per session id.
  * @param {WSControllerOptions} opts
  */
 export function setupWSController({ containerId, consoleApi, onTabsChange }) {
-	/** @type {ReturnType<typeof createWS>|null} */
-	let ws = null;
+	/** @type {Map<string, ReturnType<typeof createWSBase>>} */
+	const sockets = new Map();
 	/** @type {string|null} */
-	let lastBytesSid = null;
+	let activeSid = null;
 
 	function dispatchTerminalResize(target = "console") {
 		try {
@@ -67,191 +55,195 @@ export function setupWSController({ containerId, consoleApi, onTabsChange }) {
 		}
 	}
 
-	function handleOpen() {
+	function ensureActiveSid() {
+		if (activeSid && sockets.has(activeSid)) return activeSid;
+		const uiActive = consoleApi.getActive?.() || null;
+		if (uiActive && sockets.has(uiActive)) {
+			activeSid = uiActive;
+			return activeSid;
+		}
+		// Pick first available
+		const first = sockets.keys().next();
+		activeSid = first.done ? null : first.value;
+		return activeSid;
+	}
+
+	function handleOpen(sid) {
 		try {
-			// Reset local sessions; the server will resend session list
-			const sids = consoleApi.listSessions?.() || [];
-			// biome-ignore lint/suspicious/useIterableCallbackReturn: We want side-effects
-			sids.forEach((sid) => consoleApi.closeSession?.(sid));
-			ideStore.actions.console.clear();
-			onTabsChange?.();
-			consoleApi.addLine?.("[connected]");
+			// Ensure UI/store know about this session (idempotent if already opened)
+			consoleApi.openSession?.(sid, false);
+			consoleApi.focusSession?.(sid);
+			if (!activeSid) activeSid = sid;
+			consoleApi.addLine?.(`[connected sid=${sid}]`, sid);
+
+			const t = consoleApi?.term?.current;
+			const cols = t?.cols ? t.cols : 80;
+			const rows = t?.rows ? t.rows : 24;
+			try {
+				sendToSid(sid, `__RESIZE__ ${cols}x${rows}`);
+			} catch {}
+			setTimeout(() => {
+				try {
+					const tt = consoleApi?.term?.current;
+					const c = tt?.cols ? tt.cols : cols;
+					const r = tt?.rows ? tt.rows : rows;
+					sendToSid(sid, `__RESIZE__ ${c}x${r}`);
+				} catch {}
+			}, 1200);
+
 			dispatchTerminalResize("console");
+			onTabsChange?.();
 		} catch {
 			// ignore
 		}
 	}
 
-	function handleInfoMessage(msg) {
+	function handleMessage(sid, ev) {
 		try {
-			if (msg.message === "Connected") {
-				const sessions = Array.isArray(msg.sessions) ? msg.sessions : [];
-				const active = msg.active || sessions[0] || "s1";
-				// biome-ignore lint/suspicious/useIterableCallbackReturn: We want side-effects
-				sessions.forEach((sid) => consoleApi.openSession?.(sid, false));
-				consoleApi.focusSession?.(active);
-				ideStore.actions.console.setAll(sessions, active);
-				consoleApi.addLine?.(
-					`[info] Connected. Sessions: ${sessions.join(", ") || "none"}, active: ${active}`,
-					active,
-				);
-				onTabsChange?.();
-				return;
-			}
-
-			if (msg.message === "session-opened") {
-				const makeActive = msg.active ? msg.active === msg.sid : true;
-				consoleApi.openSession?.(msg.sid, !!makeActive);
-				if (makeActive) {
-					consoleApi.focusSession?.(msg.sid);
-				}
-				ideStore.actions.console.open(msg.sid, makeActive);
-				onTabsChange?.();
-				return;
-			}
-
-			if (msg.message === "session-closed") {
-				consoleApi.closeSession?.(msg.sid);
-				ideStore.actions.console.close(msg.sid);
-				onTabsChange?.();
-				return;
-			}
-
-			if (msg.message === "session-focused") {
-				consoleApi.focusSession?.(msg.sid);
-				ideStore.actions.console.focus(msg.sid);
-				onTabsChange?.();
-				return;
-			}
-
-			// Generic info, route to sid if provided
-			const sid = msg.sid || consoleApi.getActive?.();
-			consoleApi.addLine?.(`[info] ${msg.message ?? ""}`, sid);
-		} catch {
-			// ignore
-		}
-	}
-
-	function handleMessage(ev) {
-		try {
-			const msg = JSON.parse(ev.data);
-			if (msg && typeof msg === "object") {
-				if (msg.type === "stream") {
-					const sid = msg.sid || consoleApi.getActive?.();
-					const payload = typeof msg.payload === "string" ? msg.payload : "";
-					consoleApi.write?.(payload, sid);
-					return;
-				}
-				if (msg.type === "stream-bytes") {
-					lastBytesSid = msg.sid || consoleApi.getActive?.();
-					return;
-				}
-				if (msg.type === "info") {
-					handleInfoMessage(msg);
-					return;
-				}
-				if (msg.type === "error") {
-					notifyAlert(msg.message || "Unknown error", "error");
-					return;
-				}
-			}
-
-			// Fallback: treat as text line
-			let text = String(ev.data || "");
-			text = text.replace(/\r(?!\n)/g, "\r\n");
-			consoleApi.write?.(text);
-		} catch {
-			// Not JSON: binary or text
+			// Binary frame
 			if (ev.data instanceof ArrayBuffer) {
-				const targetSid = lastBytesSid || consoleApi.getActive?.();
-				lastBytesSid = null;
-				consoleApi.write?.(new Uint8Array(ev.data), targetSid);
-			} else {
-				let text = String(ev.data || "");
-				text = text.replace(/\r(?!\n)/g, "\r\n");
-				consoleApi.write?.(text);
+				consoleApi.write?.(new Uint8Array(ev.data), sid);
+				return;
 			}
-		}
-	}
-
-	function handleClose() {
-		try {
-			consoleApi.write?.("[disconnected]\n");
+			// Text frame
+			let text = String(ev.data || "");
+			// Normalize CR for nicer display in xterm
+			text = text.replace(/\r(?!\n)/g, "\r\n");
+			consoleApi.write?.(text, sid);
 		} catch {
 			// ignore
 		}
 	}
 
-	function handleError() {
-		notifyAlert("WebSocket error", "error");
-	}
-
-	function connect() {
-		ws = createWS(containerId, {
-			onOpen: handleOpen,
-			onMessage: handleMessage,
-			onClose: handleClose,
-			onError: handleError,
-		});
-	}
-
-	function close(code = 1000, reason = "bye") {
+	function handleClose(sid) {
 		try {
-			ws?.close(code, reason);
+			consoleApi.addLine?.(`[disconnected sid=${sid}]`, sid);
+			onTabsChange?.();
+		} catch {
+			// ignore
+		}
+	}
+
+	function handleError(sid, _ev) {
+		try {
+			consoleApi.addLine?.(`[error sid=${sid}]`, sid);
+		} catch {
+			// ignore
+		}
+	}
+
+	function openSocketForSid(sid) {
+		if (!sid || sockets.has(sid)) return;
+		const sock = createWS(containerId, {
+			sid,
+			onOpen: () => handleOpen(sid),
+			onMessage: (ev) => handleMessage(sid, ev),
+			onClose: () => handleClose(sid),
+			onError: (ev) => handleError(sid, ev),
+		});
+		sockets.set(sid, sock);
+	}
+
+	function closeSocketForSid(sid) {
+		const sock = sockets.get(sid);
+		if (!sock) return;
+		try {
+			sock.close({ code: 1000, reason: "bye", reconnect: false });
 		} catch {
 			// ignore
 		} finally {
-			ws = null;
+			sockets.delete(sid);
+			if (activeSid === sid) {
+				activeSid = null;
+				ensureActiveSid();
+			}
+		}
+	}
+
+	function connect() {
+		// Ensure default session socket exists; console UI already creates "s1" tab.
+		openSocketForSid("s1");
+		ensureActiveSid();
+	}
+
+	function close(code = 1000, reason = "bye") {
+		for (const [_, sock] of sockets) {
+			try {
+				sock.close({ code, reason, reconnect: false });
+			} catch {
+				// ignore
+			}
+		}
+		sockets.clear();
+		activeSid = null;
+	}
+
+	function hasConnection() {
+		return sockets.size > 0;
+	}
+
+	function openSession(sid) {
+		if (!sid) return;
+		openSocketForSid(sid);
+		// UI session/tab should already be created by caller.
+		activeSid = sid;
+		onTabsChange?.();
+	}
+
+	function closeSession(sid) {
+		if (!sid) return;
+		closeSocketForSid(sid);
+		// Caller handles consoleApi.closeSession UI; we keep transport minimal.
+		onTabsChange?.();
+	}
+
+	function focusSession(sid) {
+		if (!sid) return;
+		if (sockets.has(sid)) {
+			activeSid = sid;
+			// UI focus is handled by caller; we only switch the target socket.
+			onTabsChange?.();
+		}
+	}
+
+	function sendToSid(sid, payload) {
+		const sock = sockets.get(sid);
+		if (!sock) return false;
+		try {
+			return sock.send(payload);
+		} catch {
+			return false;
 		}
 	}
 
 	function send(payload) {
-		try {
-			ws?.send(payload);
-		} catch {
-			// ignore
-		}
+		// Generic send: route to active session (for backwards compatibility)
+		const sid = ensureActiveSid();
+		if (!sid) return false;
+		return sendToSid(sid, payload);
 	}
 
 	function sendInput(data) {
-		try {
-			const active = consoleApi.getActive?.() || null;
-			const payload = active ? { sid: active, data } : { data };
-			send(payload);
-		} catch {
-			// ignore
+		// Keystrokes / line input: prefer raw bytes if provided, else text
+		const sid = ensureActiveSid();
+		if (!sid) return false;
+		if (data == null) return false;
+
+		// Allow callers to pass Uint8Array/ArrayBuffer for precise control keys
+		if (data instanceof ArrayBuffer || ArrayBuffer.isView?.(data)) {
+			return sendToSid(sid, data);
 		}
+
+		// Strings: send as text frame. Do NOT force newline; caller decides.
+		const text = String(data);
+		return sendToSid(sid, text);
 	}
 
-	function openSession(sid) {
-		try {
-			ws?.send?.({ control: "open", sid });
-		} catch {
-			// ignore
-		}
-	}
-
-	function closeSession(sid) {
-		try {
-			ws?.send?.({ control: "close", sid });
-		} catch {
-			// ignore
-		}
-	}
-
-	function focusSession(sid) {
-		try {
-			ws?.send?.({ control: "focus", sid });
-		} catch {
-			// ignore
-		}
-	}
-
-	// Best-effort: close on page unload
+	// Best-effort: close all on page unload
 	try {
 		window.addEventListener("beforeunload", () => {
 			try {
-				ws?.close?.(1000, "bye");
+				close(1000, "bye");
 			} catch {
 				// ignore
 			}
@@ -263,11 +255,11 @@ export function setupWSController({ containerId, consoleApi, onTabsChange }) {
 	return {
 		connect,
 		close,
+		hasConnection,
 		send,
 		sendInput,
 		openSession,
 		closeSession,
 		focusSession,
-		hasConnection: () => ws != null,
 	};
 }

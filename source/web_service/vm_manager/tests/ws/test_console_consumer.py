@@ -1,6 +1,5 @@
 import asyncio
-import json
-import types
+import base64
 
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -41,10 +40,12 @@ class FakeWS:
         self.closed = False
 
     def __aiter__(self):
-        # No upstream traffic by default
+        # Keep pump alive with an endless async generator
         async def _gen():
-            if False:
-                yield None
+            while True:
+                await asyncio.sleep(3600)
+                if False:
+                    yield b""
 
         return _gen()
 
@@ -106,14 +107,11 @@ def test_console_connect_send_broadcast_control_and_disconnect(monkeypatch):
         # Upstream URL and headers are not actually used by FakeWS
         return "ws://fake-upstream", {"Authorization": "Bearer t"}
 
-    async def fake_open_upstream(self, sid, upstream_url, headers):
-        ws = FakeWS(sid)
-        upstreams[sid] = ws
-        return ws
-
-    async def fake_start_reader(self, sid):
-        # No-op to avoid background tasks for tests
-        return None
+    async def fake_open_upstream(self, upstream_url, headers):
+        ws = FakeWS(self.sid)
+        upstreams[self.sid] = ws
+        self._upstream = ws
+        return True
 
     monkeypatch.setattr(
         ConsoleConsumer, "_user_owns_container", staticmethod(fake_user_owns)
@@ -122,7 +120,6 @@ def test_console_connect_send_broadcast_control_and_disconnect(monkeypatch):
         ConsoleConsumer, "_build_upstream_url_and_headers", fake_build_url_headers
     )
     monkeypatch.setattr(ConsoleConsumer, "_open_upstream", fake_open_upstream)
-    monkeypatch.setattr(ConsoleConsumer, "_start_reader", fake_start_reader)
 
     # Stub audit to avoid DB writes (and SQLite locks) during tests
     async def _noop_audit_ws(self, *args, **kwargs):
@@ -136,59 +133,18 @@ def test_console_connect_send_broadcast_control_and_disconnect(monkeypatch):
         connected, _ = await comm.connect()
         assert connected is True
 
-        # Should receive initial info after connect
-        data = await comm.receive_json_from()
-        assert data["type"] == "info"
-        assert data["message"] == "Connected"
-        assert data["sessions"] == ["s1"]
-        assert data["active"] == "s1"
+        # Should receive initial text after connect
+        msg = await comm.receive_from()
+        assert msg == "[connected sid=s1]"
         assert "s1" in upstreams
         s1 = upstreams["s1"]
 
-        # Send plain text to active session
+        # Send plain text to upstream and verify base64 payload
         await comm.send_to(text_data="pwd")
         await asyncio.sleep(0.05)
-        # ends with \n internally
-        assert s1.sent and s1.sent[-1].endswith("\n")
-        assert s1.sent[-1].strip() == "pwd"
-
-        # Broadcast command to all sessions (only s1 currently)
-        await comm.send_to(text_data=json.dumps({"data": "ls", "broadcast": True}))
-        await asyncio.sleep(0.05)
-        assert s1.sent[-1].strip() == "ls"
-
-        # Open second session s2
-        await comm.send_to(text_data=json.dumps({"control": "open", "sid": "s2"}))
-        evt = await comm.receive_json_from()
-        assert evt["type"] == "info"
-        assert evt["message"] == "session-opened"
-        assert evt["sid"] == "s2"
-        assert evt["active"] == "s2"
-        assert "s2" in upstreams
-        s2 = upstreams["s2"]
-        assert s2.closed is False
-
-        # Focus back to s1
-        await comm.send_to(text_data=json.dumps({"control": "focus", "sid": "s1"}))
-        evt = await comm.receive_json_from()
-        assert evt["type"] == "info"
-        assert evt["message"] == "session-focused"
-        assert evt["sid"] == "s1"
-
-        # Sending plain text now should hit s1 (not s2)
-        prev_s2_count = len(s2.sent)
-        await comm.send_to(text_data="date")
-        await asyncio.sleep(0.05)
-        assert s1.sent[-1].strip() == "date"
-        assert len(s2.sent) == prev_s2_count
-
-        # Close s2
-        await comm.send_to(text_data=json.dumps({"control": "close", "sid": "s2"}))
-        evt = await comm.receive_json_from()
-        assert evt["type"] == "info"
-        assert evt["message"] == "session-closed"
-        assert evt["sid"] == "s2"
-        assert s2.closed is True
+        assert s1.sent, "Upstream should have received data"
+        decoded = base64.b64decode(s1.sent[-1]).decode("utf-8", errors="ignore")
+        assert decoded == "pwd"
 
         # Disconnect: remaining upstream(s) should be closed (s1)
         await comm.disconnect()

@@ -15,13 +15,13 @@ export function setupConsole({ onSend }) {
 	const light_theme = {
 		background: "#2d2d2d",
 		foreground: "#fff",
-		cursor: "#2d2d2d",
+		cursor: "#fff",
 		selectionBackground: "#111111",
 	};
 	const dark_theme = {
 		background: "#0b0d10",
 		foreground: "#d1d5db",
-		cursor: "#11161c",
+		cursor: "#d1d5db",
 		selectionBackground: "#374151",
 	};
 
@@ -48,8 +48,9 @@ export function setupConsole({ onSend }) {
 		}
 		const el = createSessionElements(sid);
 		const term = new Terminal({
-			cursorBlink: false,
+			cursorBlink: true,
 			scrollback: 5000,
+			termName: "xterm-256color",
 			convertEol: false,
 			fontFamily:
 				'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
@@ -60,8 +61,31 @@ export function setupConsole({ onSend }) {
 		term.loadAddon(fitAddon);
 		term.open(el);
 		fitAddon.fit();
+		// Send initial and delayed resize to ensure PTY matches terminal size
+		const __sendInitialResize = () => {
+			try {
+				const c = term.cols || 80;
+				const r = term.rows || 24;
+				onSend?.(`__RESIZE__ ${c}x${r}`);
+			} catch {}
+		};
+		__sendInitialResize();
+		setTimeout(__sendInitialResize, 1500);
+		// Stream raw key input to backend (no newline auto-append)
+		term.onData((data) => {
+			onSend?.(data);
+		});
+		// Notify backend of terminal size changes so it can resize the PTY
+		term.onResize(({ cols, rows }) => {
+			onSend?.(`__RESIZE__ ${cols}x${rows}`);
+		});
 
 		sessions.set(sid, { term, fitAddon, el });
+		try {
+			window.dispatchEvent(
+				new CustomEvent("console:session-opened", { detail: { sid } }),
+			);
+		} catch {}
 
 		// Default focus to first session opened
 		if (activeSid == null || makeActive) {
@@ -79,6 +103,11 @@ export function setupConsole({ onSend }) {
 			s.el.remove();
 		} catch {}
 		sessions.delete(sid);
+		try {
+			window.dispatchEvent(
+				new CustomEvent("console:session-closed", { detail: { sid } }),
+			);
+		} catch {}
 
 		if (activeSid === sid) {
 			activeSid = null;
@@ -104,6 +133,9 @@ export function setupConsole({ onSend }) {
 			s.el.style.display = "block";
 			try {
 				s.fitAddon.fit();
+			} catch {}
+			try {
+				s.term.focus();
 			} catch {}
 		}
 	}
@@ -182,11 +214,14 @@ export function setupConsole({ onSend }) {
 
 	if (sendBtn && inputEl) {
 		sendBtn.addEventListener("click", () => {
-			const v = inputEl.value;
+			const vRaw = inputEl.value;
+			let v = vRaw;
+			// Append newline so the shell executes the command
+			if·(!v.endsWith("\n"));
+			v = `${v}\n`;
 			inputEl.value = "";
-			history.push(v);
+			history.push(vRaw);
 			hIdx = history.length;
-			// Do NOT auto-append newline; backend will handle it
 			onSend?.(v);
 		});
 
@@ -245,6 +280,8 @@ export function setupConsole({ onSend }) {
 				return activeSid ? sessions.get(activeSid)?.term : null;
 			},
 		},
+		// get a terminal instance by session id
+		getTerm: (sid) => (sid ? sessions.get(sid)?.term || null : null),
 		// writing
 		addLine: (text, sid) => addLine(text, sid),
 		write: (data, sid) => write(data, sid),
