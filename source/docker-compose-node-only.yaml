@@ -1,0 +1,41 @@
+services:
+  vm_services:
+    build: ./vm_service/.
+    command: ./entrypoint.sh
+    volumes:
+      - ./vm_data:/app/vm_data
+      - /Users/hectorpulido/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro
+      - /Users/hectorpulido/.ssh/id_ed25519.pub:/root/.ssh/id_vm_pequeroku.pub:ro
+    # devices:
+    #     - /dev/kvm:/dev/kvm
+    # security_opt:
+    #     - seccomp=unconfined
+    environment:
+      VM_SSH_PRIVKEY: /root/.ssh/id_vm_pequeroku
+      VM_BASE_IMAGE: /app/vm_data/base/debian12-golden.qcow2
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - pequeroku-net
+    depends_on:
+      - redis
+    restart: unless-stopped
+    ports:
+      - "8080:8080" # Change this for your wished port
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - pequeroku-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - .redis_data:/data
+    restart: unless-stopped
+
+networks:
+  pequeroku-net:
+    external: false
