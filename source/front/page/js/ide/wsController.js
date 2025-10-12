@@ -115,7 +115,7 @@ export function setupWSController({ containerId, consoleApi, onTabsChange }) {
 		}
 	}
 
-	function handleClose(sid, ev, info) {
+	function handleClose(sid, info) {
 		try {
 			const wait = info && typeof info.waitMs === "number" ? info.waitMs : null;
 			if (wait && wait > 0) {
@@ -147,7 +147,7 @@ export function setupWSController({ containerId, consoleApi, onTabsChange }) {
 			sid,
 			onOpen: () => handleOpen(sid),
 			onMessage: (ev) => handleMessage(sid, ev),
-			onClose: (ev, info) => handleClose(sid, ev, info),
+			onClose: (info) => handleClose(sid, info),
 			onError: (ev) => handleError(sid, ev),
 		});
 		sockets.set(sid, sock);

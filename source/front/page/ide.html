@@ -3,11 +3,12 @@
         <meta charset="UTF-8" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+        <base href="/dashboard/" />
         <title>PequeRoku – Micro-IDE</title>
-        <link rel="stylesheet" href="/css/themes.css" />
-        <link rel="stylesheet" href="/css/base.css" />
-        <link rel="stylesheet" href="/css/ideStyles.css" />
-        <link rel="stylesheet" href="/css/ai.css" />
+        <link rel="stylesheet" href="css/themes.css" />
+        <link rel="stylesheet" href="css/base.css" />
+        <link rel="stylesheet" href="css/ideStyles.css" />
+        <link rel="stylesheet" href="css/ai.css" />
         <link
             rel="stylesheet"
             href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"
@@ -19,6 +20,8 @@
 
         <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+        <link rel="icon" href="favicon.svg" type="image/x-icon">
     </head>
 
     <body>
@@ -362,9 +365,9 @@
             </div>
         </main>
 
-        <script type="module" src="/js/ide/main.js"></script>
-        <script type="module" src="/js/ide/aiChat.js"></script>
-        <script type="module" src="/js/ide/minibrowser.js"></script>
+        <script type="module" src="js/ide/main.js"></script>
+        <script type="module" src="js/ide/aiChat.js"></script>
+        <script type="module" src="js/ide/minibrowser.js"></script>
 
     </body>
 </html>

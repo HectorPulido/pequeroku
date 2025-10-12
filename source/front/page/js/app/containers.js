@@ -71,12 +71,16 @@ export function setupContainers() {
 	btnRefresh.addEventListener("click", () => fetchContainers({ lazy: false }));
 	btnFullscreen.addEventListener("click", () => {
 		if (current_id)
-			open(`/ide/?containerId=${current_id}`, "_blank", "noopener,noreferrer");
+			open(
+				`/dashboard/ide/?containerId=${current_id}`,
+				"_blank",
+				"noopener,noreferrer",
+			);
 	});
 	btnFullscreenMetrics.addEventListener("click", () => {
 		if (current_id)
 			open(
-				`/metrics/?container=${current_id}`,
+				`/dashboard/metrics/?container=${current_id}`,
 				"_blank",
 				"noopener,noreferrer",
 			);
@@ -337,7 +341,11 @@ export function setupContainers() {
 	function openStats(name, id) {
 		current_id = id;
 		if (isSmallScreen()) {
-			open(`/metrics/?container=${id}`, "_blank", "noopener,noreferrer");
+			open(
+				`/dashboard/metrics/?container=${id}`,
+				"_blank",
+				"noopener,noreferrer",
+			);
 			return;
 		}
 		if (!openStats._ctrl) {
@@ -347,13 +355,17 @@ export function setupContainers() {
 			});
 		}
 		openStats._ctrl.open({ title: name });
-		metricsModalBody.innerHTML = `<iframe src="/metrics/?container=${id}&showHeader" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
+		metricsModalBody.innerHTML = `<iframe src="/dashboard/metrics/?container=${id}&showHeader" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
 	}
 
 	function openConsole(name, id) {
 		current_id = id;
 		if (isSmallScreen()) {
-			open(`/ide/?containerId=${id}`, "_blank", "noopener,noreferrer");
+			open(
+				`/dashboard/ide/?containerId=${id}`,
+				"_blank",
+				"noopener,noreferrer",
+			);
 			return;
 		}
 		if (!openConsole._ctrl) {
@@ -363,7 +375,7 @@ export function setupContainers() {
 			});
 		}
 		openConsole._ctrl.open({ title: name });
-		modalBody.innerHTML = `<iframe src="/ide/?containerId=${id}&showHeader" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
+		modalBody.innerHTML = `<iframe src="/dashboard/ide/?containerId=${id}&showHeader" frameborder="0" style="width: 100%; height: 100%;"></iframe>`;
 	}
 
 	function closeConsole() {

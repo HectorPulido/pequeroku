@@ -11,7 +11,8 @@ export function createWS(
 		backoff: { baseMs: 1000, maxMs: 30000 },
 		onOpen: (ws) => onOpen?.(ws, { sid }),
 		onMessage: (ev, ws) => onMessage?.(ev, ws, { sid }),
-		onClose: (ev, info) => onClose?.(ev, { ...info, waitMs: sock.getBackoffWait?.() }, { sid }),
+		onClose: (ev, info) =>
+			onClose?.(ev, { ...info, waitMs: sock.getBackoffWait?.() }, { sid }),
 		onError: (ev) => onError?.(ev, { sid }),
 	});
 	return {

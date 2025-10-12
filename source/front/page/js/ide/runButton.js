@@ -185,7 +185,7 @@ export function setupRunButton({
 		// Send run command if available
 		if (runCommand) {
 			try {
-				sender({ data: runCommand });
+				sender({ data: `${runCommand}\n` });
 			} catch (e) {
 				notifyAlert(
 					(e && typeof e === "object" && "message" in e && e.message) ||
@@ -198,7 +198,6 @@ export function setupRunButton({
 		}
 
 		await onBrowserClick();
-		// Do NOT auto-open the mini-browser here
 	}
 
 	async function onBrowserClick() {
