@@ -150,7 +150,7 @@ export function setupRunButton({
 	 * @returns {Promise<{url: string, html: string} | null>}
 	 */
 	async function pollUntil200(port, rawPath, attempts = 10, delayMs = 5000) {
-		await new Promise((r) => setTimeout(r, delayMs * 2));
+		await new Promise((r) => setTimeout(r, delayMs));
 		for (let i = 0; i < attempts; i++) {
 			const url = buildCurlUrl(port, rawPath);
 			try {
