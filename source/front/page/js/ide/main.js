@@ -223,6 +223,7 @@ const runCtrl = setupRunButton({
 	wsSend: (payload) => wsCtrl?.sendInput?.(payload?.data ?? payload),
 	autoOpenUrl: true,
 	readFileApi: apiReadFileWrapper,
+	containerId: containerId,
 });
 
 (async () => {

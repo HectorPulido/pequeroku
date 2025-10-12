@@ -69,7 +69,7 @@ export function setupRunButton({
 	loadRunConfig,
 	saveCurrentFile,
 	wsSend,
-	containerId = 5,
+	containerId,
 	defaultPath = "",
 }) {
 	/** @type {string|null} */
