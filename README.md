@@ -1,128 +1,105 @@
+# 🧩 PequeRoku
 
-# PequeRoku
-
-PequeRoku is a lightweight platform to **run and share disposable development environments** in the browser.
-It combines **QEMU-based virtual machines**, a **FastAPI control service**, a **Django web backend**, and a **browser-based IDE** with Monaco Editor and Xterm.js.
-
-Think of it as a “mini Heroku + VS Code + Playground”, self-hosted and hackable. 🚀
-
-## 💡 Motivation
-This project was created to give community members a slice of my servers where they can experiment, learn, and innovate in an isolated environment.
-
-![brief animation on how the platform works](img/demo.gif)
-
-## ✨ Features
-
-* 🔒 **Secure virtual machines** (QEMU/KVM) managed via FastAPI and Redis.
-* 🖥️ **Web IDE** with:
-
-  * Monaco Editor (syntax highlighting, themes).
-  * Integrated terminal (xterm.js).
-  * File tree, upload/download, templates.
-* 📊 **Metrics dashboard** (Chart.js) for CPU, memory, threads.
-* 🤖 **AI-assisted scaffolding**: generate code templates from natural language prompts.
-* 📂 **Repository cloning** from GitHub.
-* 🐳 **Containerized stack** with Docker Compose.
-* 🧩 **Pluggable architecture** (Redis state store, Django/DRF APIs, FastAPI VM manager).
-
-
-## 🛠️ Technology Stack
-
-* **Virtualization**: QEMU, KVM (with ARM/x86 support).
-* **Backend (VM Service)**: FastAPI + Paramiko + psutil.
-* **Backend (Web Service)**: Django + Django Rest Framework + Channels.
-* **State**: Redis.
-* **Database**: PostgreSQL.
-* **Frontend**: Vanilla JS, Monaco Editor, Xterm.js, Chart.js, CSS themes.
-* **Orchestration**: Docker Compose, Nginx.
-
-
-## 📦 Installation
-
-### Prerequisites
-
-* Linux host (Ubuntu/Debian recommended).
-* Docker & Docker Compose installed.
-* At least one prepared **base qcow2 image**.
-
-### 1. Prepare base qcow2 image
-
-Follow the [qcow2 creation steps](create-image.md) if you don't already have a qcow2 image.
-
-Move your image into source/vm_data/base/ (relative to the repository root).
-```bash
-mv debian12-golden.qcow2 ./source/vm_data/base/
-```
-
-### 2. Clone the repository
-
-```bash
-git clone https://github.com/HectorPulido/pequeroku.git
-cd pequeroku
-```
-
-### 3. Configure environment
-
-* Per service, copy the env template to `.env` and adjust values:
-  * `source/web_service/.env.template` → `source/web_service/.env` (DB credentials, allowed hosts, auth, etc.)
-  * `source/vm_service/.env.template` → `source/vm_service/.env` (AUTH_TOKEN, Redis, base image overrides, etc.)
-* Ensure your SSH key mapping in `source/docker-compose.yaml` under `vm_services` matches your host key path.
-
-### 4. Start services
-
-```bash
-cd source
-docker compose up --build
-```
-
-![Pequeroku demo on a phone](img/Mobile.gif)
-
-The stack includes:
-
-* VM manager (FastAPI).
-* Web service (Django + DRF).
-* Redis + Postgres.
-* Nginx (serves frontend + static files; routes `/` to dashboard, `/ide/` to IDE, `/metrics/` to metrics).
+> 🖥️ Your own **always-on, self-hosted codespace** — with real VMs, full root, and zero setup friction.
 
 
 
-## 🚀 Usage
+## 🚀 What Is It?
 
-![brief animation on how create a discord server on Pequeroku](img/DiscordExample.gif)
+**PequeRoku** is an open-source alternative to Replit or Codespaces that you can host yourself.
+It gives you **real virtual machines (via QEMU/KVM)**, a **web IDE**, and **persistent environments** you can reach from any device — laptop, tablet, or phone.
 
-1. Open the web UI at [http://localhost](http://localhost).
-2. Log in with your user. If you don't have one, create an admin in the web container:
-   ```bash
-   cd source
-   docker compose exec web python manage.py createsuperuser
-   ```
-3. Create a container (VM).
-4. Open it in the IDE (or navigate directly to `/ide/` for the IDE, `/metrics/` for metrics):
-   * Edit code with Monaco.
-   * Run commands in the terminal.
-   * Upload/download files.
-   * Clone from GitHub.
-5. Open **Metrics dashboard** to monitor CPU, memory, threads.
-6. Optionally, use the **AI Generator** to scaffold new projects.
+No sandbox. No cold starts. No hidden limits.
+Just your own cloud dev environment, fully under your control.
 
 
-## 🤖 AI Features
+## 🪄 Demo & Screenshots
 
-PequeRoku can generate complete projects from scratch using OpenAI‑compatible services. More ways to use the AI coming soon...
+<p align="center">
+  <img src="/img/demo.gif" alt="PequeRoku Demo" width="800"><br>
+  <em>Jump into your VM from any device — no setup, no waiting.</em>
+</p>
 
-![brief animation on how the AI part works](img/AI.gif)
+
+## ✨ Why It Exists
+
+I built PequeRoku because I couldn’t find a remote dev platform that was:
+
+* 🧑‍💻 **Open & self-hosted**
+* 🔑 **Root-accessible** (install whatever you want)
+* 💡 **Always-on** — no booting or waiting
+* 🌐 **Accessible from anywhere**
+* 💸 **Affordable to run at home**
+
+Traditional solutions like Replit, Codespaces, or Gitpod are great — but they don’t give you full control, and their costs add up fast.
+PequeRoku brings that freedom back.
 
 
-## 🤝 Contributing
 
-We 💖 contributions!
+## ⚙️ How It Works
 
-1. Fork the repo 🍴
-2. Create feature branch: `git checkout -b feature/awesome` 🌟
-3. Commit your changes: `git commit -m "Add awesome feature"` ✏️
-4. Push: `git push origin feature/awesome` 📤
-5. Open a Pull Request 🚀
+Each PequeRoku instance runs:
 
+* 🧠 **FastAPI backend** for VM orchestration
+* 🧩 **Django/DRF backend** for users and templates
+* 💾 **QEMU VMs** with strong isolation
+* 💻 **Monaco + Xterm.js frontend** for the IDE
+* 🧍 Each developer gets a persistent VM — always on, with root access.
+
+📘 Full architecture and setup guide → [**Wiki**](https://github.com/HectorPulido/pequeroku/wiki)
+
+
+
+## 🧩 Quick Start
+
+1. Follow the setup guide on the [**Wiki → Getting Started**](https://github.com/HectorPulido/pequeroku/wiki/Getting-Started)
+2. Launch your instance (Docker Compose supported)
+3. Visit `http://localhost:8000`
+4. Log in and start coding ✨
+
+That’s it. You now have your own self-hosted Replit-style workspace.
+
+
+
+## 🧠 What’s Next
+
+* ⚡ Fast snapshots / rollbacks
+* 👥 Multi-user roles and guardrails
+* 🤖 Automations (push → test in active VM)
+* 🧰 Better UI for managing multiple instances
+* ✨ More AI
+
+
+
+## 💬 Contribute
+
+PequeRoku is open to ideas, bug reports, and pull requests!
+If you’d like to help:
+
+* Check the [Issues](https://github.com/HectorPulido/pequeroku/issues)
+* Share feedback, ideas, or problems — I reply to everything 🚀
+
+
+
+## 🧡 Support the Project
+
+If PequeRoku resonates with you:
+
+* ⭐ Star the repo — it helps others discover it
+* 🗣️ Tell others, spread the world
+* 🧑‍💻 Deploy it in your homelab and share your setup
+
+> PequeRoku isn’t “the ultimate platform.”
+> It’s your platform — a small way to take back control.
+
+
+
+## 📎 Links
+
+* 🌐 [pequeroku.net](https://pequeroku.net)
+* 💻 [GitHub Wiki](https://github.com/HectorPulido/pequeroku/wiki)
+* 🧠 [Medium Article](https://medium.com/@HectorPulido/my-own-self-hosted-replit-with-real-root-and-always-on-...)
+* 📦 License: MIT
 
 
 ## License
