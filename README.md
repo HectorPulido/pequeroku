@@ -98,7 +98,7 @@ If PequeRoku resonates with you:
 
 * 🌐 [pequeroku.net](https://pequeroku.net)
 * 💻 [GitHub Wiki](https://github.com/HectorPulido/pequeroku/wiki)
-* 🧠 [Medium Article](https://medium.com/@HectorPulido/my-own-self-hosted-replit-with-real-root-and-always-on-...)
+* 🧠 [Medium Article](https://medium.com/p/19bc757c735d)
 * 📦 License: MIT
 
 
