@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="60" height="40" viewBox="0 0 60 40" role="img" aria-label="ʕ•ᴥ•ʔ badge">
+  <rect x="0" y="0" width="60" height="40" rx="10" ry="10" fill="#5755e8"/>
+  <text
+    x="30"
+    y="21"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    font-size="18"
+    font-weight="800"
+    font-family="system-ui, 'Noto Sans', 'Segoe UI Emoji', sans-serif"
+    fill="#ffffff">ʕ•ᴥ•ʔ</text>
+</svg>

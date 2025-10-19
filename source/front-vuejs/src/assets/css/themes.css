@@ -1,0 +1,322 @@
+/** biome-ignore-all lint/style/noDescendingSpecificity: I do not know css :( */
+/* Unified theme tokens (dark-first) based on the requested palette
+   Primary:        Indigo 600  #4F46E5
+   Accent:         Cyan 500    #06B6D4
+   Dark Background:            #0B1220 (Navy 900)
+   Dark Surface:               #111827 (Gray 900)
+   Text on dark (primary):     #E5E7EB (Gray 200)
+   Text on dark (secondary):   #9CA3AF (Gray 400)
+   Dark Border:                #1F2937 (Gray 800)
+   Success:                    #22C55E
+   Warning:                    #F59E0B
+   Error:                      #EF4444
+
+   Light variant
+   Background:                 #FFFFFF
+   Surface:                    #F8FAFC
+   Text (primary):             #0F172A
+   Text (secondary):           #475569
+
+   Accessibility notes:
+   - Use Primary/Accent over Background/Surface.
+   - Avoid Accent text over Primary backgrounds.
+*/
+
+/* ========== Core tokens (dark by default) ========== */
+:root {
+	/* Brand */
+	--color-primary: #4f46e5;
+	--color-accent: #06b6d4;
+
+	/* Surfaces & layout */
+	--color-bg: #0b1220; /* app background */
+	--color-surface: #111827; /* cards, panels */
+	--color-surface-2: #0f172a; /* deeper surface for contrast */
+
+	/* Content */
+	--color-text: #e5e7eb; /* primary readable text on dark */
+	--color-text-muted: #9ca3af; /* secondary text */
+	--color-link: var(--color-accent);
+
+	/* Borders & separators */
+	--color-border: #1f2937; /* subtle border on dark */
+	--color-border-strong: #334155; /* slightly stronger line */
+
+	/* Action/interaction */
+	--color-hover: #1f2937; /* hover bg for rows/items */
+	--button-bg: var(--color-surface);
+	--button-fg: var(--color-text);
+	--button-border: var(--color-border);
+
+	/* Console */
+	--console-bg: var(--color-bg);
+	--console-fg: var(--color-text);
+
+	/* Header */
+	--header-bg: var(--color-surface);
+	--header-fg: var(--color-text);
+
+	/* States */
+	--color-success: #22c55e;
+	--color-warning: #f59e0b;
+	--color-error: #ef4444;
+
+	/* Legacy aliases (backwards-compat with existing CSS) */
+	--bg: var(--color-bg);
+	--fg: var(--color-text);
+	--card: var(--color-surface);
+	--muted: var(--color-text-muted);
+	--brand: var(--color-primary);
+	--brand-2: var(--color-accent);
+	--hover: var(--color-hover);
+	--danger: var(--color-error);
+	--success: var(--color-success);
+	--warning: var(--color-warning);
+	--error: var(--color-error);
+	--panel: var(--color-surface);
+	--bg-dark: var(--color-bg);
+
+	/* Used by IDE styles */
+	--border: var(--color-border);
+	--border-strong: var(--color-border-strong);
+
+	/* Metrics.css compatibility */
+	--ok: var(--color-success);
+	--err: var(--color-error);
+}
+
+/* ========== Light variant ========== */
+html[data-theme="light"] {
+	--color-bg: #ffffff;
+	--color-surface: #f8fafc;
+	--color-surface-2: #ffffff;
+
+	--color-text: #0f172a;
+	--color-text-muted: #475569;
+
+	--color-border: #e2e8f0;
+	--color-border-strong: #cbd5e1;
+
+	--color-hover: #e2e8f0;
+
+	--button-bg: #eef2f6;
+	--button-fg: #0f172a;
+	--button-border: var(--color-border);
+
+	--console-bg: #f8fafc;
+	--console-fg: #0f172a;
+
+	--header-bg: var(--color-surface);
+	--header-fg: var(--color-text);
+
+	/* Legacy aliases auto-map through core tokens */
+}
+
+/* ========== Global element mappings to tokens (theme-aware) ========== */
+
+/* App base */
+html[data-theme="dark"] body,
+html[data-theme="light"] body,
+body {
+	background: var(--bg);
+	color: var(--fg);
+}
+
+/* Header */
+html[data-theme="dark"] header,
+html[data-theme="light"] header,
+header {
+	background: var(--header-bg);
+	color: var(--header-fg);
+	border-bottom: 1px solid var(--border);
+}
+
+/* Common interactive elements */
+button,
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+select {
+	background: var(--button-bg);
+	color: var(--button-fg);
+	border: 1px solid var(--button-border);
+	border-radius: 6px;
+}
+
+button:hover {
+	filter: brightness(1.05);
+}
+
+button:disabled {
+	opacity: 0.65;
+	cursor: not-allowed;
+}
+
+/* Header-specific button stronger contrast */
+header button {
+	background: var(--brand);
+	color: #fff;
+	border-color: var(--brand);
+}
+header button:hover {
+	filter: brightness(1.06);
+}
+
+/* Utility: top icon buttons on dark/light */
+.top-btn,
+#btn-ai-chat-close {
+	background: none;
+	border: none;
+	color: var(--fg);
+}
+
+/* Cards and containers */
+.container-card,
+.login-box,
+.upload-container,
+.dropdown-content div {
+	background: var(--card);
+	color: var(--fg);
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+/* Muted text */
+.container-card small,
+.muted {
+	color: var(--muted);
+}
+
+/* Dropdown menu surfaces */
+.dropdown-content div {
+	border: 1px solid var(--border);
+}
+
+/* Sidebar and toolbars */
+.sidebar,
+.toolbar {
+	background: var(--card);
+	color: var(--fg);
+	border-color: var(--border);
+}
+.sidebar {
+	border-right: 1px solid var(--border);
+}
+.sidebar li:hover,
+.context-menu li:hover {
+	background: var(--hover);
+}
+
+/* Console areas */
+.console,
+.console-body {
+	background: var(--console-bg);
+	color: var(--console-fg);
+	border: 1px solid var(--border);
+}
+.console-header,
+.upload-header {
+	background: var(--header-bg);
+	color: var(--header-fg);
+	border-bottom: 1px solid var(--border);
+}
+
+/* Textareas */
+textarea {
+	background: color-mix(in oklab, var(--card) 88%, transparent);
+	color: var(--fg);
+	border: 1px solid var(--border);
+}
+
+/* Alerts */
+.alert {
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+	background: var(--color-error);
+	color: #ffffff;
+}
+.alert.success {
+	background: var(--color-success);
+	color: #052e12;
+}
+html[data-theme="dark"] .alert.success {
+	color: #eafff1;
+}
+
+.alert.info {
+	background: var(--color-accent);
+	color: #06222a;
+}
+html[data-theme="dark"] .alert.info {
+	color: #e6fbff;
+}
+
+.alert.warning {
+	background: var(--color-warning);
+	color: #231a00;
+}
+html[data-theme="dark"] .alert.warning {
+	color: #fffaf0;
+}
+
+/* Loader overlay */
+.loader-backdrop {
+	background: rgba(0, 0, 0, 0.35);
+}
+.loader-spinner {
+	border-color: color-mix(in oklab, var(--fg) 35%, transparent);
+	border-top-color: var(--fg);
+}
+
+/* Context menu (IDE) */
+.context-menu {
+	background: var(--console-bg);
+	border: 1px solid var(--border);
+	color: var(--fg);
+}
+.context-menu .danger {
+	color: var(--danger);
+}
+.context-menu .divider {
+	background: var(--console-bg);
+}
+
+/* Upload fields */
+.upload-body input[type="file"] {
+	background: color-mix(in oklab, var(--card) 88%, transparent);
+	color: var(--fg);
+	border: 1px solid var(--button-border);
+}
+.upload-body button {
+	background: var(--brand-2);
+	color: #001018; /* ensure contrast over cyan */
+}
+.upload-body button:hover {
+	filter: brightness(1.04);
+}
+
+/* Buttons - optional semantic helpers (opt-in) */
+button.primary,
+.btn-primary {
+	background: var(--brand);
+	border-color: var(--brand);
+	color: #ffffff;
+}
+button.accent,
+.btn-accent {
+	background: var(--brand-2);
+	border-color: var(--brand-2);
+	color: #001018; /* avoid accent text on primary; use dark ink on cyan */
+}
+
+/* Header dropdown menus */
+.header-dropdown .dropdown-content div {
+	background: var(--card);
+	color: var(--fg);
+	border: 1px solid var(--border);
+}
+
+/* Accessibility helpers: focus rings */
+:focus-visible {
+	outline: 2px solid color-mix(in oklab, var(--brand) 65%, white);
+	outline-offset: 1px;
+}
