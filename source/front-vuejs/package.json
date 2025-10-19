@@ -1,26 +1,46 @@
 {
-  "name": "front-vuejs",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "lint": "biome lint .",
-    "format": "biome format --write ."
-  },
-  "dependencies": {
-    "chart.js": "^4.4.4",
-    "vue": "^3.4.21"
-  },
-  "devDependencies": {
-    "@biomejs/cli": "^1.7.3",
-    "@types/chart.js": "^2.9.41",
-    "@types/node": "^20.12.7",
-    "@vitejs/plugin-vue": "^5.0.4",
-    "typescript": "^5.4.5",
-    "vite": "^5.2.0",
-    "vue-tsc": "^1.8.27"
-  }
+	"name": "front-vuejs",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"engines": {
+		"node": "^20.19.0 || >=22.12.0"
+	},
+	"scripts": {
+		"dev": "vite",
+		"build": "run-p type-check \"build-only {@}\" --",
+		"build-only": "vite build",
+		"type-check": "vue-tsc --build",
+		"preview": "vite preview",
+		"lint": "biome lint .",
+		"format": "biome format --write .",
+		"check": "biome check .",
+		"fix": "biome check --write --unsafe .",
+		"ci": "biome ci ."
+	},
+	"dependencies": {
+		"@iconoir/vue": "^7.11.0",
+		"@vitejs/plugin-vue": "^6.0.1",
+		"@xterm/xterm": "^5.5.0",
+		"chart.js": "^4.5.1",
+		"monaco-editor": "^0.54.0",
+		"vue": "^3.5.22",
+		"vue-router": "^4.5.1"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.2.6",
+		"@tsconfig/node22": "^22.0.2",
+		"@types/chart.js": "^2.9.41",
+		"@types/node": "^22.18.6",
+		"@vue/tsconfig": "^0.8.1",
+		"eslint": "^9.33.0",
+		"eslint-plugin-vue": "~10.4.0",
+		"jiti": "^2.5.1",
+		"npm-run-all2": "^8.0.4",
+		"prettier": "3.6.2",
+		"typescript": "~5.9.0",
+		"vite": "^7.1.7",
+		"vite-plugin-vue-devtools": "^8.0.2",
+		"vue-tsc": "^3.1.0"
+	}
 }

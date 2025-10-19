@@ -1,1 +1,1 @@
-import './dashboard/main'
+import "./dashboard/main";
