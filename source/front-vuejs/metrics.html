@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Metric monitor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base href="/dashboard/" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css"
+    />
+    <link rel="icon" href="/dashboard/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header>
+      <h1>PequeRoku</h1>
+      <div class="user-info">
+        <div>
+          <div class="dropdown header-dropdown">
+            <a href="/">
+              <button class="header-button">
+                <i class="iconoir-long-arrow-down-left"></i>
+              </button>
+            </a>
+          </div>
+        </div>
+      </div>
+    </header>
+    <main>
+      <div class="grid">
+        <div class="container-card span-12">
+          <div class="status">
+            <span id="status-dot" class="dot"></span>
+            <span id="status-text">Connected…</span>
+            <span id="last-updated" class="muted" style="margin-left: auto"></span>
+          </div>
+        </div>
+
+        <div class="container-card span-4">
+          <div class="kpi">
+            <div>
+              <h3>CPU</h3>
+              <div class="value">
+                <span id="cpu-val">—</span>%
+              </div>
+            </div>
+            <div class="muted">cpu_percent</div>
+          </div>
+        </div>
+        <div class="container-card span-4">
+          <div class="kpi">
+            <div>
+              <h3>Memory RSS</h3>
+              <div class="value">
+                <span id="mem-val">—</span> MiB
+              </div>
+            </div>
+            <div class="muted">rss_mib</div>
+          </div>
+        </div>
+        <div class="container-card span-4">
+          <div class="kpi">
+            <div>
+              <h3>Threads</h3>
+              <div class="value"><span id="thr-val">—</span></div>
+            </div>
+            <div class="muted">num_threads</div>
+          </div>
+        </div>
+
+        <div class="container-card span-6">
+          <div class="muted">CPU %</div>
+          <div class="chart-wrap">
+            <canvas id="cpuChart"></canvas>
+          </div>
+        </div>
+        <div class="container-card span-6">
+          <div class="muted">RSS (MiB)</div>
+          <div class="chart-wrap">
+            <canvas id="memChart"></canvas>
+          </div>
+        </div>
+        <div class="container-card span-12">
+          <div class="muted">Threads</div>
+          <div class="chart-wrap">
+            <canvas id="thrChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="/src/legacy/metrics/main.js"></script>
+  </body>
+</html>

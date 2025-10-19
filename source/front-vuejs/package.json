@@ -1,0 +1,29 @@
+{
+  "name": "front-vuejs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.4",
+    "vue": "^3.4.21"
+  },
+  "devDependencies": {
+    "@biomejs/cli": "^1.7.3",
+    "@types/chart.js": "^2.9.41",
+    "@types/node": "^20.12.7",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "@vue/test-utils": "^2.4.5",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.0",
+    "vitest": "^1.5.3",
+    "vue-tsc": "^1.8.27"
+  }
+}

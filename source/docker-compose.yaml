@@ -33,6 +33,14 @@ services:
       - redis
     restart: unless-stopped
 
+  front_vuejs:
+    build: ./front-vuejs
+    expose:
+      - "80"
+    networks:
+      - pequeroku-net
+    restart: unless-stopped
+
   nginx:
     image: nginx:latest
     container_name: nginx_static
@@ -40,9 +48,9 @@ services:
       - "80:80"
     depends_on:
       - web
+      - front_vuejs
     volumes:
       - ./web_service/staticfiles:/usr/share/nginx/static:ro # static -> django static files
-      - ./front/page:/usr/share/nginx/html:ro # html -> front
       - ./landing/page:/usr/share/nginx/landing:ro # landing -> landing
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
