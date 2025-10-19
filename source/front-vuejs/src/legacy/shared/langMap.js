@@ -1,0 +1,111 @@
+const langMap = {
+	// **Scripting & marcados**
+	txt: "plaintext",
+	log: "log",
+	md: "markdown",
+	markdown: "markdown",
+	mdx: "markdown",
+	html: "html",
+	htm: "html",
+	xml: "xml",
+	xsd: "xml",
+	xsl: "xml",
+	svg: "xml",
+	json: "json",
+	yml: "yaml",
+	yaml: "yaml",
+	toml: "toml",
+	ini: "ini",
+	cfg: "ini",
+	conf: "ini",
+	// **Styles**
+	css: "css",
+	scss: "scss",
+	sass: "sass",
+	less: "less",
+	// **Shell & CI**
+	sh: "shell",
+	bash: "shell",
+	zsh: "shell",
+	fish: "shell",
+	ps1: "powershell",
+	psm1: "powershell",
+	psd1: "powershell",
+	dockerfile: "dockerfile",
+	gitignore: "git-commit", // usa el highlighter de Git
+	// **Web / Front-end**
+	js: "javascript",
+	jsx: "javascript",
+	ts: "typescript",
+	tsx: "typescript",
+	vue: "vue",
+	// **Back-end / General purpose**
+	py: "python",
+	rb: "ruby",
+	php: "php",
+	pl: "perl",
+	pm: "perl",
+	r: "r",
+	go: "go",
+	rs: "rust",
+	java: "java",
+	kt: "kotlin",
+	kts: "kotlin",
+	swift: "swift",
+	dart: "dart",
+	lua: "lua",
+	// **.NET**
+	cs: "csharp",
+	fs: "fsharp",
+	vb: "vb",
+	// **C / C++ / Objective-C**
+	c: "c",
+	cpp: "cpp",
+	cc: "cpp",
+	cxx: "cpp",
+	h: "cpp",
+	hpp: "cpp",
+	mm: "objective-c",
+	m: "objective-c",
+	objc: "objective-c",
+	// **Functional & others**
+	hs: "haskell",
+	erl: "erlang",
+	ex: "elixir",
+	exs: "elixir",
+	clj: "clojure",
+	cljs: "clojure",
+	scala: "scala",
+	groovy: "groovy",
+	coffee: "coffeescript",
+	// **DevOps / Infra as Code**
+	tf: "terraform",
+	tfvars: "terraform",
+	ansible: "yaml",
+	// **Build / CI files**
+	makefile: "makefile",
+	mk: "makefile",
+	cmake: "cmake",
+	cmakelists: "cmake",
+	gradle: "groovy",
+	pom: "xml", // Maven POM
+	// **Database / Query**
+	sql: "sql",
+	cypher: "cypher",
+	graphql: "graphql",
+	// **LaTeX / Academia**
+	tex: "latex",
+	sty: "latex",
+	cls: "latex",
+	bib: "bibtex",
+	// **Extras**
+	bat: "bat",
+	vbs: "vbscript",
+	// fallback
+	default: "plaintext",
+};
+
+export function detectLangFromPath(path) {
+	const ext = (path.split(".").pop() || "").toLowerCase();
+	return langMap[ext] || langMap.default;
+}

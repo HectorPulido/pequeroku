@@ -6,12 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "biome lint .",
+    "format": "biome format --write ."
   },
   "dependencies": {
+    "chart.js": "^4.4.4",
     "vue": "^3.4.21"
   },
   "devDependencies": {
+    "@biomejs/cli": "^1.7.3",
+    "@types/chart.js": "^2.9.41",
     "@types/node": "^20.12.7",
     "@vitejs/plugin-vue": "^5.0.4",
     "typescript": "^5.4.5",

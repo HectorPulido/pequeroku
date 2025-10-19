@@ -262,8 +262,8 @@ import {
   isSmallScreen,
   makeApi,
   signatureFrom
-} from './services/api'
-import { applyTheme, getCurrentTheme, toggleTheme, watchSystemThemeChanges } from './utils/theme'
+} from '../services/api'
+import { applyTheme, getCurrentTheme, toggleTheme, watchSystemThemeChanges } from '../utils/theme'
 
 type AlertType = 'info' | 'error' | 'warning' | 'success'
 

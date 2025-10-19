@@ -1,0 +1,661 @@
+/** biome-ignore-all lint/complexity/noImportantStyles: Important stuff is important */
+/** biome-ignore-all lint/style/noDescendingSpecificity: I do not know css :( */
+
+/* ===== Preview (IDE sidebar) ===== */
+.preview-box {
+	padding: 4px;
+	background: var(--card);
+	border-top: 1px solid var(--border);
+}
+
+.preview-box.hidden {
+	display: none;
+}
+
+#preview-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 4px;
+}
+
+#preview-toolbar > input {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+#preview-iframe {
+	width: 100%;
+	height: 30vh;
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+/* Better use of space on small screens */
+@media (max-width: 768px) {
+	#preview-iframe {
+		height: 35vh;
+	}
+}
+
+/* ===== Base ===== */
+html,
+body {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	overflow: hidden;
+}
+
+/* Lists inside the sidebar */
+.sidebar ul {
+	list-style: none;
+	padding-left: 8;
+	margin: 0;
+}
+
+#file-tree {
+	margin-bottom: 10em;
+}
+
+.sidebar ul ul {
+	padding-left: 12px;
+}
+
+.sidebar li {
+	padding: 4px 8px;
+	cursor: pointer;
+}
+
+.sidebar :is(#file-tree, ul#file-tree) li:hover {
+	background: var(--hover);
+}
+/* Prevent ancestor folders from highlighting when a deeper item is hovered */
+.sidebar :is(#file-tree, ul#file-tree) li:hover:has(li:hover) {
+	background: transparent;
+}
+/* Selected item style */
+.sidebar #file-tree li.selected {
+	background: color-mix(in oklab, var(--brand) 20%, transparent);
+}
+/* Keep selected style subtle when child item is hovered */
+.sidebar #file-tree li.selected:has(li:hover) {
+	background: transparent;
+}
+
+.sidebar #file-tree li:hover > ul,
+.sidebar #file-tree li ul:hover {
+	background: transparent;
+}
+
+.sidebar li.directory::before {
+	content: "📁 ";
+}
+
+.sidebar li.file::before {
+	content: "📄 ";
+}
+
+/* Buttons & text inputs */
+button,
+input[type="text"] {
+	background: var(--button-bg);
+	color: var(--button-fg);
+	border: 1px solid var(--button-border);
+	border-radius: 4px;
+	padding: 4px 8px;
+}
+
+button:hover {
+	background: var(--hover);
+}
+
+/* ===== Layout (editor shell) ===== */
+#editor-modal {
+	/* Full-viewport editor container */
+	color: var(--fg);
+	display: flex;
+	width: 100vw;
+	height: 100dvh;
+	max-width: 100%;
+	overflow: hidden;
+	/* avoid accidental horizontal scroll */
+}
+
+#main {
+	/* Main panel should be able to shrink: min-width: 0 is KEY in flexbox */
+	flex: 1 1 auto;
+	min-width: 0;
+	/* prevents pushing the container */
+	display: flex;
+	flex-direction: column;
+	max-width: 100%;
+	min-height: 0;
+	/* important so the flex editor works */
+}
+
+/* Editor must grow and fit without overflow */
+wc-monaco-editor#editor {
+	flex: 1 1 auto;
+	/* editor grows */
+	min-height: 0;
+	/* prevents overflow in flex */
+	min-width: 0;
+	/* lets flex compute widths correctly */
+}
+
+/* Console area */
+.console-area {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+	background: var(--console-bg);
+	/* avoid width push */
+}
+
+.collapsed {
+	display: none !important;
+}
+
+.console-input {
+	flex: 1;
+}
+
+/* ===== Sidebar (collapsible / off-canvas on mobile) ===== */
+#sidebar {
+	background: var(--card);
+	/*padding: 8px;*/
+	box-sizing: border-box;
+	overflow-y: auto;
+	transition: transform 0.25s ease;
+	text-wrap-mode: nowrap;
+}
+
+#sidebar > div {
+	margin-bottom: 0.5em;
+}
+
+#sidebar > div > button {
+	height: 2em;
+}
+
+/* ===== Toolbars & controls ===== */
+.toolbar {
+	/* Toolbars do not push content: they can wrap and won’t overflow */
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	flex-wrap: wrap;
+	/* on narrow screens, wrap to a new line */
+	background: var(--card);
+	padding: 4px;
+}
+
+#tree-toolbar {
+	justify-content: normal;
+	position: sticky;
+	top: 0;
+}
+
+.toolbar > div {
+	/* Both sides of the toolbar can wrap and not force width */
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	min-width: 0;
+	/* crucial for ellipsis to work */
+}
+
+.toolbar > div > button {
+	height: 2em;
+}
+
+/* The current path should not push the buttons: … when it doesn’t fit */
+#current_path_label {
+	/*display: inline-block;*/
+	display: none;
+	max-width: 60vw;
+	/* tweak as needed */
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Console */
+.console {
+	background: var(--console-bg);
+	color: var(--console-fg);
+	padding: 4px;
+	overflow-y: auto;
+	font-family: monospace;
+	white-space: pre-wrap;
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+
+.console-toolbar .last-button {
+	height: 100%;
+}
+
+/* ===== Dropdown ===== */
+.dropdown {
+	position: relative;
+	display: inline-block;
+}
+
+.dropdown-content {
+	display: none;
+	position: absolute;
+	bottom: 100%;
+	right: 0%;
+	z-index: 100;
+}
+
+.dropdown-content div {
+	background: var(--card);
+	padding: 15px;
+}
+
+.dropdown:hover .dropdown-content {
+	display: block;
+}
+
+.dropdown-content .btn-send {
+	width: 100%;
+	border-radius: 0px;
+}
+
+/* ===== Modals ===== */
+#templates-modal,
+.upload-body {
+	color: var(--fg);
+}
+
+/* ===== Responsive: phones & tablets ≤ 768px ===== */
+@media (max-width: 768px) {
+	#editor-modal {
+		flex-direction: column;
+		/* vertical layout */
+	}
+
+	.toolbar {
+		position: sticky;
+		top: 0;
+		z-index: 5;
+	}
+
+	/* Off-canvas drawer sidebar on mobile */
+	.sidebar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		bottom: 0;
+		transform: translateX(-100%);
+		/* hidden off-screen */
+		transition: transform 0.25s ease;
+		width: 80vw;
+		/* drawer-like width */
+		max-width: 320px;
+		border-right: 1px solid var(--border);
+		z-index: 50;
+	}
+
+	/* “Open” state on mobile */
+	#editor-modal.sidebar-open .sidebar {
+		transform: translateX(0);
+		z-index: 1001;
+	}
+
+	/* Editor takes remaining vertical space */
+	wc-monaco-editor#editor {
+		height: calc(100vh - 44px);
+		/* approx: top toolbar */
+	}
+
+	.console-area {
+		position: sticky;
+		/*bottom: 65.328px;*/
+		z-index: 1000;
+	}
+}
+
+#editor-modal.sidebar-collapsed .sidebar,
+#editor-modal.sidebar-collapsed .splitter-v {
+	display: none;
+}
+.calc {
+	/*Header size*/
+	height: calc(100dvh - 65.328px) !important;
+}
+
+@media (max-width: 768px) {
+	#editor-modal.sidebar-collapsed .sidebar,
+	#editor-modal.sidebar-collapsed .splitter-v {
+		transform: translateX(-100%);
+	}
+
+	.toolbar > button,
+	.toolbar > div > button {
+		font-size: larger !important;
+	}
+
+	.toolbar > input {
+		height: 32px;
+	}
+
+	header {
+		display: none !important;
+	}
+
+	.calc {
+		height: 100dvh !important;
+	}
+}
+
+body {
+	height: 100vh !important;
+}
+
+@supports (height: 100dvh) {
+	body {
+		height: 100dvh !important;
+	}
+}
+
+.context-menu {
+	position: fixed;
+	z-index: 9999;
+	list-style: none;
+	margin: 0;
+	padding: 6px;
+	background: var(--console-bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	min-width: 180px;
+	box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+.context-menu.hidden {
+	display: none;
+}
+.context-menu li {
+	padding: 8px 10px;
+	cursor: pointer;
+	user-select: none;
+}
+.context-menu li:hover {
+	background: var(--hover);
+}
+.context-menu .danger {
+	color: var(--danger);
+}
+.context-menu .divider {
+	height: 1px;
+	background: var(--console-bg);
+	margin: 6px 0;
+	pointer-events: none;
+}
+
+@media (min-width: 768px) {
+	#editor-modal {
+		display: grid;
+		grid-template-columns: 280px 6px 1fr;
+	}
+	.splitter-v {
+		cursor: col-resize;
+		background: var(--border);
+	}
+	.splitter-v:hover {
+		background: var(--border-strong);
+	}
+
+	.sidebar-collapsed {
+		display: flex !important;
+	}
+}
+
+.console-resizer {
+	height: 10px;
+	cursor: row-resize;
+	background: var(--border);
+}
+.console-resizer:hover {
+	background: var(--border-strong);
+}
+#console-area {
+	height: auto;
+}
+
+#editor {
+	overflow: auto;
+	height: 100%;
+}
+
+/* ===== Search (IDE sidebar) ===== */
+/* Case-sensitive toggle styles (moved from inline to stylesheet) */
+#search-toolbar label.toggle-case {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+#search-toolbar label.toggle-case input[type="checkbox"] {
+	position: absolute;
+	opacity: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+#search-toolbar label.toggle-case i {
+	color: var(--button-fg);
+	background: var(--button-bg);
+	border: 1px solid var(--button-border);
+	border-radius: 4px;
+	padding: 4px 6px;
+	cursor: pointer;
+	transition:
+		background 0.15s ease,
+		color 0.15s ease,
+		border-color 0.15s ease;
+}
+
+#search-toolbar label.toggle-case i:hover {
+	background: var(--hover);
+}
+
+#search-toolbar label.toggle-case input:checked + i {
+	color: #fff;
+	background: var(--brand-2);
+	border-color: var(--brand-2);
+}
+#search-box {
+	padding: 4px;
+}
+
+#search-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+#search-toolbar > button {
+	height: 2em;
+}
+
+#search-pattern {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+#search-results {
+	list-style: none;
+	margin: 4px 0 8px;
+	padding-left: 0;
+	max-height: 30vh;
+	overflow: auto;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--card);
+}
+
+#search-results li.file {
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--border);
+	cursor: pointer;
+}
+
+#search-results li.file:hover {
+	background: var(--hover);
+}
+
+#search-results li.file > strong {
+	display: block;
+	font-weight: 600;
+}
+
+#search-results li.file > ul {
+	margin: 4px 0 6px 0;
+	padding-left: 16px;
+	border-left: 2px solid var(--border);
+}
+
+#search-results li.match {
+	padding: 4px 8px;
+	border: 0;
+	cursor: pointer;
+	font-family: monospace;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+#search-results li.match:hover {
+	background: var(--hover);
+}
+
+#search-results > li:last-child {
+	border-bottom: 0;
+}
+
+.resizer {
+	background: var(--border);
+}
+
+/* Console tabs */
+.console-tabs {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow-x: auto;
+	max-height: 2em;
+	scrollbar-width: thin;
+}
+
+.console-tab {
+	background: var(--button-bg);
+	color: var(--button-fg);
+	border: 1px solid var(--button-border);
+	border-radius: 6px;
+	padding: 2px 8px;
+	cursor: pointer;
+	user-select: none;
+	white-space: nowrap;
+}
+
+.console-tab:hover {
+	background: var(--hover);
+}
+
+.console-tab[aria-selected="true"] {
+	background: var(--header-bg);
+	border-color: var(--border-strong);
+	color: var(--header-fg);
+}
+
+.console-tab:focus {
+	outline: 2px solid color-mix(in oklab, var(--brand) 65%, white);
+	outline-offset: 1px;
+}
+
+.console-tab .icon {
+	margin-left: 6px;
+	opacity: 0.8;
+}
+
+/* Smooth scrollbar for Chromium/WebKit */
+.console-tabs::-webkit-scrollbar {
+	height: 6px;
+}
+.console-tabs::-webkit-scrollbar-thumb {
+	background: var(--button-border);
+	border-radius: 3px;
+}
+.console-tabs::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* File tabs */
+.file-tabs {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: 8px;
+	min-width: 0;
+	max-width: 50vw;
+	overflow-x: auto;
+	scrollbar-width: thin;
+}
+
+.file-tab {
+	background: var(--button-bg);
+	color: var(--button-fg);
+	border: 1px solid var(--button-border);
+	border-radius: 6px;
+	padding: 1px 8px;
+	font-size: 0.9em;
+	line-height: 1.8em;
+	cursor: pointer;
+	user-select: none;
+	white-space: nowrap;
+}
+
+.file-tab:hover {
+	background: var(--hover);
+}
+
+.file-tab[aria-selected="true"] {
+	background: var(--header-bg);
+	border-color: var(--border-strong);
+	color: var(--header-fg);
+}
+
+.file-tab:focus {
+	outline: 2px solid color-mix(in oklab, var(--brand) 65%, white);
+	outline-offset: 1px;
+}
+
+.file-tab .icon {
+	margin-left: 6px;
+	opacity: 0.8;
+}
+
+/* Smooth scrollbar for Chromium/WebKit (file tabs) */
+.file-tabs::-webkit-scrollbar {
+	height: 4px;
+}
+.file-tabs::-webkit-scrollbar-thumb {
+	background: var(--button-border);
+	border-radius: 3px;
+}
+.file-tabs::-webkit-scrollbar-track {
+	background: transparent;
+}
