@@ -1,0 +1,9 @@
+node_modules
+dist
+build-tests
+coverage
+*.log
+.DS_Store
+tests
+.npmrc
+tmp

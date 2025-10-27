@@ -1,0 +1,24 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.3.0/schema.json",
+	"formatter": {
+		"indentWidth": 2,
+		"lineWidth": 100
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"style": {
+				"useImportType": "off"
+			},
+			"a11y": {
+				"useButtonType": "off",
+				"useKeyWithClickEvents": "off"
+			}
+		}
+	},
+	"files": {
+		"includes": ["src/**/*.{ts,tsx,js,jsx,json,css}"],
+		"ignoreUnknown": false
+	}
+}
