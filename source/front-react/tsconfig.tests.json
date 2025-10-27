@@ -1,0 +1,31 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./build-tests",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "types": ["node", "vite/client"],
+    "allowImportingTsExtensions": false,
+    "allowJs": false,
+    "rootDir": ".",
+    "jsx": "react-jsx",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": [
+    "src/constants.ts",
+    "src/lib/**/*.ts",
+    "src/services/**/*.ts",
+    "src/types/**/*.ts",
+    "src/types/**/*.d.ts",
+    "tests/**/*.ts",
+    "tests/**/*.tsx"
+  ]
+}
