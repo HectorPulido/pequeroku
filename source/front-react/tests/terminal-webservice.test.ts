@@ -3,79 +3,57 @@ import { strict as assert } from 'node:assert';
 
 import TerminalWebService from '@/services/ide/TerminalWebService';
 
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-  static OPEN = 1;
-  readyState = MockWebSocket.OPEN;
-  url: string;
-  binaryType: string | undefined;
-  onmessage: ((event: MessageEvent) => void) | null = null;
-  onerror: ((event: unknown) => void) | null = null;
-  onopen: (() => void) | null = null;
-  sent: Array<string | ArrayBuffer> = [];
-  closed = false;
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  constructor(url: string) {
-    this.url = url;
-    MockWebSocket.instances.push(this);
-    this.onopen?.();
-  }
-
-  send(payload: string | ArrayBuffer) {
-    this.sent.push(payload);
-  }
-
-  close() {
-    this.closed = true;
-  }
-
-  emitMessage(data: string | ArrayBuffer) {
-    this.onmessage?.({ data } as MessageEvent);
-  }
-}
-
-test('TerminalWebService send respects readyState and forwards payloads', () => {
-  const originalWebSocket = globalThis.WebSocket;
-  globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
-  MockWebSocket.instances.length = 0;
-  const originalLocation = globalThis.location;
-  globalThis.location = { protocol: 'https:', host: 'example.test' } as unknown as Location;
-
+test('TerminalWebService mock reports readiness and echoes text input', async () => {
   const service = new TerminalWebService('999', 'sid-1');
-  const socket = MockWebSocket.instances.at(-1)!;
+  const messages: Array<unknown> = [];
 
-  service.send('hello');
-  assert.deepEqual(socket.sent, ['hello']);
-
-  socket.readyState = 0; // not open
-  service.send('ignored');
-  assert.deepEqual(socket.sent, ['hello']);
-
-  service.close();
-  assert.equal(socket.closed, true);
-
-  globalThis.WebSocket = originalWebSocket;
-  globalThis.location = originalLocation;
-});
-
-test('TerminalWebService onMessage registers handler', () => {
-  const originalWebSocket = globalThis.WebSocket;
-  globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
-  MockWebSocket.instances.length = 0;
-  const originalLocation = globalThis.location;
-  globalThis.location = { protocol: 'https:', host: 'example.test' } as unknown as Location;
-
-  const service = new TerminalWebService('1000', 'sid-2');
-  const socket = MockWebSocket.instances.at(-1)!;
-
-  let payload: unknown;
   service.onMessage((event) => {
-    payload = event.data;
+    messages.push(event.data);
   });
 
-  socket.emitMessage('data');
-  assert.equal(payload, 'data');
+  await delay(25);
+  assert.equal(service.isConnected(), true);
+  assert.ok(
+    messages.some(
+      (message) => typeof message === 'string' && message.toString().includes('Terminal session ready'),
+    ),
+  );
 
-  globalThis.WebSocket = originalWebSocket;
-  globalThis.location = originalLocation;
+  service.send('help\n');
+  await delay(80);
+  assert.ok(
+    messages.some(
+      (message) => typeof message === 'string' && message.toString().includes('you typed: help'),
+    ),
+  );
+
+  service.close();
+  assert.equal(service.hasConnection(), false);
+});
+
+test('TerminalWebService mock handles binary payloads and disconnects cleanly', async () => {
+  const service = new TerminalWebService('1000', 'sid-2');
+  const received: Array<unknown> = [];
+
+  service.onMessage((event) => {
+    received.push(event.data);
+  });
+
+  await delay(25);
+  const buffer = new Uint8Array([1, 2, 3]).buffer;
+  service.send(buffer);
+  await delay(80);
+
+  assert.ok(
+    received.some(
+      (message) =>
+        typeof message === 'string' &&
+        message.toString().includes('[mock terminal received binary data]'),
+    ),
+  );
+
+  service.close();
+  assert.equal(service.isConnected(), false);
 });

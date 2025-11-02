@@ -1,4 +1,5 @@
 import { Xmark } from "iconoir-react";
+import Button from "@/components/Button";
 import type React from "react";
 
 type ModalSize = "sm" | "md" | "lg" | "xl";
@@ -41,17 +42,17 @@ const Modal: React.FC<ModalProps> = ({
 			<div
 				className={`flex w-full flex-col overflow-hidden rounded-lg border border-gray-800 bg-[#111827] shadow-xl ${sizeClasses}`}
 			>
-				<div className="flex flex-shrink-0 items-center justify-between border-b border-gray-800 px-6 py-4">
+				<div className="flex shrink-0 items-center justify-between border-b border-gray-800 px-6 py-4">
 					<h2 className="text-lg font-semibold text-white">{title}</h2>
 					<div className="flex items-center gap-2">
 						{headerActions}
-						<button
+						<Button
+  						variant="secondary"
+  						size="sm"
 							onClick={onClose}
-							className="text-gray-400 transition-colors hover:text-white"
-							aria-label="Close modal"
 						>
 							<Xmark className="h-5 w-5" />
-						</button>
+						</Button>
 					</div>
 				</div>
 
@@ -60,7 +61,7 @@ const Modal: React.FC<ModalProps> = ({
 				</div>
 
 				{footer ? (
-					<div className="flex flex-shrink-0 justify-end gap-3 border-t border-gray-800 bg-[#0B1220] px-6 py-4">
+					<div className="flex shrink-0 justify-end gap-3 border-t border-gray-800 bg-[#0B1220] px-6 py-4">
 						{footer}
 					</div>
 				) : null}

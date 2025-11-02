@@ -4,30 +4,53 @@ import { MockTerminalWebService } from "@/mocks/terminal";
 class TerminalWebService {
 	private ws: WebSocket | null = null;
 	private connected = false;
+	private readonly url: string;
+	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+	private reconnectAttempts = 0;
+	private manualClose = false;
+	private messageHandler: ((event: MessageEvent) => void) | null = null;
 
 	constructor(containerId: string, sid: string) {
 		const proto = location.protocol === "https:" ? "wss" : "ws";
-		const url = `${proto}://${location.host}/ws/containers/${containerId}/?sid=${encodeURIComponent(sid)}`;
-		this.ws = new WebSocket(url);
+		this.url = `${proto}://${location.host}/ws/containers/${containerId}/?sid=${encodeURIComponent(sid)}`;
+		this.openSocket();
+	}
 
+	private openSocket() {
+		if (this.ws) {
+			const state = this.ws.readyState;
+			if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) {
+				return;
+			}
+		}
+		this.manualClose = false;
+		this.clearReconnectTimer();
+		this.ws = new WebSocket(this.url);
 		this.ws.binaryType = "arraybuffer";
 
 		this.ws.onopen = () => {
-			console.log(`Terminal WS connected for sid=${sid}`);
+			console.log("Terminal WS connected");
 			this.connected = true;
+			this.reconnectAttempts = 0;
 		};
 
-		this.ws.onmessage = () => {
-			// The listeners will be added directly to the terminal object
+		this.ws.onmessage = (event) => {
+			if (this.messageHandler) {
+				this.messageHandler(event);
+			}
 		};
 
 		this.ws.onerror = (e) => {
-			console.error(`Terminal WS error for sid=${sid}:`, e);
+			console.error("Terminal WS error:", e);
 		};
 
 		this.ws.onclose = (event) => {
 			this.connected = false;
-			console.log(`Terminal WS closed for sid=${sid}`, event.reason);
+			this.ws = null;
+			console.log("Terminal WS closed:", event.reason);
+			if (!this.manualClose) {
+				this.scheduleReconnect();
+			}
 		};
 	}
 
@@ -40,10 +63,14 @@ class TerminalWebService {
 	}
 
 	public close() {
+		this.manualClose = true;
+		this.clearReconnectTimer();
 		this.ws?.close();
+		this.ws = null;
 	}
 
 	public onMessage(callback: (e: MessageEvent) => void) {
+		this.messageHandler = callback;
 		if (this.ws) {
 			this.ws.onmessage = callback;
 		}
@@ -54,7 +81,26 @@ class TerminalWebService {
 	}
 
 	public hasConnection() {
-		return this.isConnected();
+		return this.ws !== null;
+	}
+
+	private scheduleReconnect() {
+		if (this.manualClose || this.reconnectTimer != null) {
+			return;
+		}
+		const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 5000);
+		this.reconnectAttempts += 1;
+		this.reconnectTimer = setTimeout(() => {
+			this.reconnectTimer = null;
+			this.openSocket();
+		}, delay);
+	}
+
+	private clearReconnectTimer() {
+		if (this.reconnectTimer != null) {
+			clearTimeout(this.reconnectTimer);
+			this.reconnectTimer = null;
+		}
 	}
 }
 

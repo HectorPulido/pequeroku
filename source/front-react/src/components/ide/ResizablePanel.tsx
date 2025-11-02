@@ -80,11 +80,13 @@ const ResizablePanel: React.FC<ResizablePanelProps> = ({
 	return (
 		<div
 			ref={panelRef}
-			className="relative h-full bg-[#0B1220] border-gray-800"
+			className="relative h-full"
 			style={{
 				width: `${width}px`,
-				borderRight: side === "left" ? "1px solid #1F2937" : undefined,
-				borderLeft: side === "right" ? "1px solid #1F2937" : undefined,
+				backgroundColor: "var(--color-surface)",
+				color: "var(--color-text)",
+				borderRight: side === "left" ? "1px solid var(--color-border)" : undefined,
+				borderLeft: side === "right" ? "1px solid var(--color-border)" : undefined,
 			}}
 		>
 			{children}

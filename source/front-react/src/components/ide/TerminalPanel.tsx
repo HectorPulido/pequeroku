@@ -464,10 +464,9 @@ const TerminalPanel: React.FC<{
 					{terminalTabs.map((tab) => {
 						const isActive = activeTerminalId === tab.id;
 						return (
-							<button
+							<div
 								key={tab.id}
-								onClick={() => onTabChange(tab.id)}
-								className={`flex items-center gap-2 border-r border-slate-200 px-3 py-1.5 text-xs dark:border-gray-800 ${
+								className={`flex items-stretch border-r border-slate-200 text-xs dark:border-gray-800 ${
 									isActive
 										? "bg-slate-200 text-slate-900 dark:bg-[#0B1220] dark:text-white"
 										: "text-slate-500 dark:text-gray-400"
@@ -475,19 +474,24 @@ const TerminalPanel: React.FC<{
 							>
 								<button
 									type="button"
-									className={`flex items-center gap-2 ${isActive ? "" : "hover:text-slate-900 dark:hover:text-white"}`}
+									onClick={() => onTabChange(tab.id)}
+									className={`flex h-full min-w-0 flex-1 items-center gap-2 px-3 py-1.5 ${
+										isActive ? "" : "hover:text-slate-900 dark:hover:text-white"
+									}`}
 								>
-									<span>{tab.title}</span>
+									<span className="truncate">{tab.title}</span>
 								</button>
 								<button
 									type="button"
 									onClick={() => onTabClose(tab.id)}
-									className="hover:text-red-400"
+									className={`px-2 py-1.5 hover:text-red-400 ${
+										isActive ? "" : "hover:bg-slate-100/70 dark:hover:bg-[#161c2b]"
+									}`}
 									aria-label={`Close terminal ${tab.title}`}
 								>
 									<Xmark className="w-3 h-3" />
 								</button>
-							</button>
+							</div>
 						);
 					})}
 				</div>
@@ -524,7 +528,7 @@ const TerminalPanel: React.FC<{
 			</div>
 
 			<div
-				className={`border-t border-slate-200 bg-slate-100 px-4 py-3 flex items-center gap-3 text-xs text-slate-600 dark:border-gray-800 dark:bg-[#111827] dark:text-gray-300 ${isCollapsed ? "hidden" : ""}`}
+				className={`border-t border-slate-200 bg-slate-100 px-2 py-1 flex items-center gap-3 text-xs text-slate-600 dark:border-gray-800 dark:bg-[#111827] dark:text-gray-300 ${isCollapsed ? "hidden" : ""}`}
 			>
 				<input
 					value={command}

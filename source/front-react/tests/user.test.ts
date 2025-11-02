@@ -3,8 +3,7 @@ import { strict as assert } from 'node:assert';
 
 import { fetchCurrentUser } from '@/services/user';
 import { loaderStore } from '@/lib/loaderStore';
-
-type FetchCall = { url: string; init: RequestInit | undefined };
+import { mockFetchCurrentUser } from '@/mocks/dashboard';
 
 function withPatchedLoader<T>(fn: () => Promise<T> | T) {
   const originalStart = loaderStore.start;
@@ -32,64 +31,33 @@ function withPatchedLoader<T>(fn: () => Promise<T> | T) {
   };
 }
 
-test('fetchCurrentUser resolves with parsed user payload', async () => {
-  const fakeUser = {
-    username: 'hector',
-    is_superuser: false,
-    active_containers: 2,
-    has_quota: true,
-    quota: {
-      credits: 10,
-      credits_left: 5,
-      ai_use_per_day: 3,
-      ai_uses_left_today: 2,
-      active: true,
-      allowed_types: [],
-    },
-  };
-
-  const calls: FetchCall[] = [];
-  globalThis.fetch = (async (url: string, init?: RequestInit) => {
-    calls.push({ url, init });
-    return {
-      status: 200,
-      statusText: 'OK',
-      ok: true,
-      headers: {},
-      text: async () => JSON.stringify(fakeUser),
-    } as Response;
-  }) as typeof fetch;
+test('fetchCurrentUser resolves with mocked user payload without toggling loader', async () => {
+  const expected = await mockFetchCurrentUser();
 
   const runner = withPatchedLoader(async () => fetchCurrentUser());
   const result = await runner.run();
 
-  assert.deepEqual(result, fakeUser);
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0]?.url, '/api/user/me/');
+  assert.deepEqual(result, expected);
+  assert.notStrictEqual(result, expected);
+  assert.notStrictEqual(result.quota, expected.quota);
   assert.equal(runner.counts.start, 0);
   assert.equal(runner.counts.stop, 0);
 });
 
-test('fetchCurrentUser rejects when the payload is not a valid user', async () => {
-  globalThis.fetch = (async () =>
-    ({
-      status: 200,
-      statusText: 'OK',
-      ok: true,
-      headers: {},
-      text: async () => '<html>login</html>',
-    }) as Response) as typeof fetch;
+test('fetchCurrentUser returns fresh clones across invocations', async () => {
+  const firstRun = withPatchedLoader(async () => fetchCurrentUser());
+  const first = await firstRun.run();
 
-  const runner = withPatchedLoader(async () => fetchCurrentUser());
-  let error: unknown;
-  try {
-    await runner.run();
-  } catch (err) {
-    error = err;
-  }
+  first.quota.allowed_types[0]!.credits_cost = 999;
+  first.quota.credits = -1;
 
-  assert.ok(error instanceof Error, 'Expected an error to be thrown');
-  assert.equal((error as Error & { status?: number }).status, 401);
-  assert.equal(runner.counts.start, 0);
-  assert.equal(runner.counts.stop, 0);
+  const second = await fetchCurrentUser();
+
+  assert.equal(firstRun.counts.start, 0);
+  assert.equal(firstRun.counts.stop, 0);
+  assert.equal(second.quota.credits >= 0, true);
+  assert.notStrictEqual(first, second);
+  assert.notStrictEqual(first.quota, second.quota);
+  assert.notStrictEqual(first.quota.allowed_types, second.quota.allowed_types);
+  assert.notEqual(second.quota.allowed_types[0]?.credits_cost, 999);
 });

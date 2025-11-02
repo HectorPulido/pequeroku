@@ -3,16 +3,23 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "npm run build:ts && npm run build:vite",
     "build:ts": "tsc -b",
     "build:vite": "vite build",
-    "lint": "biome check .",
-    "lint:eslint": "eslint .",
     "preview": "vite preview",
     "build:tests": "tsc -p tsconfig.tests.json",
-    "test": "npm run build:tests"
+    "test": "npm run build:tests && node scripts/run-tests.mjs",
+   	"biome:lint": "biome lint .",
+		"biome:format": "biome format --write .",
+		"biome:check": "biome check .",
+		"biome:fix": "biome check --write .",
+		"biome:ci": "biome ci ."
+
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

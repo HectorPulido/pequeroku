@@ -30,7 +30,7 @@ const TabsBar: React.FC<TabsBarProps> = ({
 	const showRightSection = Boolean(onAdd || rightActions);
 
 	return (
-		<div className="flex items-stretch border-b border-gray-800 bg-[#111827]">
+		<div className="flex items-stretch border-b border-gray-800 bg-[#111827] min-h-auto">
 			<div className="flex-1 min-w-0 overflow-hidden">
 				<div className="flex h-full items-stretch overflow-x-auto overflow-y-hidden whitespace-nowrap scrollbar-thin">
 					{items.map((item) => {
@@ -72,7 +72,7 @@ const TabsBar: React.FC<TabsBarProps> = ({
 				</div>
 			</div>
 			{showRightSection ? (
-				<div className="flex flex-shrink-0 items-center gap-2 px-2">
+				<div className="flex shrink-0 items-center gap-2 px-2">
 					{rightActions ? <div className="flex items-center gap-2">{rightActions}</div> : null}
 					{onAdd ? (
 						<button

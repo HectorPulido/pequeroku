@@ -1,17 +1,19 @@
 import {
+	Expand,
 	GraphUp,
+	Group,
 	Play,
 	RefreshDouble,
 	Square,
 	StatsUpSquare,
 	Trash,
 	User,
-	WarningTriangle,
 	Wrench,
 } from "iconoir-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Button from "@/components/Button";
+import Header from "@/components/Header";
 import Modal from "@/components/Modal";
 import CreateContainerModal from "@/components/modals/CreateContainerModal";
 import { alertStore } from "@/lib/alertStore";
@@ -29,7 +31,6 @@ import {
 import { fetchCurrentUser } from "@/services/user";
 import type { Container, ContainerType } from "@/types/container";
 import type { UserInfo } from "@/types/user";
-import ThemeToggle from "@/components/ThemeToggle";
 
 const WARNING_STORAGE_KEY = "pequeroku:dashboard:tos-warning-shown";
 
@@ -362,78 +363,67 @@ const Dashboard: React.FC = () => {
 
 	return (
 		<div className="min-h-screen bg-[#0B1220] text-gray-200">
-			<header className="flex flex-col border-b border-gray-800 bg-[#111827] px-6 py-4 text-sm lg:flex-row lg:items-center lg:justify-between">
-				<div className="flex items-center gap-3 text-white">
-					<Wrench className="h-5 w-5 text-indigo-400" />
-					<span className="text-lg font-semibold">PequeRoku</span>
-					<span className="hidden text-xs uppercase tracking-wide text-indigo-300/80 lg:inline-flex">
-						Dashboard
-					</span>
-				</div>
-
-				<div className="mt-4 flex flex-wrap items-center gap-3 lg:mt-0">
-					<div className="flex items-center gap-2 rounded-md border border-gray-700 bg-[#0B1220] px-3 py-2">
-						<User className="h-4 w-4 text-gray-400" />
-						<div className="text-xs leading-tight text-gray-300">
-							<div className="font-semibold text-white">
-								Hello{" "}
-								{user?.username
-									? `${user.username.charAt(0).toUpperCase()}${user.username.slice(1)}`
-									: "User"}
-								!
-							</div>
+			<Header>
+				<div className="flex items-center gap-2 rounded-md border border-gray-700 bg-[#0B1220] px-3 py-2">
+					<User className="h-4 w-4 text-gray-400" />
+					<div className="text-xs leading-tight text-gray-300">
+						<div className="font-semibold text-white">
+							Hello{" "}
+							{user?.username
+								? `${user.username.charAt(0).toUpperCase()}${user.username.slice(1)}`
+								: "User"}
+							!
 						</div>
 					</div>
-
-					<div className="relative">
-						<details className="group">
-							<summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-gray-700 bg-[#0B1220] px-3 py-2 text-xs font-medium text-gray-300 transition hover:text-white">
-								<GraphUp className="h-4 w-4" />
-								Quota
-							</summary>
-							<div className="absolute right-0 z-20 mt-2 min-w-[16rem] rounded-md border border-gray-800 bg-[#111827] p-3 text-xs text-gray-300 shadow-xl">
-								<pre className="max-h-48 overflow-auto whitespace-pre-wrap text-[11px] leading-snug text-gray-200">
-									{JSON.stringify(user?.quota ?? {}, null, 2)}
-								</pre>
-							</div>
-						</details>
-					</div>
-
-					<Button
-						variant="secondary"
-						size="sm"
-						icon={
-							isRefreshing ? (
-								<span className="h-4 w-4 animate-spin rounded-full border border-indigo-400 border-t-transparent" />
-							) : (
-								<RefreshDouble className="h-4 w-4" />
-							)
-						}
-						onClick={() => refreshContainers({ lazy: false })}
-					>
-						Refresh
-					</Button>
-
-					<Button
-						variant="primary"
-						size="sm"
-						icon={<Wrench className="h-4 w-4" />}
-						disabled={!canCreateContainer}
-						onClick={() => {
-							setCreateModalOpen(true);
-							void ensureContainerTypes();
-						}}
-					>
-						{newContainerLabel}
-					</Button>
 				</div>
-				<ThemeToggle />
-			</header>
+
+				<div className="relative">
+					<details className="group">
+						<summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-gray-700 bg-[#0B1220] px-3 py-2 text-xs font-medium text-gray-300 transition hover:text-white">
+							<GraphUp className="h-4 w-4" />
+							Quota
+						</summary>
+						<div className="absolute right-0 z-20 mt-2 min-w-[20rem] rounded-md border border-gray-800 bg-[#111827] p-3 text-xs text-gray-300 shadow-xl">
+							<pre className="max-h-48 overflow-auto whitespace-pre-wrap text-[11px] leading-snug text-gray-200">
+								{JSON.stringify(user?.quota ?? {}, null, 2)}
+							</pre>
+						</div>
+					</details>
+				</div>
+
+				<Button
+					variant="secondary"
+					size="sm"
+					icon={
+						isRefreshing ? (
+							<span className="h-4 w-4 animate-spin rounded-full border border-indigo-400 border-t-transparent" />
+						) : (
+							<RefreshDouble className="h-4 w-4" />
+						)
+					}
+					onClick={() => refreshContainers({ lazy: false })}
+				>
+					Refresh
+				</Button>
+
+				<Button
+					variant="primary"
+					size="sm"
+					icon={<Wrench className="h-4 w-4" />}
+					disabled={!canCreateContainer}
+					onClick={() => {
+						setCreateModalOpen(true);
+						void ensureContainerTypes();
+					}}
+				>
+					{newContainerLabel}
+				</Button>
+			</Header>
 
 			<main className="px-6 py-8">
 				<section className="mb-10">
 					<div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-gray-500">
-						<WarningTriangle className="h-4 w-4 text-indigo-400" />
+						<User className="h-4 w-4 text-indigo-400" />
 						Containers
 					</div>
 					{!hasLoadedContainers ? (
@@ -456,7 +446,7 @@ const Dashboard: React.FC = () => {
 				{others.length > 0 && (
 					<section className="mt-12">
 						<div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-gray-500">
-							<StatsUpSquare className="h-4 w-4 text-indigo-400" />
+							<Group className="h-4 w-4 text-indigo-400" />
 							Other containers
 						</div>
 						<div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -495,7 +485,7 @@ const Dashboard: React.FC = () => {
 								);
 							}}
 						>
-							Open in new tab
+							<Expand />
 						</Button>
 					) : null
 				}

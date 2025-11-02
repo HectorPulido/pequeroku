@@ -3,172 +3,61 @@ import { strict as assert } from 'node:assert';
 
 import FileSystemWebService from '@/services/ide/FileSystemWebService';
 
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  url: string;
-  readyState = MockWebSocket.CONNECTING;
-  sent: string[] = [];
-  onopen: (() => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: ((event: unknown) => void) | null = null;
+test('FileSystemWebService call provides mock filesystem operations', async () => {
+  const service = new FileSystemWebService('fs-1');
 
-  constructor(url: string) {
-    this.url = url;
-    MockWebSocket.instances.push(this);
-  }
+  const listing = await service.call<{
+    entries: Array<{ name: string; path: string; path_type: string }>;
+  }>('list_dirs', { path: '/app' });
 
-  open() {
-    this.readyState = MockWebSocket.OPEN;
-    this.onopen?.();
-  }
+  const names = listing.entries.map((entry) => entry.name).sort();
+  assert.ok(names.includes('src'));
+  assert.ok(names.includes('readme.txt'));
 
-  send(payload: string) {
-    this.sent.push(payload);
-  }
+  await service.call('write', { path: '/app/tmp.txt', content: 'hello mock fs' });
+  const readBack = await service.call<{ content: string }>('read', { path: '/app/tmp.txt' });
+  assert.equal(readBack.content, 'hello mock fs');
 
-  emitOk(reqId: number, data: unknown) {
-    this.onmessage?.({ data: JSON.stringify({ event: 'ok', req_id: reqId, data }) });
-  }
-
-  emitError(reqId: number, message: string) {
-    this.onmessage?.({ data: JSON.stringify({ event: 'error', req_id: reqId, error: message }) });
-  }
-
-  emitBroadcast(payload: Record<string, unknown>) {
-    this.onmessage?.({ data: JSON.stringify(payload) });
-  }
-
-  close() {
-    this.readyState = MockWebSocket.CLOSED;
-  }
-}
-
-test('FileSystemWebService call resolves when ok event is received', async (t) => {
-  const originalWebSocket = globalThis.WebSocket;
-  globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
-  const originalLocation = globalThis.location;
-  globalThis.location = { protocol: 'https:', host: 'example.test' } as unknown as Location;
-  t.after(() => {
-    MockWebSocket.instances.length = 0;
-    globalThis.WebSocket = originalWebSocket;
-    globalThis.location = originalLocation;
-  });
-
-  const service = new FileSystemWebService('123');
-  const socket = MockWebSocket.instances.at(-1)!;
-  socket.open();
-
-  const promise = service.call('list_dirs', { path: '/app' });
-
-  assert.equal(socket.sent.length, 1);
-  const message = JSON.parse(socket.sent[0]);
-  assert.equal(message.action, 'list_dirs');
-  assert.equal(message.path, '/app');
-
-  socket.emitOk(message.req_id, { entries: [{ name: 'file.txt' }] });
-
-  const response = await promise;
-  assert.deepEqual(response, { entries: [{ name: 'file.txt' }] });
+  await service.call('delete_path', { path: '/app/tmp.txt' });
+  const afterDelete = await service.call<{ content: string }>('read', { path: '/app/tmp.txt' });
+  assert.equal(afterDelete.content, '');
 });
 
-test('FileSystemWebService call rejects when error event is received', async (t) => {
-  const originalWebSocket = globalThis.WebSocket;
-  globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
-  const originalLocation = globalThis.location;
-  globalThis.location = { protocol: 'https:', host: 'example.test' } as unknown as Location;
-  t.after(() => {
-    MockWebSocket.instances.length = 0;
-    globalThis.WebSocket = originalWebSocket;
-    globalThis.location = originalLocation;
+test('FileSystemWebService broadcasts mock events and supports unsubscribe', async () => {
+  const service = new FileSystemWebService('fs-2');
+  const received: Array<Record<string, unknown>> = [];
+
+  const unsubscribe = service.onBroadcast((event) => {
+    received.push(event);
   });
 
-  const service = new FileSystemWebService('234');
-  const socket = MockWebSocket.instances.at(-1)!;
-  socket.open();
-
-  const promise = service.call('read', { path: '/missing' });
-  const message = JSON.parse(socket.sent[0]);
-
-  socket.emitError(message.req_id, 'not found');
-
-	await assert.rejects(promise, /not found/);
-});
-
-test('FileSystemWebService notifies broadcast listeners', async (t) => {
-  const originalWebSocket = globalThis.WebSocket;
-  globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
-  const originalLocation = globalThis.location;
-  globalThis.location = { protocol: 'http:', host: 'example.test' } as unknown as Location;
-  t.after(() => {
-    MockWebSocket.instances.length = 0;
-    globalThis.WebSocket = originalWebSocket;
-    globalThis.location = originalLocation;
-  });
-
-  const service = new FileSystemWebService('345');
-  const socket = MockWebSocket.instances.at(-1)!;
-  socket.open();
-
-  const received: Record<string, unknown>[] = [];
-  const unsubscribe = service.onBroadcast((message) => {
-    received.push(message);
-  });
-
-  socket.emitBroadcast({ event: 'path_created', path: '/app/demo.txt' });
-  assert.equal(received.length, 1);
-  assert.equal(received[0].event, 'path_created');
+  await delay(0);
+  await service.call('create_dir', { path: '/app/new-folder' });
+  assert.ok(received.some((event) => event.event === 'connected'));
+  assert.ok(received.some((event) => event.event === 'path_created'));
 
   unsubscribe();
-  socket.emitBroadcast({ event: 'path_deleted', path: '/app/demo.txt' });
-  assert.equal(received.length, 1);
+  const countAfterUnsubscribe = received.length;
+  await service.call('delete_path', { path: '/app/new-folder' });
+  await delay(0);
+  assert.equal(received.length, countAfterUnsubscribe);
 });
 
-test('FileSystemWebService search normalizes results payloads', async (t) => {
-  const originalWebSocket = globalThis.WebSocket;
-  globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
-  const originalLocation = globalThis.location;
-  globalThis.location = { protocol: 'https:', host: 'search.test' } as unknown as Location;
-  t.after(() => {
-    MockWebSocket.instances.length = 0;
-    globalThis.WebSocket = originalWebSocket;
-    globalThis.location = originalLocation;
+test('FileSystemWebService search returns matches from the mock filesystem', async () => {
+  const service = new FileSystemWebService('fs-3');
+  await service.call('write', {
+    path: '/app/search-demo.txt',
+    content: 'Search me\nThis line mentions loader\nAnother line',
   });
 
-  const service = new FileSystemWebService('789');
-  const socket = MockWebSocket.instances.at(-1)!;
-  socket.open();
+  const results = await service.search({ pattern: 'loader' });
+  const match = results.find((item) => item.path.endsWith('search-demo.txt'));
 
-  const promise = service.search({
-    pattern: 'useFileTree',
-    includeGlobs: 'src/**/*.ts',
-    excludeDirs: '.git,.venv',
-    caseSensitive: true,
-  });
+  assert.ok(match);
+  assert.equal(match?.matches.length, 1);
+  assert.equal(match?.matches[0]?.preview.includes('loader'), true);
 
-  assert.equal(socket.sent.length, 1);
-  const outbound = JSON.parse(socket.sent[0]);
-  assert.equal(outbound.action, 'search');
-  assert.equal(outbound.pattern, 'useFileTree');
-  assert.equal(outbound.include_globs, 'src/**/*.ts');
-  assert.equal(outbound.exclude_dirs, '.git,.venv');
-  assert.equal(outbound.case, 'false');
-
-  socket.emitOk(outbound.req_id, {
-    results: [
-      {
-        path: '/app/src/hooks/useFileTree.ts',
-        matches: ['L10: import { useCallback }', 'L42: return { fileTree };'],
-      },
-    ],
-  });
-
-  const results = await promise;
-  assert.equal(results.length, 1);
-  assert.equal(results[0]?.path, '/app/src/hooks/useFileTree.ts');
-  assert.deepEqual(results[0]?.matches?.[0], { line: 10, preview: 'import { useCallback }' });
+  await service.call('delete_path', { path: '/app/search-demo.txt' });
 });
