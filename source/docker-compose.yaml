@@ -33,6 +33,16 @@ services:
       - redis
     restart: unless-stopped
 
+  front-react:
+    build:
+      context: ./front-react
+      dockerfile: Dockerfile
+      args:
+        FRONT_REACT_BASE: /dashboard/
+    networks:
+      - pequeroku-net
+    restart: unless-stopped
+
   nginx:
     image: nginx:latest
     container_name: nginx_static
@@ -40,6 +50,7 @@ services:
       - "80:80"
     depends_on:
       - web
+      - front-react
     volumes:
       - ./web_service/staticfiles:/usr/share/nginx/static:ro # static -> django static files
       - ./front/page:/usr/share/nginx/html:ro # html -> front
