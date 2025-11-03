@@ -61,11 +61,6 @@ const CreateContainerModal: React.FC<CreateContainerModalProps> = ({
 			onClose={onClose}
 			title="Create container"
 			size="md"
-			footer={
-				<Button variant="secondary" onClick={onClose}>
-					Close
-				</Button>
-			}
 		>
 			<div className="space-y-5">
 				<div>
