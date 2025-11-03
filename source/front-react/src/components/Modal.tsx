@@ -1,6 +1,6 @@
 import { Xmark } from "iconoir-react";
-import Button from "@/components/Button";
 import type React from "react";
+import Button from "@/components/Button";
 
 type ModalSize = "sm" | "md" | "lg" | "xl";
 
@@ -46,11 +46,7 @@ const Modal: React.FC<ModalProps> = ({
 					<h2 className="text-lg font-semibold text-white">{title}</h2>
 					<div className="flex items-center gap-2">
 						{headerActions}
-						<Button
-  						variant="secondary"
-  						size="sm"
-							onClick={onClose}
-						>
+						<Button variant="secondary" size="sm" onClick={onClose}>
 							<Xmark className="h-5 w-5" />
 						</Button>
 					</div>

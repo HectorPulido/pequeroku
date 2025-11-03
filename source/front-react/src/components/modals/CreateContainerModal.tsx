@@ -56,12 +56,7 @@ const CreateContainerModal: React.FC<CreateContainerModalProps> = ({
 	};
 
 	return (
-		<Modal
-			isOpen={isOpen}
-			onClose={onClose}
-			title="Create container"
-			size="md"
-		>
+		<Modal isOpen={isOpen} onClose={onClose} title="Create container" size="md">
 			<div className="space-y-5">
 				<div>
 					<label
