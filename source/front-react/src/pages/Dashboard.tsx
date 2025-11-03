@@ -521,7 +521,7 @@ const Dashboard: React.FC = () => {
 								);
 							}}
 						>
-						  <Expand />
+							<Expand />
 						</Button>
 					) : null
 				}

@@ -108,29 +108,30 @@ const langMap: Record<string, string> = {
 };
 
 interface LanguageIconProps {
-	path: string | null |undefined;
+	path: string | null | undefined;
 }
 
 export const LanguageIconFromPathComponent: React.FC<LanguageIconProps> = ({ path }) => {
-  const theme_type: "plain" | "plain-wordmark" | "plain colored" | "plain-wordmark colored" = "plain colored";
-  const fallback = "markdown";
-  if (!path) return <i className={`devicon-${fallback}-${theme_type}`}></i>;
-  const normalized = String(path).trim().toLowerCase();
-  if (!normalized) return <i className={`devicon-${fallback}-${theme_type}`}></i>;
-  const fileName = normalized.split("/").pop() ?? normalized;
-  if (!fileName) return <i className={`devicon-${fallback}-${theme_type}`}></i>;
-  if (langMap[fileName]) {
-    return <i className={`devicon-${langMap[fileName]}-${theme_type}`}></i>;
-  }
-  const segments = fileName.split(".");
-  if (segments.length < 2) {
-    return <i className={`devicon-${fallback}-${theme_type}`}></i>;
-  }
-  const baseName = segments.slice(0, -1).join(".") || fileName;
-  if (langMap[baseName]) {
-    return <i className={`devicon-${langMap[baseName]}-${theme_type}`}></i>;
-  }
-  const extension = segments.pop() ?? "";
-  const icon = langMap[extension] ?? fallback;
-  return <i className={`devicon-${icon}-${theme_type}`}></i>;;
-}
+	const theme_type: "plain" | "plain-wordmark" | "plain colored" | "plain-wordmark colored" =
+		"plain colored";
+	const fallback = "markdown";
+	if (!path) return <i className={`devicon-${fallback}-${theme_type}`}></i>;
+	const normalized = String(path).trim().toLowerCase();
+	if (!normalized) return <i className={`devicon-${fallback}-${theme_type}`}></i>;
+	const fileName = normalized.split("/").pop() ?? normalized;
+	if (!fileName) return <i className={`devicon-${fallback}-${theme_type}`}></i>;
+	if (langMap[fileName]) {
+		return <i className={`devicon-${langMap[fileName]}-${theme_type}`}></i>;
+	}
+	const segments = fileName.split(".");
+	if (segments.length < 2) {
+		return <i className={`devicon-${fallback}-${theme_type}`}></i>;
+	}
+	const baseName = segments.slice(0, -1).join(".") || fileName;
+	if (langMap[baseName]) {
+		return <i className={`devicon-${langMap[baseName]}-${theme_type}`}></i>;
+	}
+	const extension = segments.pop() ?? "";
+	const icon = langMap[extension] ?? fallback;
+	return <i className={`devicon-${icon}-${theme_type}`}></i>;
+};
