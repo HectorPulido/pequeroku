@@ -2,6 +2,7 @@ import { NavArrowDown } from "iconoir-react";
 import type React from "react";
 import { useState } from "react";
 import type { FileNode } from "@/types/ide";
+import { LanguageIconFromPathComponent } from "@/lib/devIconMap";
 
 const DEFAULT_ROOT = "/app";
 
@@ -105,8 +106,8 @@ const FileTreeItem: React.FC<FileTreeItemProps> = ({
 						/>
 					</button>
 				)}
-				{isFolder && <span className="pl-4 leading-relaxed text-nowrap ">📁 {node.name}</span>}
-				{!isFolder && <span className="leading-relaxed text-nowrap ">📄 {node.name}</span>}
+        {isFolder && <span className="pl-4 leading-relaxed text-nowrap ">{ node.isOpen ? "📂" : "📁" }  {node.name}</span>}
+        {!isFolder && <span className="leading-relaxed text-nowrap "><LanguageIconFromPathComponent path={ node.path }></LanguageIconFromPathComponent> {node.name}</span>}
 			</div>
 			{isFolder &&
 				node.isOpen &&

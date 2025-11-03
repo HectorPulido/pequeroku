@@ -26,7 +26,7 @@ const Header: React.FC<HeaderProps> = ({
 	const showDefaultActions = !children;
 
 	return (
-		<header className="flex flex-col gap-4 border-b border-gray-800 bg-[#111827] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+		<header className="flex gap-4 border-b border-gray-800 bg-[#111827] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
 			<div className="flex items-center gap-3">
         <a href="#" className="brand" aria-label="PequeRoku home">
           <span className="logo" aria-hidden="true">ʕ•ᴥ•ʔ</span>
