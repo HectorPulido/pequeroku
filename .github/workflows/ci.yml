@@ -44,6 +44,8 @@ jobs:
           cache-dependency-path: source/vm_service/poetry.lock
       - name: Install Poetry
         run: pip install poetry==1.8.4
+      - name: Add Poetry to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
       - name: Install dependencies
         run: poetry install --no-interaction --with dev
       - name: Run pytest
@@ -64,6 +66,8 @@ jobs:
           cache-dependency-path: source/web_service/poetry.lock
       - name: Install Poetry
         run: pip install poetry==1.8.4
+      - name: Add Poetry to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
       - name: Install dependencies
         run: poetry install --no-interaction --with dev
       - name: Check formatting
