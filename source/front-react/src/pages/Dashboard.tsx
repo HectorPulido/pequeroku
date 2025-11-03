@@ -521,7 +521,7 @@ const Dashboard: React.FC = () => {
 								);
 							}}
 						>
-							Open in new tab
+						  <Expand />
 						</Button>
 					) : null
 				}
