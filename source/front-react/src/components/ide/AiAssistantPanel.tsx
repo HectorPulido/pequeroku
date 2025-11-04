@@ -304,7 +304,7 @@ const AiAssistantPanel: React.FC<AiAssistantPanelProps> = ({ isOpen, onClose, co
 				</div>
 			</div>
 
-			<div className="flex flex-1 flex-col justify-between px-4 py-4">
+			<div className="flex flex-1 flex-col justify-between overflow-auto px-4 py-4">
 				<div
 					ref={scrollerRef}
 					className="flex-1 overflow-y-auto pr-1 text-sm text-gray-200 scroll-smooth"
