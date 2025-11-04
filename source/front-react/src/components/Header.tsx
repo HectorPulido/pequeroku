@@ -28,26 +28,29 @@ const Header: React.FC<HeaderProps> = ({
 	return (
 		<header className="flex gap-4 border-b border-gray-800 bg-[#111827] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
 			<div className="flex items-center gap-3">
-        <a href="#" className="brand" aria-label="PequeRoku home">
-          <span className="logo" aria-hidden="true">ʕ•ᴥ•ʔ</span>
-          <span className="name"><span>Peque</span><strong>Roku</strong></span>
-        </a>
+				<a href={backTo} className="brand" aria-label="PequeRoku home">
+					<span className="logo" aria-hidden="true">
+						ʕ•ᴥ•ʔ
+					</span>
+					<span className="name">
+						<span>Peque</span>
+						<strong>Roku</strong>
+					</span>
+				</a>
 			</div>
 			<div className="flex flex-wrap items-center gap-3 sm:justify-end">
 				{showDefaultActions ? (
-					<>
-						<Link
-							to={backTo}
-							aria-label={backLabel}
-							className="inline-flex h-9 w-9 items-center justify-center rounded border border-gray-700 text-gray-300 transition hover:border-indigo-500 hover:text-white"
-						>
-							<LongArrowDownLeft className="h-4 w-4" />
-						</Link>
-					</>
+					<Link
+						to={backTo}
+						aria-label={backLabel}
+						className="inline-flex h-9 w-9 items-center justify-center rounded border border-gray-700 text-gray-300 transition hover:border-indigo-500 hover:text-white"
+					>
+						<LongArrowDownLeft className="h-4 w-4" />
+					</Link>
 				) : (
 					children
 				)}
-			  <ThemeToggle />
+				<ThemeToggle />
 			</div>
 		</header>
 	);
