@@ -17,7 +17,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
 	onSubmit,
 	disabled = false,
 	canSend,
-	placeholder = "Escribe aquí...",
+	placeholder = "Type a message...",
 }) => {
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
