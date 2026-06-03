@@ -4,6 +4,7 @@ No dependen de la VM (corren en el servidor de Django, dentro del hilo worker).
 Portadas del agente viejo de Pequeroku. Las dependencias (ddgs, requests, bs4) se
 importan de forma perezosa para no cargarlas si el agente nunca las usa.
 """
+
 from __future__ import annotations
 
 from .base import Tool, ToolContext, truncate
@@ -35,15 +36,15 @@ class WebSearchTool(Tool):
     def execute(self, args: dict, ctx: ToolContext) -> str:
         query = str(args.get("search_query", "")).strip()
         if not query:
-            return "Error: falta search_query."
+            return "Error: missing search_query."
         try:
             from ddgs import DDGS
 
             results = list(DDGS().text(query, max_results=5, timeout=5))
         except Exception as e:
-            return f"Error en la búsqueda: {e}"
+            return f"Search error: {e}"
         if not results:
-            return "Sin resultados."
+            return "No results."
 
         lines: list[str] = []
         for r in results:
@@ -72,7 +73,7 @@ class WebReadTool(Tool):
     def execute(self, args: dict, ctx: ToolContext) -> str:
         url = str(args.get("url", "")).strip()
         if not url:
-            return "Error: falta url."
+            return "Error: missing url."
         try:
             import requests
             from bs4 import BeautifulSoup
@@ -80,7 +81,7 @@ class WebReadTool(Tool):
             resp = requests.get(url, headers={"User-Agent": _DEFAULT_UA}, timeout=10)
             resp.raise_for_status()
         except Exception as e:
-            return f"Error abriendo {url}: {e}"
+            return f"Error opening {url}: {e}"
 
         soup = BeautifulSoup(resp.text, "html.parser")
         for element in soup(["script", "style", "noscript"]):
@@ -89,5 +90,5 @@ class WebReadTool(Tool):
         lines = [ln.strip() for ln in text.splitlines()]
         cleaned = "\n".join(ln for ln in lines if ln)
         if len(cleaned) > _MAX_PAGE_CHARS:
-            cleaned = cleaned[:_MAX_PAGE_CHARS] + "\n\n[contenido truncado]"
-        return cleaned or "(sin texto legible)"
+            cleaned = cleaned[:_MAX_PAGE_CHARS] + "\n\n[content truncated]"
+        return cleaned or "(no readable text)"

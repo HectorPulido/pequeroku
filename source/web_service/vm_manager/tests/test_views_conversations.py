@@ -4,6 +4,7 @@ GET    /api/containers/{pk}/conversations/            -> {conversations, current
 GET    /api/containers/{pk}/conversations/{id}/       -> {conversation_id, messages}
 DELETE /api/containers/{pk}/conversations/{id}/       -> {conversations, current}
 """
+
 import json
 
 import pytest

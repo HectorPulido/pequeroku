@@ -9,6 +9,7 @@ puede incluir tool-calls). El bucle "seguir hasta terminar" lo lleva ``Agent``.
 de la interfaz) y, al terminar, ``return`` del mensaje final. El ``Agent`` lo
 consume con ``msg = yield from llm.stream(...)``.
 """
+
 from __future__ import annotations
 
 from typing import Iterator
@@ -23,7 +24,9 @@ class LLM:
 
         self.config = config
         # api_key dummy para endpoints locales que no la exigen (Ollama, etc.).
-        self.client = OpenAI(api_key=config.api_key or "sk-no-key", base_url=config.base_url)
+        self.client = OpenAI(
+            api_key=config.api_key or "sk-no-key", base_url=config.base_url
+        )
 
     def stream(self, messages: list[dict], tools: list[dict] | None) -> Iterator[Event]:
         """Un paso del modelo. Hace ``yield`` del texto en vivo (como eventos) y
@@ -32,7 +35,11 @@ class LLM:
         Generador: emite ``AssistantText*`` y ``return`` del mensaje final
         ``{"content": str, "tool_calls": [...], "usage": {...}|None}``.
         """
-        kwargs: dict = {"model": self.config.model, "messages": messages, "stream": True}
+        kwargs: dict = {
+            "model": self.config.model,
+            "messages": messages,
+            "stream": True,
+        }
         # Pide el uso de tokens en el último chunk del stream. Si algún endpoint
         # no lo soporta, simplemente no llegará y el conteo quedará en cero.
         kwargs["stream_options"] = {"include_usage": True}
@@ -74,7 +81,9 @@ class LLM:
                 content.append(delta.content)
 
             for tcd in delta.tool_calls or []:
-                acc = tool_calls.setdefault(tcd.index, {"id": "", "name": "", "arguments": ""})
+                acc = tool_calls.setdefault(
+                    tcd.index, {"id": "", "name": "", "arguments": ""}
+                )
                 if tcd.id:
                     acc["id"] = tcd.id
                 if tcd.function:

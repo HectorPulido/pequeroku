@@ -332,7 +332,7 @@ function listDirectoryEntries(
 function readFile(containerId: string, path: string): string {
 	const state = getContainerState(containerId);
 	const entry = state.get(path);
-	if (!entry || entry.type !== "file") {
+	if (entry?.type !== "file") {
 		return "";
 	}
 	return entry.content ?? "";

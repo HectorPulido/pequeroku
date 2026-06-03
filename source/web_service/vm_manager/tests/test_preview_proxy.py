@@ -36,9 +36,23 @@ def test_rewrite_html_injects_base_and_reroots_absolute_paths():
     assert 'href="rel/page"' in out  # relative untouched; <base> resolves it
 
 
+def test_rewrite_html_injects_runtime_shim():
+    out = _rewrite_html(
+        "<html><head></head><body></body></html>",
+        "/api/containers/15/preview/8000/",
+    )
+    assert '<base href="/api/containers/15/preview/8000/">' in out
+    # Shim runs as a script; PREFIX has NO trailing slash so PREFIX + "/posts" works.
+    assert 'var PREFIX="/api/containers/15/preview/8000"' in out
+    assert "window.fetch=" in out  # API edge patched
+    assert "Element.prototype.setAttribute" in out  # img/href setters patched
+
+
 def test_rewrite_html_inserts_head_when_missing():
     out = _rewrite_html("<body><a href='/x'>x</a></body>", "/p/")
-    assert '<head><base href="/p/"></head>' in out
+    # A <head> is synthesized, starting with our <base> (the shim follows it).
+    assert '<head><base href="/p/"><script>' in out
+    assert "</head><body>" in out
 
 
 def test_rewrite_html_srcset_absolute_entries():

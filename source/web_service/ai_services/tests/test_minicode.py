@@ -4,6 +4,7 @@ Cubren: las tools VM-backed (read/write/edit/glob/grep/bash/process) contra un
 ``FakeVMClient`` en memoria, la auto-reparación del historial (``Session.sanitize``)
 y un turno completo del bucle del agente con un LLM scripteado (sin red).
 """
+
 from __future__ import annotations
 
 import json
@@ -57,7 +58,9 @@ class FakeVMClient:
         out = []
         for p in self.fs:
             if self._under(p, root) and p != root:
-                out.append({"path": p, "name": p.rsplit("/", 1)[-1], "path_type": "file"})
+                out.append(
+                    {"path": p, "name": p.rsplit("/", 1)[-1], "path_type": "file"}
+                )
         return out
 
     def search(self, cid, req):
@@ -101,8 +104,12 @@ class FakeVMClient:
 def make_ctx(client: FakeVMClient) -> ToolContext:
     config = Config(api_key="k", base_url="u", model="m", workdir="/app")
     config.container = SimpleNamespace(container_id="vm-1", node=object())
-    config._vm_client = client  # get_client usa el cliente cacheado, no construye uno real
-    return ToolContext(config=config, session=Session(), spawn_subagent=lambda *a: iter(()))
+    config._vm_client = (
+        client  # get_client usa el cliente cacheado, no construye uno real
+    )
+    return ToolContext(
+        config=config, session=Session(), spawn_subagent=lambda *a: iter(())
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -111,7 +118,9 @@ def make_ctx(client: FakeVMClient) -> ToolContext:
 def test_write_then_read_roundtrip():
     client = FakeVMClient()
     ctx = make_ctx(client)
-    out = files_tools.WriteTool().execute({"filePath": "src/app.py", "content": "hello\nworld"}, ctx)
+    out = files_tools.WriteTool().execute(
+        {"filePath": "src/app.py", "content": "hello\nworld"}, ctx
+    )
     assert "/app/src/app.py" in out
     assert client.fs["/app/src/app.py"] == "hello\nworld"
 
@@ -126,7 +135,7 @@ def test_edit_replaces_unique_snippet():
     out = files_tools.EditTool().execute(
         {"filePath": "a.txt", "oldString": "beta", "newString": "BETA"}, ctx
     )
-    assert "Editado" in out
+    assert "Edited" in out
     assert client.fs["/app/a.txt"] == "alpha\nBETA\ngamma"
 
 
@@ -136,15 +145,13 @@ def test_edit_create_when_old_empty():
     out = files_tools.EditTool().execute(
         {"filePath": "new.txt", "oldString": "", "newString": "content"}, ctx
     )
-    assert "Creado" in out
+    assert "Created" in out
     assert client.fs["/app/new.txt"] == "content"
 
 
 def test_glob_matches_by_name():
     client = FakeVMClient()
-    client.fs.update(
-        {"/app/main.py": "x", "/app/src/a.py": "y", "/app/notes.txt": "z"}
-    )
+    client.fs.update({"/app/main.py": "x", "/app/src/a.py": "y", "/app/notes.txt": "z"})
     ctx = make_ctx(client)
     out = files_tools.GlobTool().execute({"pattern": "*.py"}, ctx)
     assert "/app/main.py" in out and "/app/src/a.py" in out
@@ -162,11 +169,21 @@ def test_grep_returns_matches():
 # --------------------------------------------------------------------------- #
 # Tools de shell
 # --------------------------------------------------------------------------- #
-def test_bash_foreground():
+def test_bash_foreground_runs_in_workdir():
     client = FakeVMClient()
     ctx = make_ctx(client)
     out = shell_tools.BashTool().execute({"command": "echo hi"}, ctx)
-    assert "ran:echo hi" in out
+    # commands run in /app by default (wrapped in `cd /app && ...`)
+    assert "echo hi" in out and "cd /app" in out
+
+
+def test_bash_respects_explicit_workdir():
+    client = FakeVMClient()
+    ctx = make_ctx(client)
+    out = shell_tools.BashTool().execute(
+        {"command": "echo hi", "workdir": "/app/sub"}, ctx
+    )
+    assert "cd /app/sub" in out
 
 
 def test_bash_background_survives_via_start_process(monkeypatch):
@@ -176,18 +193,24 @@ def test_bash_background_survives_via_start_process(monkeypatch):
     out = shell_tools.BashTool().execute(
         {"command": "python3 main.py", "background": True}, ctx
     )
-    assert client.started == ["python3 main.py"]
+    # background also runs in /app
+    assert len(client.started) == 1
+    assert (
+        client.started[0].endswith("python3 main.py") and "cd /app" in client.started[0]
+    )
     assert "job1" in out and "status=running" in out
 
 
 def test_process_status_and_stop():
     client = FakeVMClient()
     ctx = make_ctx(client)
-    status = shell_tools.ProcessTool().execute({"job_id": "job1", "action": "status"}, ctx)
+    status = shell_tools.ProcessTool().execute(
+        {"job_id": "job1", "action": "status"}, ctx
+    )
     assert "status=running" in status and "server up" in status
 
     stop = shell_tools.ProcessTool().execute({"job_id": "job1", "action": "stop"}, ctx)
-    assert "detenido" in stop and client.stopped == ["job1"]
+    assert "stopped" in stop and client.stopped == ["job1"]
 
 
 # --------------------------------------------------------------------------- #
@@ -201,7 +224,11 @@ def test_session_sanitize_repairs_dangling_tool_calls():
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "c1", "type": "function", "function": {"name": "read", "arguments": "{}"}}
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "read", "arguments": "{}"},
+                }
             ],
         },
         # falta el mensaje tool para c1 (historial roto)
@@ -249,15 +276,25 @@ def test_agent_loop_executes_tool_then_answers():
                     {
                         "id": "c1",
                         "name": "write",
-                        "arguments": json.dumps({"filePath": "hello.txt", "content": "hi"}),
+                        "arguments": json.dumps(
+                            {"filePath": "hello.txt", "content": "hi"}
+                        ),
                     }
                 ],
-                "usage": {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4},
+                "usage": {
+                    "prompt_tokens": 3,
+                    "completion_tokens": 1,
+                    "total_tokens": 4,
+                },
             },
             {
                 "content": "Listo, escribí hello.txt.",
                 "tool_calls": [],
-                "usage": {"prompt_tokens": 2, "completion_tokens": 2, "total_tokens": 4},
+                "usage": {
+                    "prompt_tokens": 2,
+                    "completion_tokens": 2,
+                    "total_tokens": 4,
+                },
             },
         ]
     )

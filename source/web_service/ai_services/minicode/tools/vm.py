@@ -14,6 +14,7 @@ Todo corre dentro del hilo worker que arranca ``frontends.pipeline`` (vía
 ``asyncio.to_thread``), así que las llamadas síncronas (HTTP, ORM de auditoría)
 son seguras y no bloquean el event loop de Channels.
 """
+
 from __future__ import annotations
 
 import posixpath

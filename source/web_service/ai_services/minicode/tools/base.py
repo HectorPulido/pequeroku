@@ -4,6 +4,7 @@ Equivale a ``tool/tool.ts`` y ``tool/truncate.ts`` de opencode: una interfaz
 uniforme (``Tool``), el ``ToolContext`` que recibe ``execute``, y el truncado
 automático para que una salida enorme no reviente la ventana de contexto.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -19,7 +20,7 @@ def truncate(
     max_bytes: int = MAX_OUTPUT_BYTES,
     from_tail: bool = False,
 ) -> str:
-    """Recorta por cabeza (por defecto) o por cola (``from_tail``, p. ej. shell)."""
+    """Trim from the head (default) or the tail (``from_tail``, e.g. shell)."""
     truncated = False
     lines = text.split("\n")
     if len(lines) > max_lines:
@@ -32,7 +33,7 @@ def truncate(
         data = data[-max_bytes:] if from_tail else data[:max_bytes]
         text = data.decode("utf-8", "ignore")
     if truncated:
-        text += "\n\n[salida truncada]"
+        text += "\n\n[output truncated]"
     return text
 
 
@@ -58,7 +59,9 @@ class Tool:
     parameters: dict = {"type": "object", "properties": {}}
     read_only: bool = False
 
-    def execute(self, args: dict, ctx: ToolContext) -> str:  # pragma: no cover - interfaz
+    def execute(
+        self, args: dict, ctx: ToolContext
+    ) -> str:  # pragma: no cover - interfaz
         raise NotImplementedError
 
     @property

@@ -3,6 +3,7 @@
 Conversation CONTENT lives in the VM (tested with a fake VMServiceClient, no DB);
 the active-conversation POINTER lives in the DB (tested with django_db).
 """
+
 from __future__ import annotations
 
 import json

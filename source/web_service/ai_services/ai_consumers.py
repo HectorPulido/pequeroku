@@ -74,7 +74,9 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
         self, conversation_id: int, messages: list[OpenAIChatMessage]
     ) -> None:
         container = cast(Container, self.container_obj)
-        await sync_to_async(convo.write_conversation)(container, conversation_id, messages)
+        await sync_to_async(convo.write_conversation)(
+            container, conversation_id, messages
+        )
 
     async def _list_conversation_ids(self) -> list[int]:
         container = cast(Container, self.container_obj)

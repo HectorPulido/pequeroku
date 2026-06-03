@@ -55,9 +55,11 @@ class VMEnsure(BaseModel):
     the Redis cache (e.g. after a vm-service restart without persistence).
     """
 
-    vcpus: int = Field(
-        default=..., ge=1, le=os.cpu_count() or 64, json_schema_extra={"example": 2}
-    )
+    # No host-CPU cap here: ensure() faithfully restores specs the orchestrator
+    # already validated and persisted. The vm-service host running this may have
+    # fewer cores than the node the VM was originally created on, so capping by
+    # os.cpu_count() would wrongly reject a legitimate rebuild.
+    vcpus: int = Field(default=..., ge=1, json_schema_extra={"example": 2})
     mem_mib: int = Field(default=..., ge=256, json_schema_extra={"example": 2})
     disk_gib: int = Field(default=..., ge=5, json_schema_extra={"example": 10})
     base_image: str | None = Field(None, description="VM_BASE_IMAGE Override")

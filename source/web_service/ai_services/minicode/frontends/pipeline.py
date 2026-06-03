@@ -22,6 +22,7 @@ CREDENCIALES
 Se leen de la tabla ``Config`` de la DB (openai_api_key / openai_api_url /
 openai_model). La lectura ocurre dentro del hilo worker, nunca en el event loop.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -125,7 +126,9 @@ def _synth_command(name: str, args: dict) -> str:
     if name == "bash":
         return str(args.get("command", ""))
     if name == "process":
-        return f"process {args.get('action', 'status')} {args.get('job_id', '')}".strip()
+        return (
+            f"process {args.get('action', 'status')} {args.get('job_id', '')}".strip()
+        )
     for key in ("filePath", "pattern", "path", "url", "search_query"):
         if key in args:
             return f"{name} {args[key]}"
@@ -255,9 +258,17 @@ async def run_pipeline(
                         }
                     )
                 elif isinstance(event, Info):
-                    _emit({"type": "info", "message": event.message, "depth": event.depth})
+                    _emit(
+                        {"type": "info", "message": event.message, "depth": event.depth}
+                    )
                 elif isinstance(event, Error):
-                    _emit({"type": "error", "message": event.message, "depth": event.depth})
+                    _emit(
+                        {
+                            "type": "error",
+                            "message": event.message,
+                            "depth": event.depth,
+                        }
+                    )
                 elif isinstance(event, Usage):
                     usage.prompt_tokens += event.prompt_tokens
                     usage.completion_tokens += event.completion_tokens
@@ -272,7 +283,7 @@ async def run_pipeline(
                         }
                     )
         except Exception as e:  # nunca tumbamos el turno: lo reportamos como texto
-            err = f"Error ejecutando el agente: {e}"
+            err = f"Error running the agent: {e}"
             _on_loop(_safe(on_start_chunking))
             _on_loop(_safe(on_chunk, err))
             _on_loop(_safe(on_finish_chunking, err))
@@ -280,5 +291,5 @@ async def run_pipeline(
 
     await asyncio.to_thread(drive)
 
-    final = session.last_assistant_text() or "(sin respuesta)"
+    final = session.last_assistant_text() or "(no response)"
     return _final_messages(session, final), usage

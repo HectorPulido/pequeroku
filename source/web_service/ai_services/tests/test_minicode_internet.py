@@ -3,6 +3,7 @@
 ``ddgs`` is injected as a fake module; ``requests.get`` is monkeypatched (bs4 runs
 for real over the fake HTML).
 """
+
 from __future__ import annotations
 
 import sys
@@ -38,7 +39,7 @@ def test_web_search_no_results(monkeypatch):
             return []
 
     monkeypatch.setitem(sys.modules, "ddgs", types.SimpleNamespace(DDGS=FakeDDGS))
-    assert WebSearchTool().execute({"search_query": "x"}, None) == "Sin resultados."
+    assert WebSearchTool().execute({"search_query": "x"}, None) == "No results."
 
 
 def test_web_search_reports_errors(monkeypatch):
@@ -48,7 +49,7 @@ def test_web_search_reports_errors(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "ddgs", types.SimpleNamespace(DDGS=FakeDDGS))
     out = WebSearchTool().execute({"search_query": "x"}, None)
-    assert "Error" in out and "boom" in out
+    assert "error" in out.lower() and "boom" in out
 
 
 def test_web_read_strips_scripts_and_returns_text(monkeypatch):

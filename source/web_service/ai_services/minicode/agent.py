@@ -17,6 +17,7 @@ consume (una terminal, una web vía SSE/websocket, una API) decide cómo mostrar
 El valor final (texto de la última respuesta) se obtiene con ``return`` del
 generador, que los subagentes capturan con ``result = yield from sub.run()``.
 """
+
 from __future__ import annotations
 
 import json
@@ -98,7 +99,7 @@ class Agent:
             if not msg["tool_calls"] or last_step:
                 if last_step and msg["tool_calls"]:
                     yield Info(
-                        message=f"(alcanzado el máximo de {self.config.max_steps} pasos)",
+                        message=f"(reached the maximum of {self.config.max_steps} steps)",
                         depth=self.depth,
                     )
                 self.session.save()
@@ -112,13 +113,15 @@ class Agent:
             interrupted = False
             for tc in msg["tool_calls"]:
                 if interrupted:
-                    self.session.add_tool_result(tc["id"], "Tool skipped: the turn was aborted.")
+                    self.session.add_tool_result(
+                        tc["id"], "Tool skipped: the turn was aborted."
+                    )
                     continue
                 try:
                     output = yield from self._execute(tc)
                 except KeyboardInterrupt:
                     output = "Tool execution aborted by the user (Ctrl-C)."
-                    yield Error(message="(interrumpido)", depth=self.depth)
+                    yield Error(message="(interrupted)", depth=self.depth)
                     interrupted = True
                 self.session.add_tool_result(tc["id"], output)
 
@@ -155,12 +158,12 @@ class Agent:
         try:
             args = json.loads(tc["arguments"] or "{}")
         except json.JSONDecodeError as e:
-            return f"Error: argumentos JSON inválidos ({e}). Reescribe el input."
+            return f"Error: invalid JSON arguments ({e}). Rewrite the input."
 
         yield ToolCallStarted(name=name, args=args, depth=self.depth)
         tool = self.tool_map.get(name)
         if tool is None:
-            output = f"Error: herramienta desconocida '{name}'."
+            output = f"Error: unknown tool '{name}'."
             yield ToolResult(name=name, output=output, depth=self.depth)
             return output
 
@@ -194,4 +197,4 @@ class Agent:
         sub.session.add_user(prompt)
         result = yield from sub.run()
         yield SubagentFinished(agent_type=agent_type, depth=self.depth)
-        return result or "(el subagente no devolvió texto)"
+        return result or "(the subagent returned no text)"

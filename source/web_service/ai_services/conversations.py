@@ -14,6 +14,7 @@ Everything here is best-effort and synchronous: callers run it off the event loo
 NOTE: a workspace "reset" wipes everything under ``/app`` except
 readme.txt/config.json, so conversations are cleared on reset / VM rebuild.
 """
+
 from __future__ import annotations
 
 import json

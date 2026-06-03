@@ -3,6 +3,7 @@
 Es clave para inducir planificación explícita (el prompt anima a usarla mucho).
 La lista vive en la sesión y se re-renderiza al actualizarse.
 """
+
 from __future__ import annotations
 
 from typing import Iterator
@@ -30,8 +31,14 @@ class TodoWriteTool(Tool):
                     "type": "object",
                     "properties": {
                         "content": {"type": "string"},
-                        "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]},
-                        "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+                        "status": {
+                            "type": "string",
+                            "enum": ["pending", "in_progress", "completed"],
+                        },
+                        "priority": {
+                            "type": "string",
+                            "enum": ["high", "medium", "low"],
+                        },
                     },
                     "required": ["content", "status"],
                 },
@@ -41,10 +48,12 @@ class TodoWriteTool(Tool):
     }
 
     def execute(self, args: dict, ctx: ToolContext) -> Iterator[Event]:
-        # Generador: emite la lista actualizada como evento y devuelve el resumen
-        # de texto que verá el modelo (vía ``return``, capturado por el Agent).
+        # Generator: emits the updated list as an event and returns the text
+        # summary the model sees (via ``return``, captured by the Agent).
         todos = args.get("todos", []) or []
         ctx.session.todos = todos
         yield TodosUpdated(todos=todos)
-        lines = [f"{_MARK.get(t.get('status'), '[ ]')} {t.get('content', '')}" for t in todos]
-        return "Lista de tareas actualizada:\n" + "\n".join(lines)
+        lines = [
+            f"{_MARK.get(t.get('status'), '[ ]')} {t.get('content', '')}" for t in todos
+        ]
+        return "Updated task list:\n" + "\n".join(lines)

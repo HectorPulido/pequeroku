@@ -3,6 +3,7 @@
 Drives ``AIConsumer._handle_action`` directly with an in-memory conversation
 store (``convo`` monkeypatched), capturing the WS events it emits. No VM, no DB.
 """
+
 from __future__ import annotations
 
 import types
@@ -17,8 +18,12 @@ def _make(monkeypatch, convs=None, current=1):
     convs = {1: []} if convs is None else dict(convs)
     state = {"current": current}
 
-    monkeypatch.setattr(ai_consumers.convo, "list_conversation_ids", lambda c: sorted(convs.keys()))
-    monkeypatch.setattr(ai_consumers.convo, "read_conversation", lambda c, cid: list(convs.get(cid, [])))
+    monkeypatch.setattr(
+        ai_consumers.convo, "list_conversation_ids", lambda c: sorted(convs.keys())
+    )
+    monkeypatch.setattr(
+        ai_consumers.convo, "read_conversation", lambda c, cid: list(convs.get(cid, []))
+    )
 
     def _write(c, cid, msgs):
         convs[cid] = list(msgs)
@@ -56,9 +61,7 @@ def _events(sent, event_type):
 
 
 async def test_list_conversations_action(monkeypatch):
-    consumer, sent, _convs, _state = _make(
-        monkeypatch, convs={1: [], 2: []}, current=2
-    )
+    consumer, sent, _convs, _state = _make(monkeypatch, convs={1: [], 2: []}, current=2)
     await consumer._handle_action("list_conversations", {})
     convo_events = _events(sent, "conversations")
     assert convo_events
@@ -101,9 +104,7 @@ async def test_switch_conversation_ignores_bad_id(monkeypatch):
 
 
 async def test_delete_current_conversation_falls_back(monkeypatch):
-    consumer, sent, convs, _state = _make(
-        monkeypatch, convs={1: [], 2: []}, current=2
-    )
+    consumer, sent, convs, _state = _make(monkeypatch, convs={1: [], 2: []}, current=2)
     await consumer._handle_action("delete_conversation", {"id": 2})
     assert 2 not in convs
     assert consumer.conversation_id == 1  # fell back to the remaining one

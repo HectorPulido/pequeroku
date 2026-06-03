@@ -12,6 +12,7 @@ Resiliencia: ``sanitize()`` repara historiales rotos (un assistant con
 ``tool_calls`` sin su ``tool`` de respuesta), que de otro modo hacen que la API
 devuelva 400 en TODAS las llamadas siguientes.
 """
+
 from __future__ import annotations
 
 import json
@@ -78,7 +79,10 @@ class Session:
                     j += 1
                 for tid in needed:
                     repaired.append(
-                        provided.get(tid, {"role": "tool", "tool_call_id": tid, "content": _ABORTED})
+                        provided.get(
+                            tid,
+                            {"role": "tool", "tool_call_id": tid, "content": _ABORTED},
+                        )
                     )
                 i = j
             elif m.get("role") == "tool":
@@ -95,7 +99,9 @@ class Session:
         self.sanitize()
         try:
             Path(self.memory_path).write_text(
-                json.dumps({"messages": self.messages, "todos": self.todos}, ensure_ascii=False),
+                json.dumps(
+                    {"messages": self.messages, "todos": self.todos}, ensure_ascii=False
+                ),
                 encoding="utf-8",
             )
         except Exception:

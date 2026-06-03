@@ -7,6 +7,7 @@ de Django (``frontends.pipeline``) leyéndolas de la tabla ``Config`` de la DB; 
 
 Sigue siendo compatible con cualquier endpoint estilo OpenAI cambiando ``base_url``.
 """
+
 from __future__ import annotations
 
 import os
@@ -53,13 +54,18 @@ class Config:
         temp = os.environ.get("MINICODE_TEMPERATURE")
         max_tokens = os.environ.get("MINICODE_MAX_TOKENS")
         return cls(
-            api_key=os.environ.get("OPENAI_API_KEY") or os.environ.get("MINICODE_API_KEY") or "",
+            api_key=os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("MINICODE_API_KEY")
+            or "",
             base_url=os.environ.get("OPENAI_BASE_URL")
             or os.environ.get("MINICODE_BASE_URL")
             or "https://api.openai.com/v1",
-            model=os.environ.get("MINICODE_MODEL") or os.environ.get("OPENAI_MODEL") or "gpt-4o",
+            model=os.environ.get("MINICODE_MODEL")
+            or os.environ.get("OPENAI_MODEL")
+            or "gpt-4o",
             max_steps=int(os.environ.get("MINICODE_MAX_STEPS", "50")),
             temperature=float(temp) if temp else None,
             max_output_tokens=int(max_tokens) if max_tokens else None,
-            restrict_to_workdir=os.environ.get("MINICODE_RESTRICT_WORKDIR", "").lower() in ("1", "true", "yes"),
+            restrict_to_workdir=os.environ.get("MINICODE_RESTRICT_WORKDIR", "").lower()
+            in ("1", "true", "yes"),
         )

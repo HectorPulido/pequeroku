@@ -6,6 +6,7 @@ La cascada de estrategias de matching de ``edit`` (exact → flexible → block-
 se conserva tal cual de minicode: es pura y muy valiosa para que el ``oldString``
 del modelo encaje aunque no copie el whitespace exacto.
 """
+
 from __future__ import annotations
 
 import difflib
@@ -131,14 +132,14 @@ def apply_edit(content: str, old: str, new: str, replace_all: bool = False) -> s
             return result
         if len(matches) > 1:
             raise EditError(
-                f"oldString aparece {len(matches)} veces; añade más contexto "
-                "alrededor para que sea único (o usa replaceAll)."
+                f"oldString appears {len(matches)} times; add more surrounding "
+                "context to make it unique (or use replaceAll)."
             )
         s, e = matches[0]
         return content[:s] + new + content[e:]
     raise EditError(
-        "No se encontró oldString en el archivo; debe coincidir con el contenido "
-        "(se toleran diferencias de espacios)."
+        "oldString was not found in the file; it must match the file content "
+        "(whitespace differences are tolerated)."
     )
 
 
@@ -155,9 +156,18 @@ class ReadTool(Tool):
     parameters = {
         "type": "object",
         "properties": {
-            "filePath": {"type": "string", "description": "Path to the file (absolute or relative to /app)."},
-            "offset": {"type": "integer", "description": "1-indexed line to start from."},
-            "limit": {"type": "integer", "description": "Max lines to read (default 2000)."},
+            "filePath": {
+                "type": "string",
+                "description": "Path to the file (absolute or relative to /app).",
+            },
+            "offset": {
+                "type": "integer",
+                "description": "1-indexed line to start from.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max lines to read (default 2000).",
+            },
         },
         "required": ["filePath"],
     }
@@ -174,18 +184,21 @@ class ReadTool(Tool):
             if real:
                 vm.audit("read_file", cid, "List directory", {"path": path})
                 names = sorted(
-                    e.get("name", "") + ("/" if e.get("path_type") == "directory" else "")
+                    e.get("name", "")
+                    + ("/" if e.get("path_type") == "directory" else "")
                     for e in real
                 )
-                return f"Directorio {path}:\n" + "\n".join(names[:200])
+                return f"Directory {path}:\n" + "\n".join(names[:200])
             sims = _similar(client, cid, path)
-            hint = f" ¿Quisiste decir: {', '.join(sims)}?" if sims else ""
-            vm.audit("read_file", cid, "Read file (missing)", {"path": path}, success=False)
-            return f"Error: no existe el archivo {path}.{hint}"
+            hint = f" Did you mean: {', '.join(sims)}?" if sims else ""
+            vm.audit(
+                "read_file", cid, "Read file (missing)", {"path": path}, success=False
+            )
+            return f"Error: file {path} does not exist.{hint}"
 
         content = resp.get("content") or ""
         if "\x00" in content[:1024]:
-            return f"Error: archivo binario, no se puede leer como texto: {path}"
+            return f"Error: binary file, cannot read as text: {path}"
 
         offset = max(int(args.get("offset", 1) or 1), 1)
         limit = int(args.get("limit", DEFAULT_READ_LIMIT) or DEFAULT_READ_LIMIT)
@@ -194,13 +207,13 @@ class ReadTool(Tool):
         out = []
         for i, line in enumerate(chunk, start=offset):
             if len(line) > MAX_LINE_CHARS:
-                line = line[:MAX_LINE_CHARS] + "… (línea truncada)"
+                line = line[:MAX_LINE_CHARS] + "… (line truncated)"
             out.append(f"{i:>6}\t{line}")
         result = "\n".join(out)
         if offset - 1 + limit < len(lines):
-            result += f"\n\n[el archivo tiene {len(lines)} líneas; continúa con offset={offset + limit}]"
+            result += f"\n\n[the file has {len(lines)} lines; continue with offset={offset + limit}]"
         vm.audit("read_file", cid, "Read file", {"path": path})
-        return result or "(archivo vacío)"
+        return result or "(empty file)"
 
 
 class WriteTool(Tool):
@@ -224,7 +237,8 @@ class WriteTool(Tool):
         content = args["content"]
         _write_file(client, cid, path, content)
         vm.audit("create_file", cid, "File created", {"path": path})
-        return f"Escrito {path} ({len(content.splitlines())} líneas)."
+        n = len(content.splitlines())
+        return f"Wrote {path} ({n} lines).\n--- content ---\n{content}"
 
 
 class EditTool(Tool):
@@ -238,9 +252,18 @@ class EditTool(Tool):
         "type": "object",
         "properties": {
             "filePath": {"type": "string", "description": "File to modify."},
-            "oldString": {"type": "string", "description": "Text to replace (empty = create file)."},
-            "newString": {"type": "string", "description": "Replacement text (must differ from oldString)."},
-            "replaceAll": {"type": "boolean", "description": "Replace all occurrences."},
+            "oldString": {
+                "type": "string",
+                "description": "Text to replace (empty = create file).",
+            },
+            "newString": {
+                "type": "string",
+                "description": "Replacement text (must differ from oldString).",
+            },
+            "replaceAll": {
+                "type": "boolean",
+                "description": "Replace all occurrences.",
+            },
         },
         "required": ["filePath", "oldString", "newString"],
     }
@@ -251,15 +274,15 @@ class EditTool(Tool):
         old = args.get("oldString", "")
         new = args["newString"]
         if old == new:
-            return "Error: oldString y newString son idénticos."
+            return "Error: oldString and newString are identical."
         if old == "":
             _write_file(client, cid, path, new)
             vm.audit("create_file", cid, "File created (edit)", {"path": path})
-            return f"Creado {path}."
+            return f"Created {path}."
 
         resp = _read_file(client, cid, path)
         if not resp.get("found"):
-            return f"Error: no existe el archivo {path}."
+            return f"Error: file {path} does not exist."
         content = resp.get("content") or ""
         try:
             updated = apply_edit(content, old, new, bool(args.get("replaceAll")))
@@ -268,7 +291,7 @@ class EditTool(Tool):
         _write_file(client, cid, path, updated)
         vm.audit("create_file", cid, "File edited", {"path": path})
         diff = _mini_diff(content, updated)
-        return f"Editado {path}.\n{diff}" if diff else f"Editado {path}."
+        return f"Edited {path}.\n{diff}" if diff else f"Edited {path}."
 
 
 class GlobTool(Tool):
@@ -282,7 +305,10 @@ class GlobTool(Tool):
         "type": "object",
         "properties": {
             "pattern": {"type": "string", "description": "Glob pattern."},
-            "path": {"type": "string", "description": "Root directory (default: /app)."},
+            "path": {
+                "type": "string",
+                "description": "Root directory (default: /app).",
+            },
         },
         "required": ["pattern"],
     }
@@ -304,12 +330,12 @@ class GlobTool(Tool):
                 matches.append(p)
         matches.sort()
         if not matches:
-            return "No se encontraron archivos."
+            return "No files found."
         vm.audit("read_workspace", cid, "Glob", {"pattern": pattern, "root": root})
         shown = matches[:100]
         out = "\n".join(shown)
         if len(matches) > 100:
-            out += f"\n\n[mostrando 100 de {len(matches)}; usa un patrón más específico]"
+            out += f"\n\n[showing 100 of {len(matches)}; use a more specific pattern]"
         return out
 
 
@@ -324,8 +350,14 @@ class GrepTool(Tool):
         "type": "object",
         "properties": {
             "pattern": {"type": "string", "description": "Text or regex pattern."},
-            "path": {"type": "string", "description": "Directory to search (default: /app)."},
-            "include": {"type": "string", "description": "Glob filter for files (e.g. *.py)."},
+            "path": {
+                "type": "string",
+                "description": "Directory to search (default: /app).",
+            },
+            "include": {
+                "type": "string",
+                "description": "Glob filter for files (e.g. *.py).",
+            },
         },
         "required": ["pattern"],
     }
@@ -354,4 +386,4 @@ class GrepTool(Tool):
             for m in hit.get("matchs", []) or []:
                 lines.append(f"{path}: {str(m)[:200]}")
         vm.audit("search", cid, "Grep", {"pattern": pattern, "root": root})
-        return truncate("\n".join(lines)) if lines else "Sin coincidencias."
+        return truncate("\n".join(lines)) if lines else "No matches."

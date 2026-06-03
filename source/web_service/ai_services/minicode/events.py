@@ -11,6 +11,7 @@ Lo rellena el agente que posee ese nivel; un evento con ``depth=None`` aún no h
 sido "sellado" (lo crean ``LLM`` y la tool ``todowrite``, que no conocen el nivel)
 y el agente más cercano le pone su profundidad antes de reenviarlo hacia fuera.
 """
+
 from __future__ import annotations
 
 import dataclasses

@@ -4,6 +4,7 @@
 sync<->async bridge: the worker thread runs the (fake) agent generator and each
 event is marshalled to the async callbacks on the loop.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -81,7 +82,11 @@ async def test_run_pipeline_streams_events_and_returns_messages(monkeypatch):
     assert chunks == ["Hi", " there"]
     assert ("bash", "ls") in tools
     assert starts and finishes == ["Hi there"]
-    assert (usage.prompt_tokens, usage.completion_tokens, usage.total_tokens) == (1, 2, 3)
+    assert (usage.prompt_tokens, usage.completion_tokens, usage.total_tokens) == (
+        1,
+        2,
+        3,
+    )
     assert messages[-1]["role"] == "assistant"
     assert messages[-1]["content"] == "Hi there"
     assert any(m["role"] == "user" and m["content"] == "do it" for m in messages)
@@ -192,7 +197,11 @@ async def test_run_pipeline_forwards_internal_events(monkeypatch):
     assert by_type["error"]["message"] == "non-fatal"
     assert by_type["usage"]["total_tokens"] == 11
     # usage is also accumulated into the returned total
-    assert (usage.prompt_tokens, usage.completion_tokens, usage.total_tokens) == (5, 6, 11)
+    assert (usage.prompt_tokens, usage.completion_tokens, usage.total_tokens) == (
+        5,
+        6,
+        11,
+    )
 
 
 def test_synth_command_variants():

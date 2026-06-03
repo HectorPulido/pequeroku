@@ -8,6 +8,7 @@ Adaptación Pequeroku: las tools de archivos/shell operan sobre la VM remota; se
 añaden ``process`` (control de jobs en background) y las de internet
 (``search_on_internet`` / ``read_from_internet``).
 """
+
 from __future__ import annotations
 
 from .base import Tool, ToolContext, truncate

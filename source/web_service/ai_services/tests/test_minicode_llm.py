@@ -4,6 +4,7 @@ Drives ``LLM.stream`` with a fake OpenAI client whose ``chat.completions.create`
 returns scripted chunks, and asserts the emitted text events + the final
 ``{content, tool_calls, usage}`` it returns.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -32,7 +33,9 @@ def _tool_chunk(index, tid, name, args):
     )
     return SimpleNamespace(
         usage=None,
-        choices=[SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[tcd]))],
+        choices=[
+            SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[tcd]))
+        ],
     )
 
 
@@ -82,7 +85,11 @@ def test_stream_text_and_tool_call_and_usage():
     assert result["tool_calls"] == [
         {"id": "c1", "name": "bash", "arguments": '{"command":"ls"}'}
     ]
-    assert result["usage"] == {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7}
+    assert result["usage"] == {
+        "prompt_tokens": 3,
+        "completion_tokens": 4,
+        "total_tokens": 7,
+    }
 
 
 def test_stream_tool_call_only_has_no_text_events_and_fills_missing_id():

@@ -80,8 +80,59 @@ def _no_cache(resp):
     return resp
 
 
+# Runtime shim injected at the top of <head>, before any app script. The static
+# HTML rewrite (and <base>) only fix markup that exists at parse time; this patches
+# the browser APIs so absolute URLs the app builds AT RUNTIME in JS get re-rooted
+# into the preview prefix too — the case <base> can't reach. We patch the API edge
+# (fetch/XHR/WS, the src/href setters, setAttribute, innerHTML), NOT the app's source.
+# Relative URLs are left alone (they already resolve via <base>). __PREFIX__ has no
+# trailing slash. Known gaps: location.href= navigations, SPA pushState routing,
+# CSS url(), and worker-scope fetches.
+_SHIM_JS = """
+(function(){
+"use strict";
+var PREFIX="__PREFIX__",ORIGIN=location.origin;
+function rw(u){
+  if(typeof u!=="string"||!u)return u;
+  var s=u;
+  if(s.slice(0,ORIGIN.length+1)===ORIGIN+"/")s=s.slice(ORIGIN.length);
+  else if(s===ORIGIN)s="/";
+  if(s.charCodeAt(0)===47&&s.charCodeAt(1)!==47&&s.slice(0,PREFIX.length+1)!==PREFIX+"/"&&s!==PREFIX)return PREFIX+s;
+  return u;
+}
+function rwSrcset(v){
+  if(typeof v!=="string")return v;
+  return v.split(",").map(function(p){var t=p.trim().split(/\\s+/);if(t[0])t[0]=rw(t[0]);return t.join(" ");}).join(", ");
+}
+function rwWs(u){
+  if(typeof u!=="string")return u;
+  if(u.charCodeAt(0)===47&&u.charCodeAt(1)!==47)return (location.protocol==="https:"?"wss://":"ws://")+location.host+PREFIX+u;
+  return u;
+}
+function rwHtml(h){
+  if(typeof h!=="string")return h;
+  return h.replace(/(\\s(?:src|href|action|poster|formaction)\\s*=\\s*["'])(\\/[^"']*)/gi,function(m,a,p){return a+rw(p);});
+}
+if(window.fetch){var of=window.fetch;window.fetch=function(i,init){try{if(typeof i==="string")i=rw(i);else if(i&&i.url)i=new Request(rw(i.url),i);}catch(e){}return of.call(this,i,init);};}
+var xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(){try{if(arguments.length>1)arguments[1]=rw(arguments[1]);}catch(e){}return xo.apply(this,arguments);};
+function wrapCtor(name,fn){var C=window[name];if(!C)return;function W(u,p){return p===undefined?new C(fn(u)):new C(fn(u),p);}W.prototype=C.prototype;["CONNECTING","OPEN","CLOSING","CLOSED"].forEach(function(k){if(k in C)W[k]=C[k];});try{window[name]=W;}catch(e){}}
+wrapCtor("WebSocket",rwWs);wrapCtor("EventSource",rw);
+var URLATTR={src:1,href:1,action:1,poster:1,formaction:1,data:1};
+var sa=Element.prototype.setAttribute;Element.prototype.setAttribute=function(n,v){try{var k=(""+n).toLowerCase();if(k==="srcset")v=rwSrcset(v);else if(URLATTR[k])v=rw(v);}catch(e){}return sa.call(this,n,v);};
+function patch(proto,prop,fn){if(!proto)return;var d=Object.getOwnPropertyDescriptor(proto,prop);if(!d||!d.set)return;Object.defineProperty(proto,prop,{configurable:true,enumerable:d.enumerable,get:d.get,set:function(v){try{v=fn(v);}catch(e){}d.set.call(this,v);}});}
+[["HTMLImageElement","src"],["HTMLImageElement","srcset"],["HTMLScriptElement","src"],["HTMLLinkElement","href"],["HTMLAnchorElement","href"],["HTMLIFrameElement","src"],["HTMLSourceElement","src"],["HTMLSourceElement","srcset"],["HTMLMediaElement","src"],["HTMLFormElement","action"],["HTMLTrackElement","src"]].forEach(function(e){var c=window[e[0]];if(c)patch(c.prototype,e[1],e[1]==="srcset"?rwSrcset:rw);});
+patch(Element.prototype,"innerHTML",rwHtml);patch(Element.prototype,"outerHTML",rwHtml);
+var iah=Element.prototype.insertAdjacentHTML;if(iah)Element.prototype.insertAdjacentHTML=function(pos,h){return iah.call(this,pos,rwHtml(h));};
+})();
+"""
+
+
+def _preview_shim(prefix: str) -> str:
+    return "<script>" + _SHIM_JS.replace("__PREFIX__", prefix.rstrip("/")) + "</script>"
+
+
 def _rewrite_html(html: str, prefix: str) -> str:
-    """Inject ``<base>`` and re-root absolute paths under ``prefix`` (HTML only)."""
+    """Inject ``<base>`` + runtime shim and re-root absolute paths (HTML only)."""
 
     def reroot(match: "re.Match[str]") -> str:
         return match.group(1) + prefix + match.group(2).lstrip("/")
@@ -111,16 +162,18 @@ def _rewrite_html(html: str, prefix: str) -> str:
     )
     html = re.sub(r'(?i)(\ssrcset\s*=\s*["\'])([^"\']+)(["\'])', fix_srcset, html)
 
-    # Now inject exactly one <base href="{prefix}"> as the first child of <head>.
+    # Inject <base> + the runtime shim as the first children of <head>, before any
+    # app script runs (the shim must patch fetch/XHR/setters before app code uses them).
+    injection = f'<base href="{prefix}">' + _preview_shim(prefix)
     if re.search(r"(?is)<head[^>]*>", html):
         html = re.sub(
             r"(?is)(<head[^>]*>)",
-            lambda m: m.group(1) + f'<base href="{prefix}">',
+            lambda m: m.group(1) + injection,
             html,
             count=1,
         )
     else:
-        html = f'<head><base href="{prefix}"></head>' + html
+        html = f"<head>{injection}</head>" + html
 
     return html
 

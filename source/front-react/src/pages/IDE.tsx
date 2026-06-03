@@ -988,8 +988,8 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 														</button>
 														{result.matches.length > 0 ? (
 															<ul className="mt-2 space-y-1 text-xs text-slate-600 dark:text-gray-300">
-																{result.matches.map((match, index) => (
-																	<li key={`${result.path}:${match.line}:${index}`}>
+																{result.matches.map((match) => (
+																	<li key={`${result.path}:${match.line}:${match.preview}`}>
 																		<button
 																			type="button"
 																			onClick={() => {

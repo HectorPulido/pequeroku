@@ -5,6 +5,7 @@ agéntico y un conjunto de herramientas restringido (aislamiento de contexto y d
 privilegios). La ejecución es en foreground: devuelve el reporte final del hijo.
 El puente real lo aporta ``ctx.spawn_subagent`` (lo provee el ``Agent``).
 """
+
 from __future__ import annotations
 
 from typing import Iterator
@@ -24,8 +25,14 @@ class TaskTool(Tool):
     parameters = {
         "type": "object",
         "properties": {
-            "description": {"type": "string", "description": "3-5 word description of the sub-task."},
-            "prompt": {"type": "string", "description": "Full, self-contained instructions for the subagent."},
+            "description": {
+                "type": "string",
+                "description": "3-5 word description of the sub-task.",
+            },
+            "prompt": {
+                "type": "string",
+                "description": "Full, self-contained instructions for the subagent.",
+            },
             "subagent_type": {
                 "type": "string",
                 "enum": ["explore", "general"],
