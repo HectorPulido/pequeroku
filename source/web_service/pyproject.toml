@@ -39,6 +39,7 @@ black = "^25.1.0"
 pytest = "^8.3.0"
 pytest-django = "^4.9.0"
 pytest-cov = "^5.0.0"
+pytest-asyncio = "^1.0.0"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "pequeroku.settings"

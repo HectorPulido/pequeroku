@@ -1914,6 +1914,25 @@ pygments = ">=2.7.2"
 dev = ["argcomplete", "attrs (>=19.2)", "hypothesis (>=3.56)", "mock", "requests", "setuptools", "xmlschema"]
 
 [[package]]
+name = "pytest-asyncio"
+version = "1.4.0"
+description = "Pytest support for asyncio"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "pytest_asyncio-1.4.0-py3-none-any.whl", hash = "sha256:933ca923a23075a87fb7070c0ec272a6848489824d887c85c812670932835aa1"},
+    {file = "pytest_asyncio-1.4.0.tar.gz", hash = "sha256:c6c0d2259945122819f171a32ecea2c349ead889ee28176caaf492143424be42"},
+]
+
+[package.dependencies]
+pytest = ">=8.4,<10"
+typing-extensions = {version = ">=4.12", markers = "python_version < \"3.13\""}
+
+[package.extras]
+docs = ["sphinx (>=5.3)", "sphinx-rtd-theme (>=1)", "sphinx-tabs (>=3.5)"]
+testing = ["coverage (>=6.2)", "hypothesis (>=5.7.1)"]
+
+[[package]]
 name = "pytest-cov"
 version = "5.0.0"
 description = "Pytest plugin for measuring coverage."
@@ -2655,4 +2674,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "4447a53c0f68d87356f678397e7e4a6e9b27c301c0050ade1b57e845d59e7a73"
+content-hash = "73fe60c32b01776e3467fd92c1c95bcf50cdc7ad466336cb77a35d0e41eecb20"

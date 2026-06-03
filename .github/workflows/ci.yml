@@ -49,9 +49,9 @@ jobs:
           path: |
             ~/.cache/pypoetry
             ~/.cache/pip
-          key: ${{ runner.os }}-poetry-${{ hashFiles('source/vm_service/poetry.lock') }}
+          key: ${{ runner.os }}-poetry-vm-${{ hashFiles('source/vm_service/poetry.lock') }}
           restore-keys: |
-            ${{ runner.os }}-poetry-
+            ${{ runner.os }}-poetry-vm-
       - name: Install Poetry
         run: pip install poetry==1.8.4
       - name: Install dependencies
@@ -76,9 +76,9 @@ jobs:
           path: |
             ~/.cache/pypoetry
             ~/.cache/pip
-          key: ${{ runner.os }}-poetry-${{ hashFiles('source/vm_service/poetry.lock') }}
+          key: ${{ runner.os }}-poetry-web-${{ hashFiles('source/web_service/poetry.lock') }}
           restore-keys: |
-            ${{ runner.os }}-poetry-
+            ${{ runner.os }}-poetry-web-
       - name: Install Poetry
         run: pip install poetry==1.8.4
       - name: Install dependencies
