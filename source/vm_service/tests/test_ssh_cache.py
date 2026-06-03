@@ -18,6 +18,18 @@ class FakeSFTPClient:
     pass
 
 
+class FakeTransport:
+    def __init__(self, active=True):
+        self.active = active
+        self.keepalive = None
+
+    def is_active(self):
+        return self.active
+
+    def set_keepalive(self, interval):
+        self.keepalive = interval
+
+
 class FakeSSHClient:
     def __init__(self):
         self._policy = None
@@ -27,6 +39,10 @@ class FakeSSHClient:
         self.raise_on_exec = False
         self.channels_created = 0
         self._sftp = FakeSFTPClient()
+        self._transport = FakeTransport(active=True)
+
+    def get_transport(self):
+        return self._transport
 
     def set_missing_host_key_policy(self, policy):
         self._policy = policy
@@ -130,8 +146,8 @@ def test_cache_reuse_when_valid(monkeypatch, fake_paramiko):
     data = sc.cache_ssh_and_sftp_by_id("id1", 22, "root")
     assert data["cli"] is cli
     assert data["sftp"] is sftp
-    # Validity check should call exec_command once
-    assert cli.exec_calls == ["echo hello"]
+    # Validity check is local (transport state); it must not run a remote command.
+    assert cli.exec_calls == []
 
 
 def test_cache_regenerate_when_missing_cli(monkeypatch, fake_paramiko):
@@ -178,9 +194,9 @@ def test_cache_regenerate_when_missing_sftp(monkeypatch, fake_paramiko):
     assert isinstance(data["sftp"], FakeSFTPClient)
 
 
-def test_cache_regenerate_when_exec_command_raises(monkeypatch, fake_paramiko):
+def test_cache_regenerate_when_transport_inactive(monkeypatch, fake_paramiko):
     bad_cli = FakeSSHClient()
-    bad_cli.raise_on_exec = True
+    bad_cli._transport = FakeTransport(active=False)
     sc.cache_data["id4"] = {"cli": bad_cli, "sftp": FakeSFTPClient()}
 
     called = {"times": 0}
@@ -218,12 +234,17 @@ def test_open_helpers_and_generate_console(monkeypatch, fake_paramiko, vm_record
     assert s is sftp
     assert c is cli
 
-    # generate_console should create a NEW channel (not from cache)
+    # generate_console now opens its OWN dedicated connection (isolated from the
+    # cached one used by file/exec ops), so the terminal can't be starved by AI
+    # channel churn. It must NOT reuse the cached cli.
     c2, chan = sc.generate_console(vm_record)
-    assert c2 is cli
+    assert c2 is not cli
+    assert isinstance(c2, FakeSSHClient)
+    assert c2.connected is True
     assert isinstance(chan, FakeChannel)
-    assert cli.channels_created == 2
-    assert chan._timeout == 0.0  # generate_console sets non-blocking timeout
+    assert c2.channels_created == 1  # its own shell channel
+    assert cli.channels_created == 1  # cached cli left untouched
+    assert chan._timeout == 0.2  # generate_console sets a small blocking timeout
 
 
 def test_clear_cache_and_clear_all(monkeypatch, fake_paramiko):

@@ -6,7 +6,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from .models import Container, Node, ResourceQuota
-from .vm_client import VMServiceClient
+from .vm_client import VMServiceClient, VMEnsure
 
 
 class VMSyncMixin:
@@ -111,6 +111,33 @@ class VMSyncMixin:
                     changed.append(o)
 
         return changed
+
+    def ensure_vm_record(self, c: Container, client: VMServiceClient) -> None:
+        """
+        Make sure the node still has a VM record for this container before
+        acting on it.
+
+        vm-service keeps VM state in a Redis cache while Django's Container table
+        is the durable source of truth. If the cache lost the record (e.g.
+        vm-service restarted without persistence) an action like ``start`` would
+        404. This rebuilds it from our specs first; it's idempotent (a no-op when
+        the record already exists) and best-effort (any error is left for the
+        caller's action to surface and for the next reconcile pass to retry).
+        """
+        if not c.container_id:
+            return
+        try:
+            _ = client.ensure_vm(
+                str(c.container_id),
+                VMEnsure(
+                    vcpus=int(c.vcpus),
+                    mem_mib=int(c.memory_mb),
+                    disk_gib=int(c.disk_gib),
+                    base_image=(c.base_image or None),
+                ),
+            )
+        except Exception:
+            pass
 
     def _check_quota(self, request) -> ResourceQuota | None:
         quota = getattr(request.user, "quota", None)

@@ -23,8 +23,8 @@ Front React is the single-page application that powers the Pequeroku control pan
 
 ```bash
 cd front-react
-npm install           # install dependencies
-npm run dev           # start Vite dev server (defaults to http://localhost:5173)
+pnpm install           # install dependencies
+pnpm run dev           # start Vite dev server (defaults to http://localhost:5173)
 ```
 
 Optional environment variables:
@@ -40,25 +40,25 @@ export VITE_USE_MOCKS=true        # run against in-memory mocks instead of the r
 
 | Command | Purpose | Details |
 | --- | --- | --- |
-| `npm run dev` | Development server | Vite with Fast Refresh; honours `FRONT_REACT_BASE`. |
-| `npm run build` | Production build | Runs `npm run build:ts` (type-check emit) followed by `npm run build:vite`. |
-| `npm run build:ts` | TypeScript project refs | Invokes `tsc -b` using the project references defined in `tsconfig.json`. |
-| `npm run build:vite` | Bundle-only build | Runs `vite build` without re-emitting TypeScript. |
-| `npm run preview` | Static preview | Serves the compiled `dist/` bundle. |
-| `npm run build:tests` | Compile tests | Emits JS into `build-tests/` from `tsconfig.tests.json`. |
-| `npm run test` | Compile + run tests | Calls `build:tests` then executes `node scripts/run-tests.mjs`; automatically sets `VITE_USE_MOCKS=true`. |
-| `npm run biome:check` | Biome lint/format (dry run) | Generates the same diagnostics as CI. |
-| `npm run biome:lint` | Lint only | Biome lint rules without formatting changes. |
-| `npm run biome:format` | Format in-place | Applies Biome formatting. |
-| `npm run biome:fix` | Fix lint + format | Writes both lint and format fixes. |
-| `npm run biome:ci` | CI helper | One command that fails on lint/format issues (used in pipelines). |
+| `pnpm run dev` | Development server | Vite with Fast Refresh; honours `FRONT_REACT_BASE`. |
+| `pnpm run build` | Production build | Runs `pnpm run build:ts` (type-check emit) followed by `pnpm run build:vite`. |
+| `pnpm run build:ts` | TypeScript project refs | Invokes `tsc -b` using the project references defined in `tsconfig.json`. |
+| `pnpm run build:vite` | Bundle-only build | Runs `vite build` without re-emitting TypeScript. |
+| `pnpm run preview` | Static preview | Serves the compiled `dist/` bundle. |
+| `pnpm run build:tests` | Compile tests | Emits JS into `build-tests/` from `tsconfig.tests.json`. |
+| `pnpm run test` | Compile + run tests | Calls `build:tests` then executes `node scripts/run-tests.mjs`; automatically sets `VITE_USE_MOCKS=true`. |
+| `pnpm run biome:check` | Biome lint/format (dry run) | Generates the same diagnostics as CI. |
+| `pnpm run biome:lint` | Lint only | Biome lint rules without formatting changes. |
+| `pnpm run biome:format` | Format in-place | Applies Biome formatting. |
+| `pnpm run biome:fix` | Fix lint + format | Writes both lint and format fixes. |
+| `pnpm run biome:ci` | CI helper | One command that fails on lint/format issues (used in pipelines). |
 
 ---
 
 ## 4. Environment & Configuration
 
 - **`FRONT_REACT_BASE`** (default `/`): controls Vite’s `base` option so assets and router links resolve under reverse proxies (e.g. `/app/`). Normalisation happens in `vite.config.ts` and is consumed by `src/lib/appBase.ts`.
-- **`VITE_USE_MOCKS`** (default `false`): when `"true"`, services route requests to the in-memory mocks under `src/mocks`. This enables offline development and deterministic tests. The test runner (`npm run test`) forces this flag to `"true"` so suites never hit real services.
+- **`VITE_USE_MOCKS`** (default `false`): when `"true"`, services route requests to the in-memory mocks under `src/mocks`. This enables offline development and deterministic tests. The test runner (`pnpm run test`) forces this flag to `"true"` so suites never hit real services.
 - Any variable prefixed with `VITE_` is exposed via `import.meta.env`.
 - `src/lib/appBase.ts` inspects `import.meta.env.BASE_URL` and the current `window.location` to select the router basename, with a fallback to `/app/` when served behind the Django app.
 
@@ -312,8 +312,8 @@ Refer to `front-react/files.md` for an exhaustive file list.
   - Service edge cases (API wrappers, filesystem/terminal mocks).
   - Hooks (`useEditor`, `useFileTree`, `useTerminals`).
   - Component rendering (buttons, alert stacks, loader overlay).
-- `npm run build:tests` compiles TypeScript tests to JavaScript without running them (helpful when another runner needs the emitted files).
-- `npm run test` runs the end-to-end pipeline: it compiles via `build:tests`, then invokes `scripts/run-tests.mjs`, which ensures `node:test` is available, forces `VITE_USE_MOCKS=true`, and executes the compiled suite with the built-in runner.
+- `pnpm run build:tests` compiles TypeScript tests to JavaScript without running them (helpful when another runner needs the emitted files).
+- `pnpm run test` runs the end-to-end pipeline: it compiles via `build:tests`, then invokes `scripts/run-tests.mjs`, which ensures `node:test` is available, forces `VITE_USE_MOCKS=true`, and executes the compiled suite with the built-in runner.
 - If you integrate Vitest/Jest or another harness, reuse the artifacts in `build-tests/` or mirror the environment configuration (`VITE_USE_MOCKS=true`) to avoid hitting real services.
 
 ---
@@ -321,16 +321,16 @@ Refer to `front-react/files.md` for an exhaustive file list.
 ## 15. Development Workflow
 
 1. Export necessary environment variables (`FRONT_REACT_BASE`, `VITE_USE_MOCKS`).
-2. Run `npm run dev` and navigate to the reported URL. React Router automatically handles deep links based on `resolveAppBase`.
+2. Run `pnpm run dev` and navigate to the reported URL. React Router automatically handles deep links based on `resolveAppBase`.
 3. Make changes; Hot Module Reload updates the UI instantly.
-4. Validate with `npm run lint` and `npm run build` before committing.
+4. Validate with `pnpm run lint` and `pnpm run build` before committing.
 5. If integrating with backends, ensure the SPA runs on the same domain for CSRF cookies to apply.
 
 ---
 
 ## 16. Deployment Notes
 
-- `npm run build` outputs the SPA into `dist/`; deploy the contents behind an HTTP server capable of fallback routing (i.e. serve `index.html` for unknown routes).
+- `pnpm run build` outputs the SPA into `dist/`; deploy the contents behind an HTTP server capable of fallback routing (i.e. serve `index.html` for unknown routes).
 - When hosting under `/app/` alongside the Django backend:
   - Configure the reverse proxy to rewrite requests to serve the SPA at that path.
   - Keep `FRONT_REACT_BASE`, `DEFAULT_APP_BASE` (`src/lib/appBase.ts`) and proxy routes in sync.
@@ -368,7 +368,7 @@ Refer to `front-react/files.md` for an exhaustive file list.
   - Inspect network tab for hanging requests; `loaderStore.stop()` is only called when promises settle.
 - **Static assets served from wrong path**
   - Verify `FRONT_REACT_BASE` matches the deployment path.
-  - Re-run `npm run build` after changing the base.
+  - Re-run `pnpm run build` after changing the base.
 - **WebSocket disconnects**
   - Confirm proxy forwards WS upgrades.
   - File system service will retry with exponential backoff up to 5 seconds; check browser logs (`FS WS connected/error`).

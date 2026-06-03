@@ -157,21 +157,27 @@ def start_vm(
     vm_ssh_privkey: str = settings.VM_SSH_PRIVKEY or ""
     vm_timeout_boot_s: int = int(settings.VM_TIMEOUT_BOOT_S or "100")
 
+    use_cloud_init = bool(getattr(settings, "VM_USE_CLOUD_INIT", True))
+
     make_overlay(vm_base_image, overlay, disk_gib=disk_gib)
-    make_seed_iso(
-        seed_iso,
-        vm_ssh_user,
-        vm_ssh_privkey + ".pub",
-        os.path.basename(workdir),
-    )
+    if use_cloud_init:
+        make_seed_iso(
+            seed_iso,
+            vm_ssh_user,
+            vm_ssh_privkey + ".pub",
+            os.path.basename(workdir),
+        )
+    else:
+        # Pre-baked golden image already contains the user, SSH key and sshd
+        # config; no cloud-init seed is attached (see scripts/build-golden.sh).
+        seed_iso = ""
 
     run_uid = _as_int(getattr(settings, "VM_RUN_AS_UID", None))
     run_gid = _as_int(getattr(settings, "VM_RUN_AS_GID", None))
 
     if run_uid is not None and run_gid is not None:
-        _ensure_paths_for_vm(
-            run_uid, run_gid, workdir, files=[overlay, seed_iso, console_log]
-        )
+        managed = [overlay, console_log] + ([seed_iso] if seed_iso else [])
+        _ensure_paths_for_vm(run_uid, run_gid, workdir, files=managed)
 
     port = pick_free_port()
 

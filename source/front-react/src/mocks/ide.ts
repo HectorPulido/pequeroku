@@ -502,6 +502,22 @@ export async function mockFetchRunConfig(containerId: string) {
 	}
 }
 
+export async function mockFetchListeningPorts(
+	containerId: string,
+): Promise<Array<{ port: number; address: string; process: string | null; pid: number | null }>> {
+	const config = await mockFetchRunConfig(containerId);
+	const ports: Array<{
+		port: number;
+		address: string;
+		process: string | null;
+		pid: number | null;
+	}> = [{ port: 3000, address: "0.0.0.0", process: "node", pid: 1234 }];
+	if (config.port && !ports.some((p) => p.port === config.port)) {
+		ports.push({ port: config.port, address: "127.0.0.1", process: "app", pid: 4321 });
+	}
+	return ports;
+}
+
 export async function mockPollPreview(
 	containerId: string,
 	port: number,

@@ -7,7 +7,6 @@ from typing import Literal, cast
 
 from .models import Node
 
-
 VMState = Literal["provisioning", "running", "stopped", "error"]
 VMActionType = Literal["start", "stop", "reboot"]
 PathType = Literal["directory", "file"]
@@ -56,6 +55,16 @@ class VMCreate:
     disk_gib: int
     base_image: str | None = None
     timeout_boot_s: int | None = None
+
+
+@dataclass
+class VMEnsure:
+    """Payload to idempotently rebuild a VM record on the node from our specs."""
+
+    vcpus: int
+    mem_mib: int
+    disk_gib: int
+    base_image: str | None = None
 
 
 @dataclass
@@ -197,6 +206,17 @@ class VMServiceClient:
         )
         return cast(dict[str, object], self._handle(resp))
 
+    def ensure_vm(self, vm_id: str, payload: VMEnsure) -> dict[str, object]:
+        """POST /vms/{vm_id}/ensure — Rebuild the VM record if missing (idempotent)."""
+        data = {k: v for k, v in asdict(payload).items() if v is not None}
+        resp = self.session.post(
+            self._url(f"/vms/{vm_id}/ensure"),
+            json=data,
+            headers=self.headers,
+            timeout=self.timeout,
+        )
+        return cast(dict[str, object], self._handle(resp))
+
     def get_vms(self, vm_ids: list[str]) -> dict[str, object]:
         """GET /vms/list/{vm_ids}"""
         query = ",".join(vm_ids)
@@ -209,6 +229,36 @@ class VMServiceClient:
         """GET /vms/{vm_id} — Obtiene una VM por id."""
         resp = self.session.get(
             self._url(f"/vms/{vm_id}"), headers=self.headers, timeout=self.timeout
+        )
+        return cast(dict[str, object], self._handle(resp))
+
+    def listening_ports(self, vm_id: str) -> list[dict[str, object]]:
+        """GET /vms/{vm_id}/listening-ports — TCP ports an app is listening on.
+
+        Used by the IDE preview to autodetect which port to proxy. Each item is
+        ``{port, address, process?, pid?}``.
+        """
+        resp = self.session.get(
+            self._url(f"/vms/{vm_id}/listening-ports"),
+            headers=self.headers,
+            timeout=self.timeout,
+        )
+        return cast(list[dict[str, object]], self._handle(resp))
+
+    def proxy(self, vm_id: str, payload: dict[str, object]) -> dict[str, object]:
+        """POST /vms/{vm_id}/proxy — relay one HTTP request into the VM app.
+
+        ``payload`` is ``{target_port, method, path, headers, body_b64?, timeout}``;
+        the reply is ``{ok, status, reason, headers, body_b64}`` (binary-safe).
+        """
+        http_timeout = max(
+            self.timeout, float(cast(float, payload.get("timeout", 30))) + 10.0
+        )
+        resp = self.session.post(
+            self._url(f"/vms/{vm_id}/proxy"),
+            json=payload,
+            headers=self.headers,
+            timeout=http_timeout,
         )
         return cast(dict[str, object], self._handle(resp))
 
@@ -306,11 +356,57 @@ class VMServiceClient:
         )
         return self._handle(resp)
 
-    def execute_sh(self, vm_id: str, vm_command: str) -> dict[str, object]:
-        """POST /vms/{vm_id}/execute-sh"""
-        p = {"command": vm_command}
+    def execute_sh(
+        self, vm_id: str, vm_command: str, timeout: int | None = None
+    ) -> dict[str, object]:
+        """POST /vms/{vm_id}/execute-sh
+
+        ``timeout`` (seconds) overrides the server-side SSH read timeout (default 5s).
+        When provided, the HTTP request timeout is widened to give the command room
+        to finish before the connection is cut.
+        """
+        p: dict[str, object] = {"command": vm_command}
+        http_timeout = self.timeout
+        if timeout is not None:
+            p["timeout"] = timeout
+            http_timeout = max(self.timeout, float(timeout) + 10.0)
         resp = self.session.post(
             self._url(f"/vms/{vm_id}/execute-sh"),
+            json=p,
+            headers=self.headers,
+            timeout=http_timeout,
+        )
+        return cast(dict[str, object], self._handle(resp))
+
+    def start_process(self, vm_id: str, command: str) -> dict[str, object]:
+        """POST /vms/{vm_id}/start-process — Launch a detached background process."""
+        p = {"command": command}
+        resp = self.session.post(
+            self._url(f"/vms/{vm_id}/start-process"),
+            json=p,
+            headers=self.headers,
+            timeout=self.timeout,
+        )
+        return cast(dict[str, object], self._handle(resp))
+
+    def process_status(
+        self, vm_id: str, job_id: str, lines: int = 80
+    ) -> dict[str, object]:
+        """POST /vms/{vm_id}/process-status — Check a background job + tail its log."""
+        p = {"job_id": job_id, "lines": lines}
+        resp = self.session.post(
+            self._url(f"/vms/{vm_id}/process-status"),
+            json=p,
+            headers=self.headers,
+            timeout=self.timeout,
+        )
+        return cast(dict[str, object], self._handle(resp))
+
+    def stop_process(self, vm_id: str, job_id: str) -> dict[str, object]:
+        """POST /vms/{vm_id}/stop-process — SIGTERM a background job's process group."""
+        p = {"job_id": job_id}
+        resp = self.session.post(
+            self._url(f"/vms/{vm_id}/stop-process"),
             json=p,
             headers=self.headers,
             timeout=self.timeout,

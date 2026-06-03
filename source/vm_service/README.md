@@ -250,6 +250,21 @@ Run the service locally (dev)
   - Set VM_BASE_IMAGE to a valid qcow2 (e.g., Ubuntu cloud image)
   - On macOS/arm64, ensure UEFI firmware is installed (see qemu_args for VM_UEFI_ARM64)
 
+Fast boot: pre-baked golden image
+- By default VMs run cloud-init at every boot to inject the SSH user/key and sshd
+  config. That pipeline adds ~40s (SSH ready in ~50s). All of it is static and
+  identical across VMs, so it can be baked into the base image once.
+- Build a golden image (auto-detects host arch + OS; downloads the base cloud
+  image; bakes user + key + sshd + DHCP + auto-resize + host keys; disables
+  cloud-init):
+    scripts/build-golden.sh --user "$VM_SSH_USER" --pubkey "$VM_SSH_PRIVKEY.pub"
+  - On Linux it uses virt-customize (libguestfs-tools) when available; otherwise it
+    falls back to booting the image once under QEMU to bake (works on macOS/HVF).
+  - Useful flags: --distro debian12|ubuntu2204, --arch auto|amd64|arm64, --size,
+    --packages, --out, --method auto|virt-customize|boot, --force.
+- Then point VM_BASE_IMAGE at the produced qcow2 and set VM_USE_CLOUD_INIT=false.
+  VMs skip the cloud-init seed entirely and SSH is ready in ~10s.
+
 Run tests & coverage
 - All tests are designed to run without Redis, SSH, or QEMU by mocking those layers.
 - Commands:

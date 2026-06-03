@@ -110,12 +110,10 @@ def test_ai_consumer_with_mocked_agent_streams_and_updates_quota(monkeypatch):
 
     # Patch the consumer module and inject our FakeAgent instance
     import ai_services.ai_consumers as ai_consumers
-    import ai_services.ai_engineer as ai_engineer
 
     fake_agent = FakeAgent(chunks=["Hola", " mundo", "!"], final_text="Hola mundo!")
-    # Patch both consumer-level and ai_engineer agent to avoid real API calls
+    # Patch consumer-level agent to avoid real API calls
     monkeypatch.setattr(ai_consumers, "agent", fake_agent)
-    monkeypatch.setattr(ai_engineer, "agent", fake_agent)
 
     # Fake run_pipeline to simulate streaming and avoid network usage
     async def fake_run_pipeline(
@@ -126,6 +124,7 @@ def test_ai_consumer_with_mocked_agent_streams_and_updates_quota(monkeypatch):
         on_tool_call,
         on_start_chunking,
         on_finish_chunking,
+        on_event=None,
     ):
         new_messages = list(messages)
         new_messages.append({"role": "user", "content": query})
@@ -154,30 +153,31 @@ def test_ai_consumer_with_mocked_agent_streams_and_updates_quota(monkeypatch):
         # decrement uses once per full exchange
         calls["uses"] = max(calls["uses"] - 1, 0)
 
-    async def fake_set_memory(user, container, memory_data):
-        calls["memory"] = memory_data
-
-    async def fake_get_memory(user, container):
-        # start with empty memory
-        return []
-
     async def fake_get_container_simple(pk):
         return container
 
     async def fake_user_owns_container(pk, user_pk):
         return True
 
+    # Conversation storage talks to the VM via ai_services.conversations; stub it
+    # so the consumer stays hermetic (no real VM round-trips).
+    monkeypatch.setattr(ai_consumers.convo, "list_conversation_ids", lambda c: [])
+    monkeypatch.setattr(ai_consumers.convo, "get_current_id", lambda u, c: None)
+    monkeypatch.setattr(ai_consumers.convo, "read_conversation", lambda c, cid: [])
+
+    def _fake_write_conversation(c, cid, messages):
+        calls["memory"] = messages
+
+    monkeypatch.setattr(
+        ai_consumers.convo, "write_conversation", _fake_write_conversation
+    )
+    monkeypatch.setattr(ai_consumers.convo, "set_current_id", lambda u, c, cid: None)
+
     monkeypatch.setattr(
         ai_consumers.AIConsumer, "_get_quota", staticmethod(fake_get_quota)
     )
     monkeypatch.setattr(
         ai_consumers.AIConsumer, "_set_quota", staticmethod(fake_set_quota)
-    )
-    monkeypatch.setattr(
-        ai_consumers.AIConsumer, "_set_memory", staticmethod(fake_set_memory)
-    )
-    monkeypatch.setattr(
-        ai_consumers.AIConsumer, "_get_memory", staticmethod(fake_get_memory)
     )
     monkeypatch.setattr(
         ai_consumers.AIConsumer,

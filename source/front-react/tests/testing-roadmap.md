@@ -49,7 +49,7 @@ Single source of truth for the unit/integration scenarios we still need to cover
 ## Tooling & Infrastructure
 
 - [ ] Coverage post-processing (convert V8 JSON to LCOV/HTML for reporting)
-- [ ] CI script to run `npm run lint` + `npm test` in sequence
+- [ ] CI script to run `pnpm run lint` + `pnpm test` in sequence
 - [ ] Watch mode for tests (optional, would require additional tooling)
 - [ ] Docs: add testing instructions to `front-react/README.md`
 

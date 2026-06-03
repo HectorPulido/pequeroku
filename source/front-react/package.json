@@ -3,17 +3,18 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
     "dev": "vite",
-    "build": "npm run build:ts && npm run build:vite",
+    "build": "pnpm run build:ts && pnpm run build:vite",
     "build:ts": "tsc -b",
     "build:vite": "vite build",
     "preview": "vite preview",
     "build:tests": "tsc -p tsconfig.tests.json",
-    "test": "npm run build:tests && node scripts/run-tests.mjs",
+    "test": "pnpm run build:tests && node scripts/run-tests.mjs",
     "biome:lint": "biome lint .",
     "biome:format": "biome format --write .",
     "biome:check": "biome check .",
@@ -22,15 +23,21 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "@xterm/addon-fit": "^0.10.0",
-    "@xterm/xterm": "^5.5.0",
+    "@xterm/addon-fit": "0.12.0-beta.256",
+    "@xterm/addon-webgl": "0.20.0-beta.255",
+    "@xterm/xterm": "6.1.0-beta.256",
     "chart.js": "^4.5.1",
     "devicon": "^2.17.0",
+    "highlight.js": "^11.11.1",
     "iconoir-react": "^7.11.0",
+    "monaco-editor": "^0.54.0",
     "react": "^19.1.1",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.1.1",
-    "react-router-dom": "^7.9.4"
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.9.4",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

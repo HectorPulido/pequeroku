@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
 import subprocess
@@ -48,6 +48,21 @@ class VMCreate(BaseModel):
     timeout_boot_s: int | None = Field(None, description="VM_TIMEOUT_BOOT_S Override")
 
 
+class VMEnsure(BaseModel):
+    """
+    Idempotent rebuild payload. The orchestrator (Django) is the source of
+    truth for VM specs; this lets it recreate a VMRecord that was lost from
+    the Redis cache (e.g. after a vm-service restart without persistence).
+    """
+
+    vcpus: int = Field(
+        default=..., ge=1, le=os.cpu_count() or 64, json_schema_extra={"example": 2}
+    )
+    mem_mib: int = Field(default=..., ge=256, json_schema_extra={"example": 2})
+    disk_gib: int = Field(default=..., ge=5, json_schema_extra={"example": 10})
+    base_image: str | None = Field(None, description="VM_BASE_IMAGE Override")
+
+
 class VMAction(BaseModel):
     action: Literal["start", "stop", "reboot"]
     cleanup_disks: bool | None = False
@@ -66,9 +81,9 @@ class VMRecord:
     key_ref: str | None = None
     error_reason: str | None = None
     proc: VMProc | None = None
-    created_at: float = time.time()
-    updated_at: float = time.time()
-    booted_at: float = time.time()
+    created_at: float = field(default_factory=time.time)
+    updated_at: float = field(default_factory=time.time)
+    booted_at: float = field(default_factory=time.time)
 
 
 class VMOut(BaseModel):

@@ -2,9 +2,20 @@ import base64
 import types
 import time
 import errno
+from contextlib import contextmanager
 
 import models
 from implementations import send_file as sf
+
+
+def _fake_borrow(cli=None, sftp=None):
+    """Patch target for send_file.borrow: yields a conn with the given cli/sftp."""
+
+    @contextmanager
+    def _cm(container):
+        yield types.SimpleNamespace(cli=cli, sftp=sftp)
+
+    return _cm
 
 
 class DummyChannel:
@@ -124,8 +135,8 @@ def make_vm(tmp_path) -> models.VMRecord:
 def test_send_files_no_sftp_ready(monkeypatch, tmp_path):
     vm = make_vm(tmp_path)
 
-    # open_ssh_and_sftp returns (None, None) so _prepare_vm_for_transfer -> (None, None, None)
-    monkeypatch.setattr(sf, "open_ssh_and_sftp", lambda container: (None, None))
+    # borrow yields a conn with no sftp -> _prepare_vm_for_transfer -> (None, None, None)
+    monkeypatch.setattr(sf, "borrow", _fake_borrow(cli=None, sftp=None))
 
     files = models.VMUploadFiles(
         dest_path="/app",
@@ -148,7 +159,7 @@ def test_prepare_vm_clean_calls_clean_dest(monkeypatch, tmp_path):
     def _clean_dest_spy(cli_arg, dest_path):
         called["args"] = (cli_arg, dest_path)
 
-    monkeypatch.setattr(sf, "open_ssh_and_sftp", lambda container: (sftp, cli))
+    monkeypatch.setattr(sf, "borrow", _fake_borrow(cli=cli, sftp=sftp))
     monkeypatch.setattr(sf, "_clean_dest", _clean_dest_spy)
     # avoid sleeps inside _save_file_bytes even though we won't reach it
     monkeypatch.setattr(time, "sleep", lambda x: None)
@@ -169,7 +180,7 @@ def test_prepare_vm_not_clean_mkdir(monkeypatch, tmp_path):
     def _run_and_check_spy(cli_arg, cmd: str, timeout=None):
         cmds.append(cmd)
 
-    monkeypatch.setattr(sf, "open_ssh_and_sftp", lambda container: (sftp, cli))
+    monkeypatch.setattr(sf, "borrow", _fake_borrow(cli=cli, sftp=sftp))
     monkeypatch.setattr(sf, "_run_and_check", _run_and_check_spy)
     monkeypatch.setattr(time, "sleep", lambda x: None)
 
@@ -189,7 +200,7 @@ def test_norm_join_security_violation(monkeypatch, tmp_path):
     def _save_file_bytes_spy(sftp_arg, cli_arg, full_path, data, file_mode):
         saved["calls"] += 1  # count successful saves
 
-    monkeypatch.setattr(sf, "open_ssh_and_sftp", lambda container: (sftp, cli))
+    monkeypatch.setattr(sf, "borrow", _fake_borrow(cli=cli, sftp=sftp))
     monkeypatch.setattr(sf, "_clean_dest", lambda c, d: None)
     monkeypatch.setattr(sf, "_save_file_bytes", _save_file_bytes_spy)
     monkeypatch.setattr(time, "sleep", lambda x: None)
@@ -221,7 +232,7 @@ def test_send_files_text_and_b64_and_chmod_fallback(monkeypatch, tmp_path):
     def _run_and_check_spy(cli_arg, cmd: str, timeout=None):
         chmod_cmds.append(cmd)
 
-    monkeypatch.setattr(sf, "open_ssh_and_sftp", lambda container: (sftp, cli))
+    monkeypatch.setattr(sf, "borrow", _fake_borrow(cli=cli, sftp=sftp))
     monkeypatch.setattr(sf, "_clean_dest", lambda c, d: None)
     monkeypatch.setattr(sf, "_run_and_check", _run_and_check_spy)
     monkeypatch.setattr(time, "sleep", lambda x: None)
@@ -255,7 +266,7 @@ def test_create_dir_success(monkeypatch, tmp_path):
     vm = make_vm(tmp_path)
     cli = DummyCLI(status=0)
 
-    monkeypatch.setattr(sf, "open_ssh", lambda container: cli)
+    monkeypatch.setattr(sf, "borrow", _fake_borrow(cli=cli))
 
     resp = sf.create_dir(vm, "/data/new")
     assert resp.ok is True
@@ -266,7 +277,7 @@ def test_create_dir_failure(monkeypatch, tmp_path):
     vm = make_vm(tmp_path)
     # exit != 0 will cause _run_and_check to raise -> create_dir returns ok=False
     cli = DummyCLI(status=1, stderr=b"permission denied")
-    monkeypatch.setattr(sf, "open_ssh", lambda container: cli)
+    monkeypatch.setattr(sf, "borrow", _fake_borrow(cli=cli))
 
     resp = sf.create_dir(vm, "/data/nope")
     assert resp.ok is False
@@ -301,7 +312,7 @@ def test_send_files_collects_failed_files(monkeypatch, tmp_path):
             raise RuntimeError("boom")
         return None
 
-    monkeypatch.setattr(sf, "open_ssh_and_sftp", lambda container: (sftp, cli))
+    monkeypatch.setattr(sf, "borrow", _fake_borrow(cli=cli, sftp=sftp))
     monkeypatch.setattr(sf, "_clean_dest", lambda c, d: None)
     monkeypatch.setattr(sf, "_save_file_bytes", _save_file_bytes_conditional)
     monkeypatch.setattr(time, "sleep", lambda x: None)

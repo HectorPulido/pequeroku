@@ -61,6 +61,42 @@ class SearchHit(BaseModel):
     matchs: list[str]
 
 
+class ListeningPort(BaseModel):
+    port: int = Field(..., description="TCP port a process is listening on.")
+    address: str = Field(
+        ...,
+        description="Bind address (0.0.0.0/::/* or 127.0.0.1). All are reachable "
+        "from the preview proxy because the direct-tcpip channel originates inside the VM.",
+    )
+    process: str | None = Field(
+        None, description="Process name owning the socket, if known."
+    )
+    pid: int | None = Field(None, description="Process id owning the socket, if known.")
+
+
+class VMProxyRequest(BaseModel):
+    target_port: int = Field(..., description="App port inside the VM to proxy to.")
+    method: str = Field("GET", description="HTTP method.")
+    path: str = Field(
+        "/", description="Origin-form request target including query string."
+    )
+    headers: dict[str, str] = Field(
+        default_factory=dict, description="Request headers to forward upstream."
+    )
+    body_b64: str | None = Field(None, description="Base64-encoded request body.")
+    timeout: float = Field(30.0, description="Per-request timeout in seconds.")
+
+
+class VMProxyResponse(BaseModel):
+    ok: bool = True
+    status: int = Field(502, description="Upstream HTTP status (or 502 on failure).")
+    reason: str = ""
+    headers: list[tuple[str, str]] = Field(
+        default_factory=list, description="Upstream response headers."
+    )
+    body_b64: str = Field("", description="Base64-encoded response body.")
+
+
 class VMFile(BaseModel):
     path: str = Field("/", description="Path for the file")
     text: str | None = Field(None, description="UTF-8 text content")
@@ -83,3 +119,41 @@ class VMUploadFiles(BaseModel):
     dest_path: str | None = Field("/app", description="Base path for the files")
     files: list[VMFile] = Field(..., description="List of fields to send")
     clean: bool | None = Field(False, description="Clean the dest path dir")
+
+
+class StartProcessRequest(BaseModel):
+    command: str = Field(..., description="Shell command to run detached in the VM.")
+    cwd: str = Field("/app", description="Working directory for the process.")
+
+
+class ProcessStatusRequest(BaseModel):
+    job_id: str = Field(..., description="Job id returned by start-process.")
+    lines: int = Field(80, description="Number of trailing log lines to return.")
+
+
+class ProcessRef(BaseModel):
+    job_id: str = Field(..., description="Job id returned by start-process.")
+
+
+class StartProcessResponse(BaseModel):
+    ok: bool
+    job_id: str = ""
+    pid: int | None = None
+    log_path: str = ""
+    reason: str = ""
+
+
+class ProcessStatusResponse(BaseModel):
+    ok: bool
+    job_id: str
+    status: Literal["running", "exited", "unknown"] = "unknown"
+    pid: int | None = None
+    log: str = ""
+    reason: str = ""
+
+
+class ProcessActionResponse(BaseModel):
+    ok: bool
+    job_id: str
+    status: str = ""
+    reason: str = ""

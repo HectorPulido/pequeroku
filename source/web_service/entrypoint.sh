@@ -15,7 +15,7 @@ fi
 
 (
   sleep 5
-  python manage.py reconcile_containers
+  python manage.py reconcile_containers --loop --interval "${RECONCILE_INTERVAL:-30}"
 ) &
 
 echo "Starting gunicorn..."

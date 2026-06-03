@@ -1,3 +1,5 @@
+import base64
+
 import pytest
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -82,6 +84,21 @@ class FakeVMServiceClient:
 
     def statistics(self, vm_id):
         return {"cpu": 0.12, "mem": 123}
+
+    def listening_ports(self, vm_id):
+        return [
+            {"port": 3000, "address": "127.0.0.1", "process": "node", "pid": 12},
+            {"port": 8000, "address": "0.0.0.0", "process": "python3", "pid": 34},
+        ]
+
+    def proxy(self, vm_id, payload):
+        body = b"<html><head></head><body><a href='/'>home</a></body></html>"
+        return {
+            "ok": True,
+            "status": 200,
+            "headers": [["Content-Type", "text/html; charset=utf-8"]],
+            "body_b64": base64.b64encode(body).decode("ascii"),
+        }
 
     def download_file(self, vm_id, path):
         return DummyHTTPResponse(
@@ -301,6 +318,118 @@ def test_power_actions(monkeypatch, action_name, expected_status_key):
     res = client.post(url)
     assert res.status_code == 200
     assert res.json()["status"] == expected_status_key
+
+
+def test_ports_returns_detected_ports(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("u_ports")
+    create_quota(user=user)
+    node = create_node()
+    c = create_container(user=user, node=node, status=Container.Status.RUNNING)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-ports", kwargs={"pk": c.pk})
+    res = client.get(url)
+    assert res.status_code == 200
+    body = res.json()
+    assert isinstance(body, list)
+    assert {p["port"] for p in body} == {3000, 8000}
+    assert body[0]["process"] == "node"
+
+
+def test_ports_returns_empty_on_node_error(monkeypatch):
+    patch_services(monkeypatch)
+
+    def _raise(self, vm_id):
+        raise RuntimeError("VM still booting")
+
+    monkeypatch.setattr(FakeVMServiceClient, "listening_ports", _raise, raising=False)
+
+    user = create_user("u_ports_err")
+    create_quota(user=user)
+    node = create_node()
+    c = create_container(user=user, node=node, status=Container.Status.RUNNING)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-ports", kwargs={"pk": c.pk})
+    res = client.get(url)
+    # Degrades gracefully so the front can keep polling.
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_preview_action_proxies_and_rewrites_html(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("u_preview")
+    create_quota(user=user)
+    node = create_node()
+    c = create_container(user=user, node=node, status=Container.Status.RUNNING)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    res = client.get(f"/api/containers/{c.pk}/preview/8000/")
+    assert res.status_code == 200
+    content = res.content.decode()
+    assert f'<base href="/api/containers/{c.pk}/preview/8000/">' in content
+    # bare href="/" re-rooted into the proxy instead of escaping to the landing
+    assert f'href="/api/containers/{c.pk}/preview/8000/"' in content
+    assert res["X-Robots-Tag"] == "noindex"
+
+
+def test_preview_action_handles_extension_paths(monkeypatch):
+    """DRF format-suffix routing must not 500 on paths like openapi.json."""
+    patch_services(monkeypatch)
+
+    user = create_user("u_prev_ext")
+    create_quota(user=user)
+    node = create_node()
+    c = create_container(user=user, node=node, status=Container.Status.RUNNING)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    res = client.get(f"/api/containers/{c.pk}/preview/8000/openapi.json")
+    assert res.status_code == 200
+
+
+def test_preview_action_post_without_trailing_slash(monkeypatch):
+    """A form POST to a slash-less path must reach the proxy, not APPEND_SLASH 500."""
+    patch_services(monkeypatch)
+
+    user = create_user("u_prev_post")
+    create_quota(user=user)
+    node = create_node()
+    c = create_container(user=user, node=node, status=Container.Status.RUNNING)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    res = client.post(
+        f"/api/containers/{c.pk}/preview/8000/admin/posts",
+        data={"title": "hola", "content": "mundo"},
+    )
+    assert res.status_code == 200
+
+
+def test_preview_action_requires_visibility(monkeypatch):
+    patch_services(monkeypatch)
+
+    owner = create_user("prev_owner")
+    other = create_user("prev_other")
+    node = create_node()
+    c = create_container(user=owner, node=node, status=Container.Status.RUNNING)
+
+    client = APIClient()
+    client.force_authenticate(user=other)
+    res = client.get(f"/api/containers/{c.pk}/preview/8000/")
+    assert res.status_code == 404  # not visible to a non-owner
 
 
 def test_download_file_requires_path(monkeypatch):

@@ -27,6 +27,7 @@ class ConsoleConsumer(AsyncWebsocketConsumer, ContainerAccessMixin, AuditMixin):
 
     FIRST_COMMAND: str = (
         "export TERM=xterm-256color && "
+        "export COLORTERM=truecolor && "
         "cd /app && "
         "clear && "
         "echo 'Welcome to your machine'\n"
@@ -137,7 +138,8 @@ class ConsoleConsumer(AsyncWebsocketConsumer, ContainerAccessMixin, AuditMixin):
             if not self._upstream:
                 return None
 
-            await asyncio.sleep(1)
+            # No artificial delay: the vm-service bridge buffers input until the
+            # upstream shell is ready, so the first command is never lost.
             data_bytes = self.FIRST_COMMAND.encode("utf-8", errors="ignore")
             enc = base64.b64encode(data_bytes).decode("ascii")
             await self._upstream.send(enc)

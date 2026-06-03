@@ -10,16 +10,18 @@ import {
 	Play,
 	RefreshDouble,
 	Search,
+	Sparks,
 } from "iconoir-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Header from "@/components/Header";
 import AiAssistantPanel from "@/components/ide/AiAssistantPanel";
 import Editor from "@/components/ide/Editor";
 import FileTabs from "@/components/ide/FileTabs";
 import FileTree from "@/components/ide/FileTree";
 import GithubModal from "@/components/ide/GithubModal";
+import PortSelector from "@/components/ide/PortSelector";
 import ResizablePanel from "@/components/ide/ResizablePanel";
 import TemplatesModal from "@/components/ide/TemplatesModal";
 import TerminalPanel from "@/components/ide/TerminalPanel";
@@ -28,6 +30,7 @@ import { ACTION_DELAYS } from "@/constants";
 import { useEditor } from "@/hooks/useEditor";
 import { useFileTree } from "@/hooks/useFileTree";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { usePreviewPorts } from "@/hooks/usePreviewPorts";
 import { useTerminals } from "@/hooks/useTerminals";
 import { alertStore } from "@/lib/alertStore";
 import { detectLanguageFromPath } from "@/lib/langMap";
@@ -148,6 +151,14 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 		clearTerminal,
 	} = useTerminals(containerId);
 	const isMobile = useIsMobile();
+	const navigate = useNavigate();
+
+	const openAiStudio = useCallback(() => {
+		// Preserve the embedded mode: when the IDE is hosted inside the dashboard
+		// modal (showHeader=false) keep the chrome hidden in the AI view too.
+		const suffix = showHeader ? "" : "&showHeader=1";
+		navigate(`/ai?containerId=${containerId}${suffix}`);
+	}, [containerId, navigate, showHeader]);
 
 	const [sidebarState, setSidebarState] = useState<"open" | "collapsed">(() => {
 		if (typeof window === "undefined") {
@@ -188,6 +199,10 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 	const [searchPerformed, setSearchPerformed] = useState(false);
 	const [runCommand, setRunCommand] = useState<string | null>(null);
 	const [runPort, setRunPort] = useState<number | null>(null);
+	const { selectedPort, setSelectedPort, portOptions, rescanPorts } = usePreviewPorts(
+		containerId,
+		runPort,
+	);
 	const [runLoading, setRunLoading] = useState(false);
 	const [templates, setTemplates] = useState<TemplateSummary[]>([]);
 	const [templatesLoading, setTemplatesLoading] = useState(false);
@@ -365,9 +380,14 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 	);
 
 	const handlePreviewGo = useCallback(
-		async (rawPath?: string): Promise<{ ok: boolean; error?: string }> => {
-			if (!runPort) {
-				const message = "No preview port configured. Update /app/config.json to expose a port.";
+		async (
+			rawPath?: string,
+			portOverride?: number | null,
+		): Promise<{ ok: boolean; error?: string }> => {
+			const port = portOverride ?? selectedPort;
+			if (!port) {
+				const message =
+					"No preview port selected. Pick a detected port or set one in /app/config.json.";
 				setPreviewError(message);
 				return { ok: false, error: message };
 			}
@@ -379,7 +399,7 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 			try {
 				const response = await pollPreview({
 					containerId,
-					port: runPort,
+					port,
 					path: normalized,
 				});
 				if (!response) {
@@ -399,7 +419,7 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 				setPreviewLoading(false);
 			}
 		},
-		[containerId, previewPath, runPort],
+		[containerId, previewPath, selectedPort],
 	);
 
 	const handlePreviewRefresh = useCallback(() => {
@@ -436,30 +456,35 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 		void hydrateRunConfig();
 	}, [hydrateRunConfig]);
 
+	// Autodetect listening ports whenever the preview opens, so the selector has
+	// fresh suggestions without polling in the background.
 	useEffect(() => {
-		if (!containerId) {
-			setPreviewTargetUrl(null);
-			setPreviewPath("");
-			setPreviewError(null);
-			return;
-		}
+		if (!showPreview) return;
+		void rescanPorts();
+	}, [showPreview, rescanPorts]);
+
+	// Reset preview state whenever the active container changes; containerId is the
+	// intended trigger even though the body only calls setters. (Port detection +
+	// selection reset live in usePreviewPorts.)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset-on-container-change
+	useEffect(() => {
 		setPreviewTargetUrl(null);
 		setPreviewPath("");
 		setPreviewError(null);
 	}, [containerId]);
 
 	useEffect(() => {
-		if (runPort && !previewPath) {
+		if (selectedPort && !previewPath) {
 			setPreviewPath("/");
 		}
-	}, [previewPath, runPort]);
+	}, [previewPath, selectedPort]);
 
 	useEffect(() => {
 		if (!showPreview) return;
 		if (previewLoading || previewTargetUrl) return;
-		if (!runPort) return;
+		if (!selectedPort) return;
 		void handlePreviewGo(previewPath || "/");
-	}, [handlePreviewGo, previewLoading, previewPath, previewTargetUrl, runPort, showPreview]);
+	}, [handlePreviewGo, previewLoading, previewPath, previewTargetUrl, selectedPort, showPreview]);
 
 	const loadTemplates = useCallback(async () => {
 		setTemplatesLoading(true);
@@ -697,18 +722,28 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 
 		alertStore.push({ message: `Running "${runCommand}"`, variant: "success" });
 
-		if (!runPort) {
+		setShowPreview(true);
+
+		// Re-scan now that the app is starting; pick the effective port the same way
+		// the selector does (config wins, else a single detected port).
+		const ports = await rescanPorts();
+		const effectivePort = selectedPort ?? runPort ?? (ports.length === 1 ? ports[0].port : null);
+
+		if (!effectivePort) {
 			setRunLoading(false);
 			alertStore.push({
 				message:
-					"There is no preview port configured in /app/config.json. Update it to enable the mini browser.",
+					"App started. Once it is listening, pick a port in the preview panel to open the mini browser.",
 				variant: "info",
 			});
 			return;
 		}
 
-		setShowPreview(true);
-		const previewResult = await handlePreviewGo(normalizedPath);
+		if (selectedPort === null) {
+			setSelectedPort(effectivePort);
+		}
+
+		const previewResult = await handlePreviewGo(normalizedPath, effectivePort);
 		if (!previewResult.ok) {
 			alertStore.push({
 				message: previewResult.error ?? "Preview not ready yet. Start the app and try again.",
@@ -720,8 +755,11 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 		handlePreviewGo,
 		handleSaveActiveFile,
 		previewPath,
+		rescanPorts,
 		runCommand,
 		runPort,
+		selectedPort,
+		setSelectedPort,
 		sendToActiveTerminal,
 	]);
 
@@ -987,6 +1025,18 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 							<div className="border-b border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-[#0B1220]">
 								<div className="px-3 py-3 space-y-2">
 									<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+										<PortSelector
+											value={selectedPort}
+											options={portOptions}
+											onOpen={() => void rescanPorts()}
+											onChange={(port) => {
+												setSelectedPort(port);
+												// Switching target invalidates the current preview so it reloads.
+												setPreviewTargetUrl(null);
+												setPreviewError(null);
+											}}
+											className="rounded border border-slate-300 bg-white px-2 py-2 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-[#111827] dark:text-gray-200"
+										/>
 										<input
 											type="text"
 											value={previewPath}
@@ -997,7 +1047,7 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 										<button
 											type="button"
 											className="inline-flex items-center justify-center rounded bg-indigo-600 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-											disabled={previewLoading || !runPort}
+											disabled={previewLoading || !selectedPort}
 											onClick={() => void handlePreviewGo()}
 										>
 											{previewLoading ? (
@@ -1011,7 +1061,7 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 										<button
 											type="button"
 											onClick={handlePreviewRefresh}
-											disabled={previewLoading || !runPort}
+											disabled={previewLoading || !selectedPort}
 											className="underline decoration-dotted underline-offset-4 transition hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-400 dark:hover:text-white dark:disabled:text-gray-600"
 										>
 											Refresh
@@ -1024,11 +1074,20 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 										>
 											Pop out
 										</button>
-										{runPort ? (
-											<span>Preview port: {runPort}</span>
+										<button
+											type="button"
+											onClick={() => void rescanPorts()}
+											className="underline decoration-dotted underline-offset-4 transition hover:text-slate-900 dark:hover:text-white"
+										>
+											Re-scan ports
+										</button>
+										{selectedPort ? (
+											<span>Preview port: {selectedPort}</span>
+										) : portOptions.length > 0 ? (
+											<span className="text-amber-500">Select a port to enable preview.</span>
 										) : (
 											<span className="text-amber-500">
-												Add a <code>port</code> in <code>/app/config.json</code> to enable preview.
+												No listening ports detected — run your app.
 											</span>
 										)}
 									</div>
@@ -1073,6 +1132,16 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 							onTabClose={handleCloseTab}
 							rightActions={
 								<div className="flex flex-wrap items-center gap-2">
+									<button
+										type="button"
+										className="inline-flex items-center gap-1 md:gap-2 rounded border border-gray-700 px-3 py-1.5 text-xs text-gray-200 transition hover:border-indigo-500 hover:text-white"
+										onClick={openAiStudio}
+										aria-label="Open AI studio"
+										title="Open AI studio"
+									>
+										<Sparks className="h-4 w-4" />
+										<span className="hidden md:inline">AI</span>
+									</button>
 									<button
 										type="button"
 										className="inline-flex items-center gap-1 md:gap-2 rounded border border-gray-700 px-3 py-1.5 text-xs text-gray-200 transition hover:border-indigo-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"

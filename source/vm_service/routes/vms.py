@@ -4,10 +4,8 @@ import threading
 import uuid
 import shlex
 
-from typing import cast
 from zipfile import error
 
-import paramiko
 from fastapi import HTTPException, Depends, APIRouter, Query
 from fastapi.responses import Response
 
@@ -17,6 +15,7 @@ import settings
 from models import (
     VMState,
     VMCreate,
+    VMEnsure,
     VMOut,
     VMAction,
     VMRecord,
@@ -30,6 +29,15 @@ from models import (
     SearchHit,
     SearchRequest,
     VMShResponse,
+    StartProcessRequest,
+    ProcessStatusRequest,
+    ProcessRef,
+    StartProcessResponse,
+    ProcessStatusResponse,
+    ProcessActionResponse,
+    ListeningPort,
+    VMProxyRequest,
+    VMProxyResponse,
 )
 
 from implementations import (
@@ -40,11 +48,16 @@ from implementations import (
     create_dir,
     download_file,
     download_folder,
+    start_process,
+    process_status,
+    stop_process,
+    listening_ports,
+    proxy_request,
 )
 
-from implementations.ssh_cache import cache_ssh_and_sftp
+from implementations.ssh_cache import exec_and_close
+from implementations.ssh_pool import borrow
 from middleware import verify_bearer_token
-
 
 store = RedisStore(settings.REDIS_URL, settings.REDIS_PREFIX)
 runner = Runner(store, settings.NODE_NAME)
@@ -67,6 +80,37 @@ async def create_vm(req: VMCreate) -> VMOut:
     )
     store.put(vm)
     runner.start(vm)
+    return VMOut.from_record(vm, runner)
+
+
+@vms_router.post("/{vm_id}/ensure", response_model=VMOut)
+async def ensure_vm(vm_id: str, req: VMEnsure) -> VMOut:
+    """
+    Idempotently guarantee a VMRecord exists for ``vm_id``.
+
+    vm-service keeps VM state in a Redis cache, while the orchestrator (Django)
+    holds the durable source of truth. If the record is missing (e.g. Redis was
+    restarted without persistence), rebuild it from the caller-provided specs in
+    the ``stopped`` state so a follow-up ``start`` action can boot it. The qcow2
+    overlay on disk is reused if present, so the VM comes back with its data.
+    If the record already exists it is returned unchanged.
+    """
+    try:
+        vm: "VMRecord" = store.get(vm_id)
+        return VMOut.from_record(vm, runner)
+    except KeyError:
+        pass
+
+    wd = runner.workdir(vm_id)
+    vm = VMRecord(
+        id=vm_id,
+        state=VMState.stopped,
+        workdir=wd,
+        vcpus=req.vcpus,
+        mem_mib=req.mem_mib,
+        disk_gib=req.disk_gib,
+    )
+    store.put(vm)
     return VMOut.from_record(vm, runner)
 
 
@@ -122,7 +166,7 @@ async def action_vm(vm_id: str, act: VMAction) -> VMOut:
 
 
 @vms_router.post("/{vm_id}/upload-files", response_model=ElementResponse)
-async def upload_files(vm_id: str, files: VMUploadFiles) -> ElementResponse:
+def upload_files(vm_id: str, files: VMUploadFiles) -> ElementResponse:
     try:
         vm: "VMRecord" = store.get(vm_id)
     except KeyError as e:
@@ -135,7 +179,7 @@ async def upload_files(vm_id: str, files: VMUploadFiles) -> ElementResponse:
 
 
 @vms_router.post("/{vm_id}/list-dirs", response_model=list[ListDirItem])
-async def list_dirs_endpoint(vm_id: str, root: VMPaths) -> list[ListDirItem]:
+def list_dirs_endpoint(vm_id: str, root: VMPaths) -> list[ListDirItem]:
     try:
         vm: "VMRecord" = store.get(vm_id)
     except KeyError as e:
@@ -145,7 +189,7 @@ async def list_dirs_endpoint(vm_id: str, root: VMPaths) -> list[ListDirItem]:
 
 
 @vms_router.post("/{vm_id}/read-file", response_model=FileContent)
-async def read_file_endpoint(vm_id: str, path: VMPath) -> FileContent:
+def read_file_endpoint(vm_id: str, path: VMPath) -> FileContent:
     try:
         vm: "VMRecord" = store.get(vm_id)
     except KeyError as e:
@@ -155,7 +199,7 @@ async def read_file_endpoint(vm_id: str, path: VMPath) -> FileContent:
 
 
 @vms_router.post("/{vm_id}/create-dir", response_model=ElementResponse)
-async def create_dir_endpoint(vm_id: str, path: VMPath) -> ElementResponse:
+def create_dir_endpoint(vm_id: str, path: VMPath) -> ElementResponse:
     try:
         vm: "VMRecord" = store.get(vm_id)
     except KeyError as e:
@@ -175,22 +219,13 @@ async def delete_vm(vm_id: str) -> VMOut:
 
 
 @vms_router.post("/{vm_id}/search", response_model=list[SearchHit])
-async def search_in_vm(vm_id: str, req: SearchRequest) -> list[SearchHit]:
+def search_in_vm(vm_id: str, req: SearchRequest) -> list[SearchHit]:
     try:
         vm: "VMRecord" = store.get(vm_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="VM doesn't exist")
     if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
         raise HTTPException(status_code=400, detail="VM is not running")
-
-    try:
-        val = cache_ssh_and_sftp(vm)
-        cli = cast(paramiko.SSHClient | None, val["cli"])
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"SSH error: {e}")
-
-    if not cli:
-        raise HTTPException(status_code=500, detail="No cli available")
 
     cmd_parts = [
         "grep",
@@ -209,10 +244,11 @@ async def search_in_vm(vm_id: str, req: SearchRequest) -> list[SearchHit]:
 
     cmd_parts.extend(["-e", req.pattern, req.root])
     command = " ".join(shlex.quote(p) for p in cmd_parts)
+
     try:
-        _, stdout, _ = cli.exec_command(command)
-        stdout.channel.settimeout(req.timeout_seconds)
-        out_bytes = stdout.read()
+        with borrow(vm) as conn:
+            # exec_and_close drains the output and CLOSES the channel (no leak).
+            out_bytes, _ = exec_and_close(conn.cli, command, req.timeout_seconds)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Remote exec error: {e}")
 
@@ -243,7 +279,7 @@ async def search_in_vm(vm_id: str, req: SearchRequest) -> list[SearchHit]:
 
 
 @vms_router.post("/{vm_id}/execute-sh", response_model=VMShResponse)
-async def execute_sh(vm_id: str, vm_command: VMSh) -> VMShResponse:
+def execute_sh(vm_id: str, vm_command: VMSh) -> VMShResponse:
     try:
         vm: "VMRecord" = store.get(vm_id)
     except KeyError:
@@ -255,17 +291,10 @@ async def execute_sh(vm_id: str, vm_command: VMSh) -> VMShResponse:
 
     command = vm_command.command
     try:
-        val = cache_ssh_and_sftp(vm)
-        cli = cast(paramiko.SSHClient, val["cli"])
-
-        if not cli:
-            return VMShResponse(ok=False, reason="Not valid client")
-
-        _, stdout, stderr = cli.exec_command(command)
-        stdout.channel.settimeout(vm_command.timeout)
-
-        out = stdout.read()
-        err = stderr.read()
+        with borrow(vm) as conn:
+            # exec_and_close applies the timeout to the channel and CLOSES it,
+            # so the session slot is freed instead of leaking toward MaxSessions.
+            out, err = exec_and_close(conn.cli, command, vm_command.timeout)
 
         try:
             return VMShResponse(ok=True, stdout=out.decode(), stderr=err.decode())
@@ -280,8 +309,101 @@ async def execute_sh(vm_id: str, vm_command: VMSh) -> VMShResponse:
     return VMShResponse(ok=False, reason="Something went wrong")
 
 
+@vms_router.get("/{vm_id}/listening-ports", response_model=list[ListeningPort])
+def listening_ports_ep(vm_id: str) -> list[ListeningPort]:
+    """List the TCP ports an app is listening on inside the VM (preview autodetect)."""
+    try:
+        vm: "VMRecord" = store.get(vm_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail="VM doesn't exist") from e
+    if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
+        raise HTTPException(status_code=400, detail="VM is not running")
+
+    try:
+        return listening_ports(vm)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Remote exec error: {e}") from e
+
+
+@vms_router.post("/{vm_id}/proxy", response_model=VMProxyResponse)
+def proxy_ep(vm_id: str, req: VMProxyRequest) -> VMProxyResponse:
+    """Proxy one HTTP request to an app listening inside the VM (binary-safe)."""
+    try:
+        vm: "VMRecord" = store.get(vm_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail="VM doesn't exist") from e
+    if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
+        raise HTTPException(status_code=400, detail="VM is not running")
+    # SSRF guard: never tunnel to sshd; the channel dest is hard-pinned to the
+    # guest's own 127.0.0.1, so it cannot pivot to other VMs or the node host.
+    if req.target_port == 22 or not (1 <= req.target_port <= 65535):
+        raise HTTPException(status_code=400, detail="Port not allowed")
+
+    return proxy_request(vm, req)
+
+
+@vms_router.post("/{vm_id}/start-process", response_model=StartProcessResponse)
+def start_process_ep(vm_id: str, req: StartProcessRequest) -> StartProcessResponse:
+    try:
+        vm: "VMRecord" = store.get(vm_id)
+    except KeyError:
+        return StartProcessResponse(ok=False, reason="VM doesn't exist")
+    if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
+        return StartProcessResponse(ok=False, reason="VM is not running")
+
+    try:
+        data = start_process(vm, req.command, req.cwd)
+    except Exception as e:
+        return StartProcessResponse(ok=False, reason=f"Process error: {e}")
+    return StartProcessResponse(**data)
+
+
+@vms_router.post("/{vm_id}/process-status", response_model=ProcessStatusResponse)
+def process_status_ep(vm_id: str, req: ProcessStatusRequest) -> ProcessStatusResponse:
+    try:
+        vm: "VMRecord" = store.get(vm_id)
+    except KeyError:
+        return ProcessStatusResponse(
+            ok=False, job_id=req.job_id, reason="VM doesn't exist"
+        )
+    if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
+        return ProcessStatusResponse(
+            ok=False, job_id=req.job_id, reason="VM is not running"
+        )
+
+    try:
+        data = process_status(vm, req.job_id, req.lines)
+    except Exception as e:
+        return ProcessStatusResponse(
+            ok=False, job_id=req.job_id, reason=f"Process error: {e}"
+        )
+    return ProcessStatusResponse(**data)
+
+
+@vms_router.post("/{vm_id}/stop-process", response_model=ProcessActionResponse)
+def stop_process_ep(vm_id: str, req: ProcessRef) -> ProcessActionResponse:
+    try:
+        vm: "VMRecord" = store.get(vm_id)
+    except KeyError:
+        return ProcessActionResponse(
+            ok=False, job_id=req.job_id, reason="VM doesn't exist"
+        )
+    if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
+        return ProcessActionResponse(
+            ok=False, job_id=req.job_id, reason="VM is not running"
+        )
+
+    try:
+        data = stop_process(vm, req.job_id)
+    except Exception as e:
+        return ProcessActionResponse(
+            ok=False, job_id=req.job_id, reason=f"Process error: {e}"
+        )
+    return ProcessActionResponse(**data)
+
+
 @vms_router.get("/{vm_id}/download-file")
-async def download_file_ep(
+def download_file_ep(
     vm_id: str,
     path: str = Query(..., description="Absolute rute of the file"),
 ):
@@ -300,7 +422,7 @@ async def download_file_ep(
 
 
 @vms_router.get("/{vm_id}/download-folder")
-async def download_folder_ep(
+def download_folder_ep(
     vm_id: str,
     root: str = Query("/app", description="Dict to download"),
     prefer_fmt: str = Query(

@@ -20,6 +20,21 @@ VM_BASE_IMAGE = os.environ.get(
 VM_TIMEOUT_BOOT_S = int(os.environ.get("VM_TIMEOUT_BOOT_S", "600"))
 NODE_NAME = os.environ.get("NODE_NAME", "local-node")
 
+# CPU affinity for QEMU on the KVM path, in `taskset -c` syntax (e.g. "0-3" or
+# "0,2,4"). Empty disables pinning and lets the kernel scheduler place threads.
+VM_TASKSET_CPUS: str = os.environ.get("VM_TASKSET_CPUS", "")
+
+# Whether to build and attach a cloud-init seed ISO at boot. Set to False when
+# VM_BASE_IMAGE is a pre-baked golden image (user + SSH key + sshd config already
+# inside, cloud-init disabled) so VMs skip the ~40s cloud-init pipeline and SSH is
+# ready as soon as sshd starts. See scripts/build-golden.sh.
+VM_USE_CLOUD_INIT: bool = os.environ.get("VM_USE_CLOUD_INIT", "true").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+
 REDIS_URL: str = os.environ.get("REDIS_URL", "redis://redis:6379/1")
 REDIS_PREFIX: str = os.environ.get("REDIS_PREFIX", "vmservice:")
 

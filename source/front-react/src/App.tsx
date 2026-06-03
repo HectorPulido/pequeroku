@@ -3,6 +3,7 @@ import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import AlertStack from "@/components/AlertStack";
 import LoaderOverlay from "@/components/LoaderOverlay";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import AiStudio from "./pages/AiStudio";
 import Dashboard from "./pages/Dashboard";
 import IDE from "./pages/IDE";
 import Login from "./pages/Login";
@@ -44,6 +45,14 @@ function App() {
 					element={
 						<ProtectedRoute>
 							<IDE />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/ai"
+					element={
+						<ProtectedRoute>
+							<AiStudio />
 						</ProtectedRoute>
 					}
 				/>

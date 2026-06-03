@@ -130,6 +130,68 @@ def test_start_vm_success_x86(monkeypatch, tmp_path):
     assert not os.path.exists(pidfile)
 
 
+def test_start_vm_skips_seed_when_cloud_init_disabled(monkeypatch, tmp_path):
+    workdir = str(tmp_path / "wd")
+    os.makedirs(workdir, exist_ok=True)
+
+    monkeypatch.setattr(qvm.settings, "VM_BASE_IMAGE", "/img/base.qcow2", raising=False)
+    monkeypatch.setattr(qvm.settings, "VM_SSH_USER", "root", raising=False)
+    monkeypatch.setattr(qvm.settings, "VM_SSH_PRIVKEY", "/keys/id_vm", raising=False)
+    monkeypatch.setattr(qvm.settings, "VM_TIMEOUT_BOOT_S", 5, raising=False)
+    monkeypatch.setattr(qvm.settings, "VM_RUN_AS_UID", None, raising=False)
+    monkeypatch.setattr(qvm.settings, "VM_RUN_AS_GID", None, raising=False)
+    # Pre-baked golden image: cloud-init disabled.
+    monkeypatch.setattr(qvm.settings, "VM_USE_CLOUD_INIT", False, raising=False)
+
+    monkeypatch.setattr(qvm.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(qvm, "pick_free_port", lambda: 2200)
+
+    captured = {}
+
+    def fake_vm_x86_args(vcpus, mem_mib, console_log, port, overlay, seed_iso, pidfile):
+        captured["seed_iso"] = seed_iso
+        return ["QEMU-X86"]
+
+    monkeypatch.setattr(qvm, "vm_qemu_x86_args", fake_vm_x86_args)
+
+    seed_called = {"n": 0}
+    monkeypatch.setattr(qvm, "make_overlay", lambda *a, **k: None)
+    monkeypatch.setattr(
+        qvm, "make_seed_iso", lambda *a, **k: seed_called.__setitem__("n", seed_called["n"] + 1)
+    )
+    monkeypatch.setattr(qvm.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(qvm, "wait_ssh", lambda **kwargs: True)
+
+    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8, vm_id="vm-baked")
+
+    # No cloud-init seed is built and none is passed to the args builder.
+    assert seed_called["n"] == 0
+    assert captured["seed_iso"] == ""
+    assert proc.seed_iso == ""
+
+
+def test_x86_args_omit_seed_drive_when_empty(monkeypatch, tmp_path):
+    import qemu_manager.qemu_args as qemu_args
+
+    monkeypatch.setattr(qemu_args.os.path, "exists", lambda p: False)
+    monkeypatch.setattr(
+        qemu_args.settings, "VM_QEMU_BIN", "/usr/bin/qemu-system-x86_64", raising=False
+    )
+
+    args = qemu_args.vm_qemu_x86_args(
+        vcpus=2,
+        mem_mib=1024,
+        console_log=str(tmp_path / "c.log"),
+        port=2222,
+        overlay=str(tmp_path / "disk.qcow2"),
+        seed_iso="",
+        pidfile=None,
+    )
+
+    # No cidata/seed drive (the read-only raw drive) should be present.
+    assert not any("readonly=on" in a for a in args)
+
+
 def test_start_vm_timeout_shows_tail(monkeypatch, tmp_path):
     workdir = str(tmp_path / "wd_timeout")
     os.makedirs(workdir, exist_ok=True)

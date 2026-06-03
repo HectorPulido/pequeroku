@@ -1,8 +1,20 @@
 import types
+from contextlib import contextmanager
+
 import pytest
 
 import models
 import implementations.read_from_vm as read_from_vm
+
+
+def _fake_borrow(cli=None, sftp=None):
+    """Patch target for read_from_vm.borrow: yields a conn with the given cli/sftp."""
+
+    @contextmanager
+    def _cm(container):
+        yield types.SimpleNamespace(cli=cli, sftp=sftp)
+
+    return _cm
 
 
 class FakeSFTPFile:
@@ -112,8 +124,8 @@ def test_list_dirs_parses_find_output(monkeypatch, vm_record):
     )
     cli = FakeSSH(responses={"find ": (stdout, b"")})
 
-    # Patch open_ssh to return our fake cli
-    monkeypatch.setattr(read_from_vm, "open_ssh", lambda vm: cli, raising=False)
+    # The impl borrows a pooled connection; patch that seam to yield our fake cli.
+    monkeypatch.setattr(read_from_vm, "borrow", _fake_borrow(cli=cli), raising=False)
 
     items = read_from_vm.list_dirs(vm_record, ["/app"], depth=2)
     # Ensure items include directory and file entries with proper names and path types
@@ -133,7 +145,7 @@ def test_list_dirs_parses_find_output(monkeypatch, vm_record):
 def test_list_dir_single_path(monkeypatch, vm_record):
     stdout = b"/home||d\n/home/readme.md||f\n"
     cli = FakeSSH(responses={"find ": (stdout, b"")})
-    monkeypatch.setattr(read_from_vm, "open_ssh", lambda vm: cli, raising=False)
+    monkeypatch.setattr(read_from_vm, "borrow", _fake_borrow(cli=cli), raising=False)
 
     items = read_from_vm.list_dir(vm_record, "/home")
     names = {it.name for it in items}
@@ -143,7 +155,7 @@ def test_list_dir_single_path(monkeypatch, vm_record):
 
 def test_read_file_found(monkeypatch, vm_record):
     sftp = FakeSFTP(files={"/etc/hosts": b"127.0.0.1 localhost\n"})
-    monkeypatch.setattr(read_from_vm, "open_sftp", lambda vm: sftp, raising=False)
+    monkeypatch.setattr(read_from_vm, "borrow", _fake_borrow(sftp=sftp), raising=False)
 
     content = read_from_vm.read_file(vm_record, "/etc/hosts")
     assert content.found is True
@@ -153,7 +165,7 @@ def test_read_file_found(monkeypatch, vm_record):
 
 def test_read_file_not_found(monkeypatch, vm_record):
     sftp = FakeSFTP(files={})
-    monkeypatch.setattr(read_from_vm, "open_sftp", lambda vm: sftp, raising=False)
+    monkeypatch.setattr(read_from_vm, "borrow", _fake_borrow(sftp=sftp), raising=False)
 
     content = read_from_vm.read_file(vm_record, "/no/such/file.txt")
     assert content.found is False
@@ -163,7 +175,7 @@ def test_read_file_not_found(monkeypatch, vm_record):
 
 def test_download_file_success(monkeypatch, vm_record):
     sftp = FakeSFTP(files={"/app/hello.txt": b"hello world"})
-    monkeypatch.setattr(read_from_vm, "open_sftp", lambda vm: sftp, raising=False)
+    monkeypatch.setattr(read_from_vm, "borrow", _fake_borrow(sftp=sftp), raising=False)
 
     resp = read_from_vm.download_file(vm_record, "/app/hello.txt")
     assert resp is not None
@@ -174,14 +186,14 @@ def test_download_file_success(monkeypatch, vm_record):
 
 def test_download_file_not_found(monkeypatch, vm_record):
     sftp = FakeSFTP(files={})
-    monkeypatch.setattr(read_from_vm, "open_sftp", lambda vm: sftp, raising=False)
+    monkeypatch.setattr(read_from_vm, "borrow", _fake_borrow(sftp=sftp), raising=False)
 
     assert read_from_vm.download_file(vm_record, "/app/missing.txt") is None
 
 
 def test_download_file_is_directory(monkeypatch, vm_record):
     sftp = FakeSFTP(files={}, dirs={"/app/somedir"})
-    monkeypatch.setattr(read_from_vm, "open_sftp", lambda vm: sftp, raising=False)
+    monkeypatch.setattr(read_from_vm, "borrow", _fake_borrow(sftp=sftp), raising=False)
 
     assert read_from_vm.download_file(vm_record, "/app/somedir") is None
 
@@ -190,13 +202,12 @@ def test_download_folder_zip_success(monkeypatch, vm_record):
     # Pretend zip is available
     monkeypatch.setattr(read_from_vm, "_zip_available", lambda cli: True, raising=False)
 
-    # Provide sftp that reports the directory exists
+    # Provide sftp that reports the directory exists + SSH that returns the archive
     sftp = FakeSFTP(files={}, dirs={"/app"})
-    monkeypatch.setattr(read_from_vm, "open_sftp", lambda vm: sftp, raising=False)
-
-    # SSH returns non-empty stdout for the zip pack command
     cli = FakeSSH(responses={"zip -r - .": (b"ZIPDATA", b"")})
-    monkeypatch.setattr(read_from_vm, "open_ssh", lambda vm: cli, raising=False)
+    monkeypatch.setattr(
+        read_from_vm, "borrow", _fake_borrow(cli=cli, sftp=sftp), raising=False
+    )
 
     resp = read_from_vm.download_folder(vm_record, "/app", "zip")
     assert resp is not None
@@ -212,10 +223,10 @@ def test_download_folder_tar_gz_when_zip_unavailable(monkeypatch, vm_record):
     )
 
     sftp = FakeSFTP(files={}, dirs={"/data"})
-    monkeypatch.setattr(read_from_vm, "open_sftp", lambda vm: sftp, raising=False)
-
     cli = FakeSSH(responses={"tar -C": (b"TARDATA", b"")})
-    monkeypatch.setattr(read_from_vm, "open_ssh", lambda vm: cli, raising=False)
+    monkeypatch.setattr(
+        read_from_vm, "borrow", _fake_borrow(cli=cli, sftp=sftp), raising=False
+    )
 
     resp = read_from_vm.download_folder(vm_record, "/data", "zip")
     assert resp is not None
@@ -225,12 +236,12 @@ def test_download_folder_tar_gz_when_zip_unavailable(monkeypatch, vm_record):
 
 
 def test_download_folder_missing_dir(monkeypatch, vm_record):
+    # Directory does not exist: download_folder should bail before packing.
     sftp = FakeSFTP(files={}, dirs=set())
-    monkeypatch.setattr(read_from_vm, "open_sftp", lambda vm: sftp, raising=False)
-
-    # open_ssh should not matter because it should fail before executing command
     cli = FakeSSH()
-    monkeypatch.setattr(read_from_vm, "open_ssh", lambda vm: cli, raising=False)
+    monkeypatch.setattr(
+        read_from_vm, "borrow", _fake_borrow(cli=cli, sftp=sftp), raising=False
+    )
 
     resp = read_from_vm.download_folder(vm_record, "/nope", "zip")
     assert resp is None
@@ -239,11 +250,11 @@ def test_download_folder_missing_dir(monkeypatch, vm_record):
 def test_download_folder_empty_output_returns_none(monkeypatch, vm_record):
     monkeypatch.setattr(read_from_vm, "_zip_available", lambda cli: True, raising=False)
     sftp = FakeSFTP(files={}, dirs={"/app"})
-    monkeypatch.setattr(read_from_vm, "open_sftp", lambda vm: sftp, raising=False)
-
     # Command returns empty archive and an error message on stderr
     cli = FakeSSH(responses={"zip -r - .": (b"", b"some error")})
-    monkeypatch.setattr(read_from_vm, "open_ssh", lambda vm: cli, raising=False)
+    monkeypatch.setattr(
+        read_from_vm, "borrow", _fake_borrow(cli=cli, sftp=sftp), raising=False
+    )
 
     resp = read_from_vm.download_folder(vm_record, "/app", "zip")
     assert resp is None

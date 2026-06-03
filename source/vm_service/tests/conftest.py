@@ -199,9 +199,10 @@ class FakeSSHClient:
 
 
 class FakeTTYBridge:
-    def __init__(self, ws, vm):
+    def __init__(self, ws, vm, loop=None):
         self.ws = ws
         self.vm = vm
+        self.loop = loop
         self.started = False
         self.closed = False
 

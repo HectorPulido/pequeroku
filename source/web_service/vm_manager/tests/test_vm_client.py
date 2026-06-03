@@ -297,3 +297,52 @@ def test_action_vm_posts_action_payload_and_returns_json():
     assert res == {"status": "ok"}
     assert session.last_url.endswith("/vms/vm-5/actions")
     assert session.last_json == {"action": "reboot", "cleanup_disks": False}
+
+
+def test_proxy_posts_payload_and_returns_envelope():
+    node = create_node()
+    session = FakeSession()
+    session.queue.append(
+        FakeResponse(
+            json_data={"ok": True, "status": 200, "headers": [], "body_b64": "aGk="},
+            content=b"ok",
+        )
+    )
+
+    client = VMServiceClient(node=node, session=session)
+    env = client.proxy(
+        "vm-1",
+        {
+            "target_port": 8000,
+            "method": "GET",
+            "path": "/",
+            "headers": {},
+            "timeout": 30,
+        },
+    )
+
+    assert env["ok"] is True
+    assert session.last_url.endswith("/vms/vm-1/proxy")
+    assert session.last_json["target_port"] == 8000
+    assert session.last_json["method"] == "GET"
+
+
+def test_listening_ports_gets_list_from_node():
+    node = create_node()
+    session = FakeSession()
+    session.queue.append(
+        FakeResponse(
+            json_data=[
+                {"port": 3000, "address": "127.0.0.1", "process": "node", "pid": 12},
+                {"port": 8000, "address": "0.0.0.0", "process": "python3", "pid": 34},
+            ],
+            content=b"ok",
+        )
+    )
+
+    client = VMServiceClient(node=node, session=session)
+    data = client.listening_ports("vm-9")
+
+    assert isinstance(data, list)
+    assert {p["port"] for p in data} == {3000, 8000}
+    assert session.last_url.endswith("/vms/vm-9/listening-ports")

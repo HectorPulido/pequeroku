@@ -131,6 +131,58 @@ def test_command_dry_run_counts_actions_without_updates(monkeypatch, capsys):
     assert c2.status == "running"
 
 
+def test_loop_mode_runs_pass_then_sleeps(monkeypatch):
+    user = create_user(username="recon_loop_user")
+    node = create_node()
+    c = create_container(user=user, node=node, container_id="vm-loop")
+    c.desired_state = "running"
+    c.status = "stopped"
+    c.save()
+
+    client = FakeClient()
+    monkeypatch.setattr(Reconciler, "_sync_statuses", lambda self, objs: [])
+    monkeypatch.setattr(Reconciler, "_service_for", lambda self, c: client)
+
+    import vm_manager.management.commands.reconcile_containers as cmd_mod
+
+    class _StopLoop(Exception):
+        pass
+
+    # Break out of the otherwise-infinite loop on the first sleep.
+    def _fake_sleep(_seconds):
+        raise _StopLoop()
+
+    monkeypatch.setattr(cmd_mod.time, "sleep", _fake_sleep)
+
+    with pytest.raises(_StopLoop):
+        call_command("reconcile_containers", "--loop", "--interval", "1")
+
+    # The pass before the (intercepted) sleep must have started the VM.
+    assert client.actions == [("vm-loop", "start")]
+    c.refresh_from_db()
+    assert c.status == "provisioning"
+
+
+def test_loop_mode_survives_a_failing_pass(monkeypatch):
+    import vm_manager.management.commands.reconcile_containers as cmd_mod
+
+    class _StopLoop(Exception):
+        pass
+
+    # First pass blows up; the loop must log it and reach the sleep (i.e. not die).
+    def _boom(self):
+        raise RuntimeError("kaboom")
+
+    def _fake_sleep(_seconds):
+        raise _StopLoop()
+
+    monkeypatch.setattr(Reconciler, "reconcile_once", _boom)
+    monkeypatch.setattr(cmd_mod.time, "sleep", _fake_sleep)
+
+    with pytest.raises(_StopLoop):
+        call_command("reconcile_containers", "--loop", "--interval", "1")
+
+
 def test_command_with_container_ids_executes_only_one(monkeypatch, capsys):
     user = create_user(username="recon_one_user")
     node = create_node()

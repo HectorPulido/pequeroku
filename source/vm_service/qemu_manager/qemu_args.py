@@ -183,10 +183,12 @@ def _kvm(
     pidfile: str | None,
 ):
     args: list[str] = []
+    # Optional CPU pinning. Off by default; set settings.VM_TASKSET_CPUS (taskset
+    # -c syntax, e.g. "0-3") to confine QEMU to specific cores for NUMA/isolation.
+    cpus = (getattr(settings, "VM_TASKSET_CPUS", "") or "").strip()
+    if cpus and shutil.which("taskset"):
+        args += ["taskset", "-c", cpus]
     args += [
-        "taskset",
-        "-c",
-        "0-3",
         arm_64_bin,
         "-accel",
         "kvm",
@@ -388,9 +390,11 @@ def vm_qemu_x86_args(
         "virtio-rng-pci",
         "-drive",
         f"if=virtio,format=qcow2,file={overlay}",
-        "-drive",
-        f"if=virtio,format=raw,readonly=on,file={seed_iso}",
     ]
+
+    # Cloud-init seed is optional: pre-baked golden images don't need it.
+    if seed_iso:
+        args += ["-drive", f"if=virtio,format=raw,readonly=on,file={seed_iso}"]
 
     if pidfile:
         args += ["-pidfile", pidfile]

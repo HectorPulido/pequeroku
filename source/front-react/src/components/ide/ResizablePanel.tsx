@@ -90,6 +90,12 @@ const ResizablePanel: React.FC<ResizablePanelProps> = ({
 			}}
 		>
 			{children}
+			{isResizing ? (
+				// Full-viewport shield so the drag keeps receiving mouse events even when
+				// the cursor passes over an <iframe> (preview) or Monaco, which would
+				// otherwise swallow the mouseup and leave the panel stuck resizing.
+				<div className="fixed inset-0 z-50 cursor-col-resize" />
+			) : null}
 			<button
 				type="button"
 				aria-label="Resize panel"

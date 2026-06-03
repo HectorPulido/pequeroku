@@ -6,12 +6,13 @@ ARG FRONT_REACT_BASE=/app/
 ENV FRONT_REACT_BASE=${FRONT_REACT_BASE}
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm i
-RUN npm ci
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN npm run build:ts && npm run build:vite
+RUN pnpm run build:ts && pnpm run build:vite
 
 FROM nginx:1.27-alpine AS runtime
 WORKDIR /usr/share/nginx/html

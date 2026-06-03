@@ -1,6 +1,7 @@
 import { USE_MOCKS } from "@/config";
 import {
 	mockApplyTemplate,
+	mockFetchListeningPorts,
 	mockFetchRunConfig,
 	mockFetchTemplates,
 	mockPollPreview,
@@ -13,6 +14,13 @@ import type { TemplateSummary } from "@/types/template";
 type RunConfig = {
 	run: string | null;
 	port: number | null;
+};
+
+export type ListeningPort = {
+	port: number;
+	address: string;
+	process: string | null;
+	pid: number | null;
 };
 
 type TemplateApplyResponse = {
@@ -100,6 +108,39 @@ export async function fetchRunConfig(
 	}
 }
 
+export async function fetchListeningPorts(containerId: string): Promise<ListeningPort[]> {
+	if (USE_MOCKS) {
+		return mockFetchListeningPorts(containerId);
+	}
+	const api = getContainerApi(containerId);
+	try {
+		const ports = await api<Array<Record<string, unknown>>>("/ports/", {
+			method: "GET",
+			noLoader: true,
+			noAuthRedirect: true,
+			noAuthAlert: true,
+		});
+		return (ports || [])
+			.map((raw): ListeningPort | null => {
+				const port =
+					typeof raw.port === "number" ? raw.port : Number.parseInt(String(raw.port ?? ""), 10);
+				if (!Number.isFinite(port)) return null;
+				return {
+					port,
+					address: typeof raw.address === "string" ? raw.address : "",
+					process: typeof raw.process === "string" ? raw.process : null,
+					pid: typeof raw.pid === "number" ? raw.pid : null,
+				};
+			})
+			.filter((value): value is ListeningPort => value !== null);
+	} catch (error) {
+		// Read-only suggestion endpoint: a booting VM / unreachable node should not
+		// surface an error — the caller treats an empty list as "nothing detected".
+		console.warn("Failed to fetch listening ports", error);
+		return [];
+	}
+}
+
 export async function fetchTemplates(): Promise<TemplateSummary[]> {
 	if (USE_MOCKS) {
 		return mockFetchTemplates();
@@ -152,13 +193,12 @@ export async function applyTemplate(
 }
 
 function buildPreviewUrl(containerId: string, port: number, rawPath: string) {
-	const sanitized = rawPath.replace(/^\//, "");
-	const encoded = sanitized ? `/${encodeURIComponent(sanitized)}/` : "/";
-	const base = `/api/containers/${containerId}/curl/${port}`;
-	const url = `${base}${encoded}`;
-	const u = new URL(url, window.location.href);
-	u.searchParams.set("_cb", String(Date.now()));
-	return u.toString();
+	// Real paths (no %2F encoding): the binary-safe proxy serves at this prefix and
+	// the injected <base> resolves relative assets against it. No cache-buster —
+	// the proxy passes through the app's real cache headers.
+	const sanitized = rawPath.replace(/^\/+/, "");
+	const base = `/api/containers/${containerId}/preview/${port}/`;
+	return new URL(base + sanitized, window.location.href).toString();
 }
 
 export async function pollPreview(options: PollPreviewOptions) {

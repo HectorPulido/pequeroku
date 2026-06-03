@@ -17,7 +17,7 @@ from rest_framework.response import Response
 
 from internal_config.audit import audit_log_http
 
-from .proxy_browser_utils import parse_get
+from .preview_proxy import build_preview_response
 from .serializers import (
     ContainerSerializer,
     UserInfoSerializer,
@@ -34,6 +34,8 @@ from .templates import (
 )
 
 from .mixin import VMSyncMixin
+
+from ai_services import conversations as convo
 
 
 class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
@@ -280,6 +282,23 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
         return Response(response)
 
+    @action(detail=True, methods=["get"])
+    def ports(self, request, pk=None):
+        """GET /api/containers/{pk}/ports/ — TCP ports detected listening in the VM.
+
+        Feeds the IDE preview port selector (autodetection). Read-only; container
+        visibility is enforced by get_object()/get_queryset. Returns ``[]`` instead
+        of erroring while the VM is still booting or the app isn't up yet, so the
+        front can poll smoothly. Each item is ``{port, address, process?, pid?}``.
+        """
+        obj: Container = self.get_object()
+        service = self._get_service(obj)
+        try:
+            response = service.listening_ports(str(obj.container_id))
+        except Exception:
+            response = []
+        return Response(response)
+
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
     def upload_file(self, request, pk=None):
         quota = self._check_quota(request)
@@ -357,6 +376,9 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
         obj: Container = self.get_object()
         service = self._get_service(obj)
+        # Rebuild the VM record on the node if its cache lost it (e.g. vm-service
+        # restart); idempotent and avoids a 404 on start.
+        self.ensure_vm_record(obj, service)
         service.action_vm(
             str(obj.container_id), action=VMAction(action="start", cleanup_disks=False)
         )
@@ -494,22 +516,62 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             resp["Content-Disposition"] = content_disposition
         return resp
 
+    # NB: registered explicitly in urls.py (NOT via the router) so the catch-all
+    # path matches with or without a trailing slash — apps POST to arbitrary URLs
+    # and the router's forced trailing slash would 404 → APPEND_SLASH RuntimeError.
     @xframe_options_exempt
-    @action(
-        detail=True, methods=["get"], url_path=r"curl/(?P<port>\d+)(?:/(?P<path>.*))?"
-    )
-    def internal_get(self, request, pk=None, port=None, path=None):
+    def preview(self, request, pk=None, port=None, path=None, format=None):
+        """Binary-safe HTTP proxy to an app listening inside the container's VM."""
         obj: Container = self.get_object()
-        service = self._get_service(obj)
-
         if not port:
             return Response("No port", status=status.HTTP_400_BAD_REQUEST)
+        # DRF's format-suffix routing may peel a trailing extension (e.g.
+        # ``openapi.json`` -> path="openapi", format="json"); stitch it back so the
+        # real upstream path is preserved.
+        if format:
+            path = f"{path}.{format}" if path else format
+        service = self._get_service(obj)
+        return build_preview_response(request, obj, port, path, service)
 
-        scheme = request.scheme
-        host = request.get_host()
-        base_url = f"{scheme}://{host}/api/containers/{str(obj.pk)}/curl/{port}/"
+    @action(detail=True, methods=["get"])
+    def conversations(self, request, pk=None):
+        """List the AI conversations stored in the VM (+ the active one)."""
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
-        return parse_get(port, path, obj, base_url, service)
+        obj: Container = self.get_object()
+        return Response(convo.list_with_current(request.user, obj))
+
+    @action(
+        detail=True,
+        methods=["get", "delete"],
+        url_path=r"conversations/(?P<conversation_id>\d+)",
+    )
+    def conversation(self, request, pk=None, conversation_id=None):
+        """GET the messages of one AI conversation, or DELETE it."""
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
+        obj: Container = self.get_object()
+        try:
+            conv_id = int(cast(str, conversation_id))
+        except (TypeError, ValueError):
+            return Response(
+                "Invalid conversation id", status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if request.method == "DELETE":
+            convo.delete_conversation(obj, conv_id)
+            return Response(convo.list_with_current(request.user, obj))
+
+        return Response(
+            {
+                "conversation_id": conv_id,
+                "messages": convo.read_conversation(obj, conv_id),
+            }
+        )
 
 
 class UserViewSet(viewsets.ViewSet):

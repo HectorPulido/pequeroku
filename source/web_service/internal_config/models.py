@@ -52,7 +52,11 @@ class AIMemory(models.Model):
     container = models.ForeignKey(
         Container, on_delete=models.CASCADE, related_name="container"
     )
+    # Conversation content lives in the VM (/app/.pequenin/); the DB only keeps the
+    # durable pointer to which conversation is currently active per (user, container)
+    # so it survives a VM reset/rebuild and is known without hitting the VM.
     memory = models.JSONField(blank=True, null=True, default=dict)
+    current_conversation = models.PositiveIntegerField(default=1)
 
 
 class AuditLog(models.Model):

@@ -42,11 +42,17 @@ def wait_ssh(
 
             if vm_id is not None:
                 try:
-                    from implementations.ssh_cache import cache_data
+                    from implementations.ssh_cache import (
+                        cache_data,
+                        finalize_and_cache,
+                    )
 
-                    _ = cli.exec_command("echo hello")
-                    sftp = cli.open_sftp()
-                    cache_data[vm_id] = {"cli": cli, "sftp": sftp}
+                    # Warm the cache exactly once, reusing the connection we just
+                    # validated. Later accesses go through cache_ssh_and_sftp, which
+                    # only reconnects if the entry is missing or the transport died.
+                    cached = cache_data.get(vm_id)
+                    if not cached or not cached.get("cli"):
+                        finalize_and_cache(vm_id, cli)
                 except Exception:
                     ...
 

@@ -91,9 +91,8 @@ def test_start_success_sets_running_and_ports(monkeypatch, store_and_runner):
             pidfile=os.path.join(workdir, "qemu.pid"),
         )
 
-    # speed up and avoid real waiting
+    # speed up and avoid real waiting; start_vm already waits for SSH internally.
     monkeypatch.setattr("implementations.runner.start_vm", fake_start_vm)
-    monkeypatch.setattr("implementations.runner.wait_ssh", lambda **kwargs: True)
 
     vm = _make_vm(runner, "vm-start-ok")
     store.put(vm)
@@ -114,8 +113,6 @@ def test_start_failure_sets_error(monkeypatch, store_and_runner):
         raise RuntimeError("boom-start")
 
     monkeypatch.setattr("implementations.runner.start_vm", fake_start_vm_fail)
-    # even if wait_ssh is called (it won't be), keep it harmless
-    monkeypatch.setattr("implementations.runner.wait_ssh", lambda **kwargs: True)
 
     vm = _make_vm(runner, "vm-start-fail")
     store.put(vm)
@@ -155,18 +152,6 @@ def test_stop_with_pidfile_kills_and_removes_pidfile(
 
     monkeypatch.setattr(os, "killpg", fake_killpg)
 
-    # Provide a channel to test _send_stop path
-    class FakeChan:
-        def __init__(self):
-            self.closed = False
-            self.sent = []
-
-        def send(self, data):
-            self.sent.append(data)
-
-    chan = FakeChan()
-    setattr(vm.proc, "chan", chan)
-
     runner.stop(vm, cleanup_disks=False)
 
     assert wait_until(lambda: vm.state == models.VMState.stopped, timeout=2.0)
@@ -174,11 +159,6 @@ def test_stop_with_pidfile_kills_and_removes_pidfile(
     assert any(pid == 12345 for pid, _ in calls)
     # pidfile should be removed
     assert not os.path.exists(pidfile_path)
-    # _send_stop must have sent shutdown command
-    assert any(
-        "shutdown now" in (s if isinstance(s, str) else s.decode("utf-8", "ignore"))
-        for s in chan.sent
-    )
 
 
 def test_stop_without_pidfile_uses_popen(monkeypatch, store_and_runner, base_env):

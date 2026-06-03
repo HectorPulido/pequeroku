@@ -4,6 +4,7 @@ import {
 	Group,
 	Play,
 	RefreshDouble,
+	Sparks,
 	Square,
 	StatsUpSquare,
 	Trash,
@@ -58,6 +59,7 @@ const Dashboard: React.FC = () => {
 	const [isLoadingTypes, setIsLoadingTypes] = useState(false);
 	const [pendingActions, setPendingActions] = useState<Record<PendingAction, boolean>>({});
 	const [consoleContainer, setConsoleContainer] = useState<Container | null>(null);
+	const [aiContainer, setAiContainer] = useState<Container | null>(null);
 	const [metricsContainer, setMetricsContainer] = useState<Container | null>(null);
 	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [hasLoadedContainers, setHasLoadedContainers] = useState(false);
@@ -260,6 +262,14 @@ const Dashboard: React.FC = () => {
 		setConsoleContainer(container);
 	};
 
+	const handleOpenAi = (container: Container) => {
+		if (isSmallScreen()) {
+			window.open(buildUrl(`ai?containerId=${container.id}`), "_blank", "noopener,noreferrer");
+			return;
+		}
+		setAiContainer(container);
+	};
+
 	const handleOpenMetrics = (container: Container) => {
 		if (isSmallScreen()) {
 			window.open(buildUrl(`metrics?container=${container.id}`), "_blank", "noopener,noreferrer");
@@ -304,6 +314,14 @@ const Dashboard: React.FC = () => {
 								icon={<Wrench className="h-4 w-4" />}
 							>
 								Open
+							</Button>
+							<Button
+								size="sm"
+								variant="secondary"
+								onClick={() => handleOpenAi(container)}
+								icon={<Sparks className="h-4 w-4" />}
+							>
+								AI
 							</Button>
 							<Button
 								size="sm"
@@ -494,6 +512,40 @@ const Dashboard: React.FC = () => {
 					<iframe
 						title={`IDE-${consoleContainer.id}`}
 						src={buildUrl(`ide?containerId=${consoleContainer.id}&showHeader=1`)}
+						className="h-full w-full rounded-lg border border-gray-800"
+					/>
+				) : null}
+			</Modal>
+
+			<Modal
+				isOpen={aiContainer !== null}
+				onClose={() => setAiContainer(null)}
+				title={aiContainer ? `${aiContainer.id} — ${aiContainer.name} - AI` : ""}
+				size="xl"
+				padding=""
+				headerActions={
+					aiContainer ? (
+						<Button
+							variant="secondary"
+							size="sm"
+							onClick={() => {
+								if (!aiContainer) return;
+								window.open(
+									buildUrl(`ai?containerId=${aiContainer.id}`),
+									"_blank",
+									"noopener,noreferrer",
+								);
+							}}
+						>
+							<Expand />
+						</Button>
+					) : null
+				}
+			>
+				{aiContainer ? (
+					<iframe
+						title={`AI-${aiContainer.id}`}
+						src={buildUrl(`ai?containerId=${aiContainer.id}&showHeader=1`)}
 						className="h-full w-full rounded-lg border border-gray-800"
 					/>
 				) : null}

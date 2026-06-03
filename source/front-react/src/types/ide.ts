@@ -23,4 +23,5 @@ export interface TerminalTab {
 	terminal: Terminal | null;
 	fitAddon: FitAddon | null;
 	service?: InstanceType<typeof import("@/services/ide/TerminalWebService").default>;
+	resizeObserver?: ResizeObserver | null;
 }

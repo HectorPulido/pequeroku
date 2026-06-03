@@ -96,8 +96,9 @@ def test_vm_qemu_arm64_args_kvm(monkeypatch, tmp_path):
         pidfile=pid,
     )
 
-    # KVM branch uses taskset prefix and -accel kvm
-    assert args[0:3] == ["taskset", "-c", "0-3"]
+    # KVM branch uses -accel kvm; CPU pinning is off by default (no taskset)
+    assert "taskset" not in args
+    assert args[0] == "/bin/qemu-system-aarch64"
     assert "-accel" in args and "kvm" in args
     # BIOS/UEFI path is used
     assert "-bios" in args and "/fw/uefi.fd" in args
@@ -105,6 +106,39 @@ def test_vm_qemu_arm64_args_kvm(monkeypatch, tmp_path):
     assert f"user,id=n0,hostfwd=tcp:127.0.0.1:2222-:22" in args
     # pidfile included
     assert "-pidfile" in args and pid in args
+
+
+def test_vm_qemu_arm64_args_kvm_with_taskset(monkeypatch, tmp_path):
+    console, overlay, seed, pid = _make_paths(tmp_path)
+
+    monkeypatch.setattr(qemu_args, "_find_uefi_firmware_arm64", lambda: "/fw/uefi.fd")
+    monkeypatch.setattr(
+        qemu_args, "_resolve_qemu_bin_arm64", lambda: "/bin/qemu-system-aarch64"
+    )
+    monkeypatch.setattr(qemu_args.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(qemu_args.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        qemu_args.os.path, "exists", lambda p: True if p == "/dev/kvm" else False
+    )
+
+    # Enable CPU pinning via settings and make taskset resolvable
+    monkeypatch.setattr(qemu_args.settings, "VM_TASKSET_CPUS", "0-3", raising=False)
+    monkeypatch.setattr(qemu_args.shutil, "which", lambda name: "/usr/bin/taskset")
+
+    args = qemu_args.vm_qemu_arm64_args(
+        vcpus=2,
+        mem_mib=1024,
+        console_log=console,
+        port=2222,
+        overlay=overlay,
+        seed_iso=seed,
+        pidfile=pid,
+    )
+
+    # taskset prefix present, followed by the qemu binary
+    assert args[0:3] == ["taskset", "-c", "0-3"]
+    assert args[3] == "/bin/qemu-system-aarch64"
+    assert "-accel" in args and "kvm" in args
 
 
 def test_vm_qemu_arm64_args_hvf_on_darwin(monkeypatch, tmp_path):

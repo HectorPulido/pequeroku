@@ -5,18 +5,26 @@ import shlex
 import paramiko
 import errno
 from models import VMUploadFiles, VMRecord, ElementResponse
-from .ssh_cache import open_ssh_and_sftp, open_ssh
+from .ssh_pool import borrow
 
 
 def _run_and_check(cli: paramiko.SSHClient, cmd: str, timeout: float | None = None):
     _, stdout, stderr = cli.exec_command(cmd, timeout=timeout)
-    exit_status = stdout.channel.recv_exit_status()
-    if exit_status != 0:
-        err = stderr.read().decode("utf-8", "ignore")
-        out = stdout.read().decode("utf-8", "ignore")
-        raise RuntimeError(
-            f"Command failed ({exit_status}): {cmd}\nSTDERR: {err}\nSTDOUT: {out}"
-        )
+    try:
+        exit_status = stdout.channel.recv_exit_status()
+        if exit_status != 0:
+            err = stderr.read().decode("utf-8", "ignore")
+            out = stdout.read().decode("utf-8", "ignore")
+            raise RuntimeError(
+                f"Command failed ({exit_status}): {cmd}\nSTDERR: {err}\nSTDOUT: {out}"
+            )
+    finally:
+        # Close the channel so it does not linger as a half-open session and
+        # count against the remote sshd's MaxSessions.
+        try:
+            stdout.channel.close()
+        except Exception:
+            pass
 
 
 def _norm_join(dest_path: str, rel: str) -> str:
@@ -38,9 +46,8 @@ def _clean_dest(cli: paramiko.SSHClient, dest_path: str):
 
 
 def _prepare_vm_for_transfer(
-    container: VMRecord, dest_path: str = "/app", clean: bool = True
+    sftp, cli, dest_path: str = "/app", clean: bool = True
 ):
-    sftp, cli = open_ssh_and_sftp(container)
     if not sftp:
         return None, None, None
 
@@ -98,37 +105,43 @@ def send_files(container: VMRecord, files: VMUploadFiles):
     clean = files.clean or False
     dest_path = files.dest_path or "/app"
 
-    try:
-        sftp, cli, dest_path = _prepare_vm_for_transfer(container, dest_path, clean)
+    # Borrow a dedicated pooled connection (its own SFTP client) for this whole
+    # upload, so it can run concurrently with other VM ops without racing a
+    # shared SFTP client or churning channels on a single connection.
+    with borrow(container) as conn:
+        try:
+            sftp, cli, dest_path = _prepare_vm_for_transfer(
+                conn.sftp, conn.cli, dest_path, clean
+            )
 
-        if not sftp or not dest_path or not cli:
-            return ElementResponse(ok=False, reason="No sftp ready")
+            if not sftp or not dest_path or not cli:
+                return ElementResponse(ok=False, reason="No sftp ready")
 
-        failed: list[dict[str, object]] = []
-        for it in files.files:
-            try:
-                fullp = _norm_join(dest_path, it.path)
-                if it.text is not None and len(it.text) > 0:
-                    data = (it.text or "").encode("utf-8")
-                else:
-                    data = base64.b64decode(it.content_b64 or "", validate=False)
-                _save_file_bytes(sftp, cli, fullp, data, it.mode)
-            except Exception as e:
-                failed.append({"path": it.path, "reason": str(e)})
+            failed: list[dict[str, object]] = []
+            for it in files.files:
+                try:
+                    fullp = _norm_join(dest_path, it.path)
+                    if it.text is not None and len(it.text) > 0:
+                        data = (it.text or "").encode("utf-8")
+                    else:
+                        data = base64.b64decode(it.content_b64 or "", validate=False)
+                    _save_file_bytes(sftp, cli, fullp, data, it.mode)
+                except Exception as e:
+                    failed.append({"path": it.path, "reason": str(e)})
 
-        if failed:
-            return ElementResponse(ok=False, reason=f"Failed files: {failed}")
-        return ElementResponse(ok=True)
+            if failed:
+                return ElementResponse(ok=False, reason=f"Failed files: {failed}")
+            return ElementResponse(ok=True)
 
-    except Exception as e:
-        return ElementResponse(ok=False, reason=str(e))
+        except Exception as e:
+            return ElementResponse(ok=False, reason=str(e))
 
 
 def create_dir(container: VMRecord, path: str = "/app"):
-    cli = open_ssh(container)
-    try:
-        _run_and_check(cli, f"mkdir -p {shlex.quote(path)}")
-    except Exception as e:
-        return ElementResponse(ok=False, reason=str(e))
+    with borrow(container) as conn:
+        try:
+            _run_and_check(conn.cli, f"mkdir -p {shlex.quote(path)}")
+        except Exception as e:
+            return ElementResponse(ok=False, reason=str(e))
 
     return ElementResponse(ok=True)

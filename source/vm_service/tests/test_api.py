@@ -3,6 +3,7 @@ import sys
 import time
 import types
 import pathlib
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
@@ -125,10 +126,21 @@ class FakeSSHClient:
         )
 
 
+def _fake_borrow(cli=None, sftp=None):
+    """Build a fake ssh_pool.borrow that yields a connection with the given cli/sftp."""
+
+    @contextmanager
+    def _cm(container):
+        yield types.SimpleNamespace(cli=cli, sftp=sftp)
+
+    return _cm
+
+
 class FakeTTYBridge:
-    def __init__(self, ws, vm):
+    def __init__(self, ws, vm, loop=None):
         self.ws = ws
         self.vm = vm
+        self.loop = loop
         self.started = False
         self.closed = False
 
@@ -278,6 +290,52 @@ def test_actions_stop_start_reboot(client: TestClient, auth_header, store_and_ru
     assert r.json()["state"] == "provisioning"
 
 
+def test_ensure_vm_recreates_missing_record(
+    client: TestClient, auth_header, store_and_runner
+):
+    store, _runner, _base_dir = store_and_runner
+    vm_id = "11111111-1111-1111-1111-111111111111"
+
+    # Record does not exist yet -> get returns 404
+    r = client.get(f"/vms/{vm_id}", headers=auth_header)
+    assert r.status_code == 404
+
+    # Ensure rebuilds it (in 'stopped' state) from the provided specs
+    payload = {"vcpus": 4, "mem_mib": 1024, "disk_gib": 20}
+    r = client.post(f"/vms/{vm_id}/ensure", headers=auth_header, json=payload)
+    assert r.status_code == 200
+    ensured = r.json()
+    assert ensured["id"] == vm_id
+    assert ensured["state"] == "stopped"
+
+    # The record now exists in the store with the requested specs
+    rec = store.get(vm_id)
+    assert rec.vcpus == 4
+    assert rec.mem_mib == 1024
+    assert rec.disk_gib == 20
+
+    # And it is now retrievable through the regular endpoint (no more 404)
+    r = client.get(f"/vms/{vm_id}", headers=auth_header)
+    assert r.status_code == 200
+
+
+def test_ensure_vm_is_idempotent(client: TestClient, auth_header, store_and_runner):
+    # Create a VM the normal way
+    r = client.post(
+        "/vms/", headers=auth_header, json={"vcpus": 2, "mem_mib": 512, "disk_gib": 10}
+    )
+    vm_id = r.json()["id"]
+
+    # Ensure with different specs must NOT clobber the existing record
+    r = client.post(
+        f"/vms/{vm_id}/ensure",
+        headers=auth_header,
+        json={"vcpus": 8, "mem_mib": 4096, "disk_gib": 50},
+    )
+    assert r.status_code == 200
+    assert r.json()["id"] == vm_id
+
+
 def test_upload_files_and_dirs_endpoints(
     client: TestClient, auth_header, monkeypatch, store_and_runner
 ):
@@ -353,15 +411,12 @@ def test_search_in_vm(client: TestClient, auth_header, monkeypatch):
     )
     vm_id = r.json()["id"]
 
-    # Mock SSH for search
-    def _fake_cache(vm):
-        cli = FakeSSHClient(
-            stdout_data=b"/app/a.txt:1:hello\n/app/b.txt:2:world\n",
-            stderr_data=b"",
-        )
-        return {"cli": cli}
-
-    monkeypatch.setattr(vms, "cache_ssh_and_sftp", _fake_cache)
+    # Mock SSH for search (the route borrows a pooled connection)
+    cli = FakeSSHClient(
+        stdout_data=b"/app/a.txt:1:hello\n/app/b.txt:2:world\n",
+        stderr_data=b"",
+    )
+    monkeypatch.setattr(vms, "borrow", _fake_borrow(cli=cli))
     body = {
         "pattern": "o",
         "root": "/app",
@@ -395,12 +450,9 @@ def test_execute_sh(client: TestClient, auth_header, monkeypatch):
     )
     vm_id = r.json()["id"]
 
-    # Mock SSH for execute_sh
-    def _fake_cache(vm):
-        cli = FakeSSHClient(stdout_data=b"ok\n", stderr_data=b"")
-        return {"cli": cli}
-
-    monkeypatch.setattr(vms, "cache_ssh_and_sftp", _fake_cache)
+    # Mock SSH for execute_sh (the route borrows a pooled connection)
+    cli = FakeSSHClient(stdout_data=b"ok\n", stderr_data=b"")
+    monkeypatch.setattr(vms, "borrow", _fake_borrow(cli=cli))
     r = client.post(
         f"/vms/{vm_id}/execute-sh", headers=auth_header, json={"command": "echo ok"}
     )
@@ -409,6 +461,214 @@ def test_execute_sh(client: TestClient, auth_header, monkeypatch):
     assert data["ok"] is True
     reason = data.get("reason", "")
     assert (reason == "") or ("ok" in reason)
+
+
+def test_listening_ports_endpoint(client: TestClient, auth_header, monkeypatch):
+    import importlib
+
+    # NB: `from implementations import listening_ports` yields the *function*
+    # (re-exported in __init__), not the module. Grab the module to patch its
+    # `borrow` global that the function calls.
+    lp_mod = importlib.import_module("implementations.listening_ports")
+
+    r = client.post(
+        "/vms/", headers=auth_header, json={"vcpus": 1, "mem_mib": 256, "disk_gib": 5}
+    )
+    vm_id = r.json()["id"]
+
+    # `ss -ltnpH` style output: ssh on 22 (filtered), a loopback dev server, a
+    # wildcard api, the IPv6 duplicate of ssh (also filtered), and the systemd
+    # resolver noise on :53/:5355 (filtered by port + process).
+    ss_out = (
+        b'LISTEN 0 128   0.0.0.0:22    0.0.0.0:*  users:(("sshd",pid=600,fd=3))\n'
+        b'LISTEN 0 511 127.0.0.1:3000  0.0.0.0:*  users:(("node",pid=1234,fd=20))\n'
+        b'LISTEN 0 128      [::]:22       [::]:*  users:(("sshd",pid=600,fd=4))\n'
+        b'LISTEN 0 511         *:8000        *:*  users:(("python3",pid=2345,fd=6))\n'
+        b'LISTEN 0 4096 127.0.0.53%lo:53 0.0.0.0:* users:(("systemd-resolve",pid=300,fd=18))\n'
+        b'LISTEN 0 4096   127.0.0.1:5355 0.0.0.0:* users:(("systemd-resolve",pid=300,fd=10))\n'
+    )
+    cli = FakeSSHClient(stdout_data=ss_out)
+    monkeypatch.setattr(lp_mod, "borrow", _fake_borrow(cli=cli))
+
+    r = client.get(f"/vms/{vm_id}/listening-ports", headers=auth_header)
+    assert r.status_code == 200
+    ports = r.json()
+    by_port = {p["port"]: p for p in ports}
+
+    assert 22 not in by_port  # SSH is filtered out
+    assert 53 not in by_port and 5355 not in by_port  # systemd-resolved noise gone
+    assert [p["port"] for p in ports] == [3000, 8000]  # deduped + sorted
+    assert by_port[3000]["process"] == "node"
+    assert by_port[3000]["pid"] == 1234
+    assert by_port[3000]["address"] == "127.0.0.1"
+    assert by_port[8000]["process"] == "python3"
+
+
+def test_parse_ss_dedup_and_wildcard():
+    from implementations.listening_ports import _parse_ss
+
+    text = (
+        'LISTEN 0 511 127.0.0.1:5000 0.0.0.0:* users:(("flask",pid=10,fd=3))\n'
+        "LISTEN 0 511   0.0.0.0:5000 0.0.0.0:*\n"  # same port, wildcard, no process
+        'LISTEN 0 128      [::]:9229    [::]:* users:(("node",pid=7,fd=9))\n'
+        'LISTEN 0 128 127.0.0.1:11323 0.0.0.0:* users:(("chronyd",pid=99,fd=5))\n'  # system proc
+        "\n"  # blank line ignored
+        "garbage line without colon port\n"  # malformed, ignored
+    )
+    ports = _parse_ss(text)
+    by_port = {p.port: p for p in ports}
+
+    # 11323 dropped: chronyd is a system daemon even though the port isn't hidden.
+    assert 11323 not in by_port
+    assert sorted(by_port) == [5000, 9229]
+    # Port 5000 seen twice: keep the process learned from the loopback row, but
+    # display the wildcard bind address.
+    assert by_port[5000].process == "flask"
+    assert by_port[5000].address == "0.0.0.0"
+    # IPv6 brackets stripped.
+    assert by_port[9229].address == "::"
+    assert by_port[9229].process == "node"
+
+
+def test_build_forward_headers():
+    from implementations.preview_proxy import build_forward_headers
+
+    fwd = build_forward_headers(
+        {
+            "Accept": "text/html",
+            "Connection": "keep-alive",  # hop-by-hop -> dropped
+            "Host": "evil.example",  # overridden
+            "Accept-Encoding": "gzip",  # overridden to identity
+            "Content-Length": "5",  # dropped (http.client recomputes)
+            "X-Custom": "keep-me",
+        },
+        8000,
+    )
+    assert fwd["Host"] == "127.0.0.1:8000"
+    assert fwd["Accept-Encoding"] == "identity"
+    assert fwd["Connection"] == "close"
+    assert fwd["Accept"] == "text/html"
+    assert fwd["X-Custom"] == "keep-me"
+    assert "keep-alive" not in fwd.values()
+    assert "Content-Length" not in fwd
+
+
+def test_proxy_endpoint_and_ssrf_guard(client: TestClient, auth_header, monkeypatch):
+    r = client.post(
+        "/vms/", headers=auth_header, json={"vcpus": 1, "mem_mib": 256, "disk_gib": 5}
+    )
+    vm_id = r.json()["id"]
+
+    captured = {}
+
+    def _fake_proxy(vm, req):
+        captured["port"] = req.target_port
+        captured["method"] = req.method
+        captured["path"] = req.path
+        return models.VMProxyResponse(
+            ok=True,
+            status=200,
+            headers=[("Content-Type", "application/json")],
+            body_b64="b2s=",  # "ok"
+        )
+
+    monkeypatch.setattr(vms, "proxy_request", _fake_proxy)
+
+    body = {"target_port": 8000, "method": "GET", "path": "/openapi.json"}
+    r = client.post(f"/vms/{vm_id}/proxy", headers=auth_header, json=body)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True and data["status"] == 200
+    assert captured == {"port": 8000, "method": "GET", "path": "/openapi.json"}
+
+    # SSRF guard: sshd and out-of-range ports are rejected before proxying.
+    r = client.post(
+        f"/vms/{vm_id}/proxy", headers=auth_header, json={"target_port": 22}
+    )
+    assert r.status_code == 400
+    r = client.post(f"/vms/{vm_id}/proxy", headers=auth_header, json={"target_port": 0})
+    assert r.status_code == 400
+
+    # Missing VM -> 404
+    r = client.post(
+        "/vms/does-not-exist/proxy", headers=auth_header, json={"target_port": 8000}
+    )
+    assert r.status_code == 404
+
+
+def test_proxy_request_parses_buffered_response(monkeypatch):
+    import base64 as _b64
+    from contextlib import contextmanager
+    import implementations.preview_proxy as pp
+
+    response_bytes = (
+        b"HTTP/1.1 200 OK\r\n"
+        b"Content-Type: application/json\r\n"
+        b"Content-Length: 13\r\n"
+        b"\r\n"
+        b'{"ok": true}\n'
+    )
+
+    class FakeChan:
+        def __init__(self):
+            self.sent = b""
+            self._served = False
+
+        def settimeout(self, t):
+            pass
+
+        def sendall(self, data):
+            self.sent += data
+
+        def recv(self, n):
+            if self._served:
+                return b""
+            self._served = True
+            return response_bytes
+
+        def close(self):
+            pass
+
+    chan = FakeChan()
+
+    class FakeTransport:
+        def open_channel(self, kind, dest, src):
+            assert kind == "direct-tcpip"
+            assert dest == ("127.0.0.1", 8000)
+            return chan
+
+    class FakeCli:
+        def get_transport(self):
+            return FakeTransport()
+
+    @contextmanager
+    def fake_borrow(container):
+        yield FakeCli()
+
+    monkeypatch.setattr(pp, "borrow_preview", fake_borrow)
+
+    vm = models.VMRecord(
+        id="vm1",
+        state=models.VMState.running,
+        workdir="/tmp",
+        vcpus=1,
+        mem_mib=256,
+        disk_gib=5,
+        ssh_port=2222,
+        ssh_user="root",
+    )
+    req = models.VMProxyRequest(target_port=8000, method="GET", path="/openapi.json")
+    resp = pp.proxy_request(vm, req)
+
+    assert resp.ok is True
+    assert resp.status == 200
+    assert _b64.b64decode(resp.body_b64) == b'{"ok": true}\n'  # binary-safe, verbatim
+    # The raw request carried our pinned headers.
+    assert b"GET /openapi.json HTTP/1.1" in chan.sent
+    assert b"Host: 127.0.0.1:8000" in chan.sent
+    assert b"Connection: close" in chan.sent
+    hdrs = {k.lower(): v for k, v in resp.headers}
+    assert hdrs.get("content-type") == "application/json"
 
 
 def test_download_file_and_folder(client: TestClient, auth_header, monkeypatch):

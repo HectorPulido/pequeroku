@@ -147,6 +147,10 @@ vm_data/vms/*
 
 ignore-*
 out.txt
+
+# macOS
+.DS_Store
 .vscode
 AGENTS.md
 plans/
+vm_data/base/*

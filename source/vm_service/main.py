@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import asyncio
 import base64
 import re
 import uvicorn
@@ -39,6 +40,9 @@ async def health():
 @app.websocket("/vms/{vm_id}/tty")
 async def tty_ws(websocket: WebSocket, vm_id: str):
     def _try_to_resize(raw: bytes):
+        # Any frame with this prefix is a control message: always consume it (return
+        # True) so it is never forwarded to the shell as keystrokes, even if the
+        # channel is not ready yet or the resize fails.
         if not raw.startswith(b"__RESIZE__"):
             return False
         try:
@@ -49,16 +53,11 @@ async def tty_ws(websocket: WebSocket, vm_id: str):
                 return True
             chan = getattr(bridge, "chan", None)
             if chan is None:
-                return False
-            try:
-                chan.resize_pty(width=int(nums[0]), height=int(nums[1]))
-            except Exception as e:
-                print("Exception trying resizing", e)
-                return False
-            return True
+                return True
+            chan.resize_pty(width=int(nums[0]), height=int(nums[1]))
         except Exception as e:
             print("Exception trying resizing", e)
-            return False
+        return True
 
     print("Initiating ws...")
     await websocket.accept()
@@ -76,6 +75,7 @@ async def tty_ws(websocket: WebSocket, vm_id: str):
     bridge = TTYBridge(
         websocket,
         vm=vm,
+        loop=asyncio.get_running_loop(),
     )
     bridge.start()
 

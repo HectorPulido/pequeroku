@@ -13,6 +13,8 @@ services:
     environment:
       VM_SSH_PRIVKEY: /root/.ssh/id_vm_pequeroku
       VM_BASE_IMAGE: /app/vm_data/base/debian12-golden.qcow2
+      # Pre-baked golden image (scripts/build-golden.sh): skip cloud-init so SSH is ready in ~10s.
+      VM_USE_CLOUD_INIT: "false"
     cap_add:
       - NET_ADMIN
     networks:

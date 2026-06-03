@@ -1,4 +1,5 @@
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import type { ITheme } from "@xterm/xterm";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -170,18 +171,70 @@ const TerminalPanel: React.FC<{
 					fontFamily: 'Menlo, Monaco, "Courier New", monospace',
 					theme: TERMINAL_THEMES[theme],
 					scrollback: 2000,
+					// Kitty keyboard protocol: when an app negotiates it (Claude Code,
+					// neovim, etc.), xterm reports every key with its modifiers
+					// disambiguated (CSI-u), so Shift+Enter, Ctrl+Enter, Ctrl+I vs Tab,
+					// etc. all work. Apps that don't enable it keep legacy encoding.
+					vtExtensions: {
+						kittyKeyboard: true,
+					},
 				});
 
 				const fitAddon = new FitAddon();
 				terminal.loadAddon(fitAddon);
 
 				terminal.open(container);
+
+				// GPU-accelerated rendering for smooth heavy output (logs, TUI redraws).
+				// Falls back to the default DOM renderer if WebGL is unavailable or its
+				// context is lost.
+				try {
+					const webglAddon = new WebglAddon();
+					webglAddon.onContextLoss(() => {
+						try {
+							webglAddon.dispose();
+						} catch (error) {
+							console.error("webgl dispose failed", error);
+						}
+					});
+					terminal.loadAddon(webglAddon);
+				} catch (error) {
+					console.error("webgl addon unavailable, using default renderer", error);
+				}
+
 				tab.terminal = terminal;
 				tab.fitAddon = fitAddon;
 				terminalsInitialized.current[tab.id] = true;
 				ensureViewport(terminal);
-				fitTerminal(tab);
-				requestAnimationFrame(() => fitTerminal(tab));
+
+				// Forward geometry changes to the upstream PTY. Wired before the first
+				// fit() so the initial dimensions reach the server too.
+				terminal.onResize(({ cols, rows }) => {
+					tab.service?.sendResize(cols, rows);
+				});
+
+				// Fit + report the size to the PTY. The first fit can run before the
+				// layout settles or the webfont loads, computing the wrong cols/rows
+				// (the "wrong size until I resize" symptom). So we re-fit on several
+				// triggers instead of just once.
+				const applySize = () => {
+					fitTerminal(tab);
+					tab.service?.sendResize(terminal.cols, terminal.rows);
+				};
+				applySize();
+				requestAnimationFrame(applySize);
+				// Cell metrics change once the monospace webfont is ready -> re-fit.
+				document.fonts?.ready?.then(applySize).catch(() => {});
+				// Re-fit whenever the container actually changes size: initial layout
+				// settle, panel drag, sidebar toggle, window resize. This is what
+				// removes the need for a manual resize on startup.
+				try {
+					const ro = new ResizeObserver(() => applySize());
+					ro.observe(container);
+					tab.resizeObserver = ro;
+				} catch (error) {
+					console.error("ResizeObserver unavailable", error);
+				}
 
 				if (tab.service) {
 					tab.service.onMessage((e) => {

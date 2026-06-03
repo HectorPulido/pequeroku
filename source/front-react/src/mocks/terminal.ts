@@ -37,6 +37,10 @@ export class MockTerminalWebService {
 		this.listener(createMessage("\r\n[mock terminal received binary data]\r\n$ "));
 	}
 
+	public sendResize(_cols: number, _rows: number) {
+		// No-op in mock mode; geometry only matters against a real PTY.
+	}
+
 	public close() {
 		this.closed = true;
 		this.connected = false;

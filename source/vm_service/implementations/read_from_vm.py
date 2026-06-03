@@ -5,7 +5,8 @@ from typing import Any
 import paramiko
 
 from models import VMRecord, ListDirItem, FileContent
-from .ssh_cache import open_ssh, open_sftp
+from .ssh_cache import exec_and_close
+from .ssh_pool import borrow
 
 
 def _execute_list(
@@ -14,8 +15,8 @@ def _execute_list(
     items: list[ListDirItem] = []
     try:
         cmd = f"find {shlex.quote(root)} -maxdepth {depth} -printf '%p||%y\\n' 2>/dev/null || true"
-        _, stdout, _ = cli.exec_command(cmd)
-        lines = (stdout.read().decode() or "").strip().splitlines()
+        out, _ = exec_and_close(cli, cmd)
+        lines = (out.decode() or "").strip().splitlines()
 
         for ln in lines:
             if "||" not in ln:
@@ -36,11 +37,10 @@ def _execute_list(
 
 
 def list_dirs(container: VMRecord, paths: list[str], depth: int) -> list[ListDirItem]:
-    cli = open_ssh(container)
-
     items: list[ListDirItem] = []
-    for root in paths:
-        items.extend(_execute_list(root, cli, depth))
+    with borrow(container) as conn:
+        for root in paths:
+            items.extend(_execute_list(root, conn.cli, depth))
 
     return list(set(items))
 
@@ -50,22 +50,23 @@ def list_dir(container: VMRecord, path: str) -> list[ListDirItem]:
 
 
 def read_file(container: VMRecord, path: str) -> FileContent:
-    sftp = open_sftp(container)
+    with borrow(container) as conn:
+        sftp = conn.sftp
 
-    data = ""
-    if not sftp:
-        return FileContent(
-            name=path.split("/")[-1], content=data, length=len(data), found=False
-        )
+        data = ""
+        if not sftp:
+            return FileContent(
+                name=path.split("/")[-1], content=data, length=len(data), found=False
+            )
 
-    try:
-        # pyrefly: ignore  # missing-attribute
-        with sftp.file(path, "rb") as rf:
-            data = rf.read().decode("utf-8", errors="ignore")
-    except Exception:
-        return FileContent(
-            name=path.split("/")[-1], content=data, length=len(data), found=False
-        )
+        try:
+            # pyrefly: ignore  # missing-attribute
+            with sftp.file(path, "rb") as rf:
+                data = rf.read().decode("utf-8", errors="ignore")
+        except Exception:
+            return FileContent(
+                name=path.split("/")[-1], content=data, length=len(data), found=False
+            )
 
     return FileContent(
         name=path.split("/")[-1], content=data, length=len(data), found=True
@@ -73,27 +74,28 @@ def read_file(container: VMRecord, path: str) -> FileContent:
 
 
 def download_file(vm: VMRecord, path: str) -> dict[str, Any] | None:
-    sftp = open_sftp(vm)
-    if not sftp:
-        print("Issue downloading...", "issue with sftp")
-        return None
+    with borrow(vm) as conn:
+        sftp = conn.sftp
+        if not sftp:
+            print("Issue downloading...", "issue with sftp")
+            return None
 
-    try:
-        st = sftp.stat(path)
-    except Exception as e:
-        print("Issue downloading... File not found", e)
-        return None
-    if str(st.st_mode).startswith("4"):
-        print("Issue downloading...", "Path is a directory; use /download-folder")
-        return None
+        try:
+            st = sftp.stat(path)
+        except Exception as e:
+            print("Issue downloading... File not found", e)
+            return None
+        if str(st.st_mode).startswith("4"):
+            print("Issue downloading...", "Path is a directory; use /download-folder")
+            return None
 
-    try:
-        # pyrefly: ignore  # missing-attribute
-        with sftp.file(path, "rb") as rf:
-            data: bytes = rf.read()
-    except Exception as e:
-        print("Issue downloading...", f"Cannot open: {path}", e)
-        return None
+        try:
+            # pyrefly: ignore  # missing-attribute
+            with sftp.file(path, "rb") as rf:
+                data: bytes = rf.read()
+        except Exception as e:
+            print("Issue downloading...", f"Cannot open: {path}", e)
+            return None
 
     name = os.path.basename(path) or "download"
     media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
@@ -107,52 +109,48 @@ def download_file(vm: VMRecord, path: str) -> dict[str, Any] | None:
 
 def _zip_available(cli: paramiko.SSHClient) -> bool:
     check_cmd = "sh -lc 'command -v zip >/dev/null 2>&1 && echo OK || echo NO'"
-    _, out, _ = cli.exec_command(check_cmd)
-    return out.read().decode().strip() == "OK"
+    out, _ = exec_and_close(cli, check_cmd)
+    return out.decode().strip() == "OK"
 
 
 def download_folder(
     vm: VMRecord, root: str, prefer_fmt: str = "zip"
 ) -> dict[str, Any] | None:
-    cli = open_ssh(vm)
-    if not cli:
-        print("Error generating zip folder", "SSH unavailable")
-        return None
-
     safe_root = shlex.quote(root)
     base = os.path.basename(root.rstrip("/")) or "archive"
 
-    sftp = open_sftp(vm)
-    if not sftp:
-        print("Error generating zip folder", "SFTP unavailable")
-        return None
-    try:
-        _ = sftp.stat(root)
-    except Exception as e:
-        print("Error generating zip folder", f"Directory not found: {root}", e)
-        return None
+    with borrow(vm) as conn:
+        cli = conn.cli
+        sftp = conn.sftp
+        if not cli or not sftp:
+            print("Error generating zip folder", "SSH/SFTP unavailable")
+            return None
+        try:
+            _ = sftp.stat(root)
+        except Exception as e:
+            print("Error generating zip folder", f"Directory not found: {root}", e)
+            return None
 
-    fmt = prefer_fmt
-    if fmt == "zip" and not _zip_available(cli):
-        fmt = "tar.gz"
+        fmt = prefer_fmt
+        if fmt == "zip" and not _zip_available(cli):
+            fmt = "tar.gz"
 
-    if fmt == "zip":
-        cmd = f"sh -lc 'cd {safe_root} && zip -r - . 2>/dev/null'"
-        media_type = "application/zip"
-        filename = f"{base}.zip"
-    elif fmt == "tar.gz":
-        cmd = f"sh -lc 'tar -C {safe_root} -czf - . 2>/dev/null'"
-        media_type = "application/gzip"
-        filename = f"{base}.tar.gz"
-    else:
-        print("Error generating zip folder", "Invalid format")
-        return None
+        if fmt == "zip":
+            cmd = f"sh -lc 'cd {safe_root} && zip -r - . 2>/dev/null'"
+            media_type = "application/zip"
+            filename = f"{base}.zip"
+        elif fmt == "tar.gz":
+            cmd = f"sh -lc 'tar -C {safe_root} -czf - . 2>/dev/null'"
+            media_type = "application/gzip"
+            filename = f"{base}.tar.gz"
+        else:
+            print("Error generating zip folder", "Invalid format")
+            return None
 
-    _, stdout, stderr = cli.exec_command(cmd)
+        archive_bytes, err_bytes = exec_and_close(cli, cmd)
 
-    archive_bytes: bytes = stdout.read()
     if not archive_bytes:
-        err = stderr.read().decode(errors="ignore")
+        err = err_bytes.decode(errors="ignore")
         print(
             "Error generating zip folder", f"Pack command returned empty output. {err}"
         )

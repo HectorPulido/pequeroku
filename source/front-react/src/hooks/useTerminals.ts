@@ -29,6 +29,12 @@ export const useTerminals = (containerId: string) => {
 	const disposeTabs = useCallback((tabs: TerminalTab[]) => {
 		tabs.forEach((tab) => {
 			try {
+				tab.resizeObserver?.disconnect();
+			} catch (error) {
+				console.error("terminal resize observer disconnect failed", error);
+			}
+			tab.resizeObserver = null;
+			try {
 				tab.fitAddon?.dispose();
 			} catch (error) {
 				console.error("terminal fit addon dispose failed", error);
@@ -89,6 +95,12 @@ export const useTerminals = (containerId: string) => {
 			setTabs((prev) => {
 				const tab = prev.find((entry) => entry.id === id);
 				if (tab) {
+					try {
+						tab.resizeObserver?.disconnect();
+					} catch (error) {
+						console.error("terminal resize observer disconnect failed", error);
+					}
+					tab.resizeObserver = null;
 					try {
 						tab.fitAddon?.dispose();
 					} catch (error) {

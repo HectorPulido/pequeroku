@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Iterable
 from django.core.management.base import BaseCommand
+from django.db import close_old_connections
 
 from vm_manager.models import Container, Node
 from vm_manager.vm_client import VMServiceClient, VMAction
@@ -102,6 +104,10 @@ class Reconciler(VMSyncMixin):
                     "created",
                     "creating",
                 ):
+                    # The node may have lost this VM's record (Redis cache wiped
+                    # on a vm-service restart) while we still hold it in Postgres.
+                    # Rebuild it from our specs so the start below doesn't 404.
+                    self.ensure_vm_record(c, client)
                     _ = client.action_vm(
                         str(c.container_id),
                         VMAction(action="start", cleanup_disks=False),
@@ -190,6 +196,42 @@ class Command(BaseCommand):
             dest="container_ids",
             help="Only reconcile the specified container_id",
         )
+        parser.add_argument(
+            "--loop",
+            action="store_true",
+            help="Run continuously as a control loop, reconciling every --interval seconds.",
+        )
+        parser.add_argument(
+            "--interval",
+            type=int,
+            default=30,
+            help="Seconds to wait between passes when --loop is set (default: 30).",
+        )
+
+    def _run_loop(self, reconciler: "Reconciler", interval: int) -> None:
+        """
+        Run reconcile passes forever, sleeping ``interval`` seconds between them.
+
+        A single failing pass (e.g. vm-service not ready yet at startup) must not
+        kill the loop: it is logged and retried on the next tick. DB connections
+        are refreshed each pass to avoid stale/closed connections in a long-lived
+        process.
+        """
+        self.stdout.write(
+            self.style.SUCCESS(f"[reconciler] loop mode started, interval={interval}s")
+        )
+        while True:
+            close_old_connections()
+            try:
+                batches, actions_total, updated_total = reconciler.reconcile_once()
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"[reconciler] batches={batches} actions={actions_total} local_updates={updated_total}"
+                    )
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                self.stderr.write(self.style.ERROR(f"[reconciler] pass failed: {e}"))
+            time.sleep(interval)
 
     def handle(self, *args, **options):
         dry_run = bool(options.get("dry_run"))
@@ -252,6 +294,10 @@ class Command(BaseCommand):
                     f"[reconciler] container_id={container_ids} batches={batches} actions={actions_total} local_updates={updated_total}"
                 )
             )
+            return
+
+        if bool(options.get("loop")):
+            self._run_loop(reconciler, int(options.get("interval") or 30))
             return
 
         batches, actions_total, updated_total = reconciler.reconcile_once()

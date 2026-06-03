@@ -9,6 +9,9 @@ class TerminalWebService {
 	private reconnectAttempts = 0;
 	private manualClose = false;
 	private messageHandler: ((event: MessageEvent) => void) | null = null;
+	// Last known PTY geometry, re-sent on every (re)connect because the upstream
+	// shell is recreated at the default size on a fresh connection.
+	private lastResize: string | null = null;
 
 	constructor(containerId: string, sid: string) {
 		const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -32,6 +35,14 @@ class TerminalWebService {
 			console.log("Terminal WS connected");
 			this.connected = true;
 			this.reconnectAttempts = 0;
+			// Re-apply the terminal size to the freshly created upstream shell.
+			if (this.lastResize) {
+				try {
+					this.ws?.send(this.lastResize);
+				} catch (error) {
+					console.error("terminal resize resend failed", error);
+				}
+			}
 		};
 
 		this.ws.onmessage = (event) => {
@@ -60,6 +71,23 @@ class TerminalWebService {
 		}
 		this.ws.send(payload);
 		return true;
+	}
+
+	// Propagate the xterm geometry to the upstream PTY so TUIs (vim, htop, less)
+	// and line wrapping match the visible terminal. The backend parses the
+	// "__RESIZE__<cols>x<rows>" control frame and calls chan.resize_pty.
+	public sendResize(cols: number, rows: number) {
+		if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols <= 0 || rows <= 0) {
+			return;
+		}
+		const frame = `__RESIZE__${Math.floor(cols)}x${Math.floor(rows)}`;
+		if (this.lastResize === frame) {
+			return;
+		}
+		this.lastResize = frame;
+		if (this.ws?.readyState === WebSocket.OPEN) {
+			this.ws.send(frame);
+		}
 	}
 
 	public close() {

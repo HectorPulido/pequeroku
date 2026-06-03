@@ -8,7 +8,6 @@ import time
 import settings
 
 from qemu_manager.vm import start_vm
-from qemu_manager.ssh_ready import wait_ssh
 from models import VMState, VMRecord
 
 from typing import TYPE_CHECKING
@@ -40,16 +39,8 @@ class Runner:
                 vm.ssh_port = proc.port_ssh
                 vm.ssh_user = vm_ssh_user
 
-                try:
-                    wait_ssh(
-                        port=proc.port_ssh,
-                        timeout=settings.VM_TIMEOUT_BOOT_S,
-                        user=vm_ssh_user,
-                        vm_id=vm.id,
-                    )
-                except Exception:
-                    pass
-
+                # start_vm already waited for SSH and warmed the SSH cache
+                # (see wait_ssh / finalize_and_cache); no second probe needed.
                 self.store.set_status(vm, VMState.running)
             except Exception as e:  # pylint: disable=broad-except
                 self.store.set_status(vm, VMState.error, error_reason=str(e))
@@ -116,24 +107,9 @@ class Runner:
                 pid = None
         return pid, pidfile
 
-    @staticmethod
-    def _send_stop(vm: VMRecord):
-        if not vm.proc:
-            return
-        if not getattr(vm.proc, "chan", None):
-            return
-        if vm.proc.chan.closed:
-            return
-
-        try:
-            vm.proc.chan.send("shutdown now\n")
-        except Exception:
-            pass
-
     def stop(self, vm: VMRecord, cleanup_disks: bool = False) -> None:
         def _run():
             try:
-                self._send_stop(vm)
                 pid, pidfile = self._try_to_get_pid(vm)
 
                 if pid:
