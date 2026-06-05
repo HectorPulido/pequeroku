@@ -2,7 +2,6 @@
 
 Front React is the single-page application that powers the Pequeroku control panel. It offers the user dashboard, container orchestration tools, the in-browser IDE (file tree, Monaco editor, multiplexed terminals) and live metrics visualisations. This document explains every moving part—after reading it you should be able to run, extend and debug the front end without inspecting the source.
 
----
 
 ## 1. Technology Stack
 
@@ -15,7 +14,6 @@ Front React is the single-page application that powers the Pequeroku control pan
 - **Linting & Formatting:** Biome (primary) plus ESLint for React-specific rules.
 - **Testing:** Type-checked build artifacts under `tests/` compiled via `tsconfig.tests.json`; integrates with external runners.
 
----
 
 ## 2. Quick Start
 
@@ -34,7 +32,6 @@ export FRONT_REACT_BASE=/app/     # serve the SPA from a sub-path
 export VITE_USE_MOCKS=true        # run against in-memory mocks instead of the real backend
 ```
 
----
 
 ## 3. Scripts
 
@@ -53,7 +50,6 @@ export VITE_USE_MOCKS=true        # run against in-memory mocks instead of the r
 | `pnpm run biome:fix` | Fix lint + format | Writes both lint and format fixes. |
 | `pnpm run biome:ci` | CI helper | One command that fails on lint/format issues (used in pipelines). |
 
----
 
 ## 4. Environment & Configuration
 
@@ -62,7 +58,6 @@ export VITE_USE_MOCKS=true        # run against in-memory mocks instead of the r
 - Any variable prefixed with `VITE_` is exposed via `import.meta.env`.
 - `src/lib/appBase.ts` inspects `import.meta.env.BASE_URL` and the current `window.location` to select the router basename, with a fallback to `/app/` when served behind the Django app.
 
----
 
 ## 5. High-Level Architecture
 
@@ -104,7 +99,6 @@ export VITE_USE_MOCKS=true        # run against in-memory mocks instead of the r
 - Failure triggers a redirect to `/login` using `react-router-dom` navigation.
 - Any component can broadcast session expiry by dispatching `window.dispatchEvent(new CustomEvent("auth:unauthorized"))`. `App.tsx` listens and redirects.
 
----
 
 ## 6. Global UI Systems
 
@@ -119,7 +113,6 @@ export VITE_USE_MOCKS=true        # run against in-memory mocks instead of the r
   - Persists theme in `localStorage`, syncs via `window` events, toggles Tailwind’s `dark` class on `<html>`.
   - UI toggled through `ThemeToggle` button present on the dashboard header.
 
----
 
 ## 7. Data Layer & State Management
 
@@ -137,7 +130,6 @@ export VITE_USE_MOCKS=true        # run against in-memory mocks instead of the r
 
 `Dashboard.tsx` uses `signatureFrom` to generate JSON signatures of container lists and avoid overwriting UI state when the payload hasn’t changed (useful during polling).
 
----
 
 ## 8. HTTP Client & Services
 
@@ -186,7 +178,6 @@ const containers = await api<Container[]>("/containers/", { method: "GET", noLoa
   - Exposes `send`, `onMessage`, `close`, `isConnected`.
   - Swapped for `MockTerminalWebService` when mocks are active.
 
----
 
 ## 9. Page-Level Behaviour
 
@@ -239,7 +230,6 @@ If the `containerId` query param is missing or invalid, `MissingContainer` rende
 
 - Minimal form; relies on backend redirection. When mocks are enabled, successful login is simulated.
 
----
 
 ## 10. Styling & Theming
 
@@ -248,7 +238,6 @@ If the `containerId` query param is missing or invalid, `MissingContainer` rende
 - `src/styles/theme-overrides.css` tweaks Monaco, terminals and layout specifics that Tailwind cannot express.
 - Components use Tailwind utility classes; heavier layouts still rely on conventional CSS within the same files.
 
----
 
 ## 11. Directory Reference
 
@@ -281,7 +270,6 @@ front-react/
 
 Refer to `front-react/files.md` for an exhaustive file list.
 
----
 
 ## 12. TypeScript & Build Configuration
 
@@ -294,7 +282,6 @@ Refer to `front-react/files.md` for an exhaustive file list.
   - Defines alias `@` → `./src`.
   - Configures the project for SPA deployment under sub-paths.
 
----
 
 ## 13. Mocking & Offline Development
 
@@ -303,7 +290,6 @@ Refer to `front-react/files.md` for an exhaustive file list.
 - Services check `USE_MOCKS` before invoking network calls, ensuring identical TypeScript signatures regardless of backend availability.
 - Tests rely heavily on mocks to assert behaviour without spinning up real services.
 
----
 
 ## 14. Testing Strategy
 
@@ -316,7 +302,6 @@ Refer to `front-react/files.md` for an exhaustive file list.
 - `pnpm run test` runs the end-to-end pipeline: it compiles via `build:tests`, then invokes `scripts/run-tests.mjs`, which ensures `node:test` is available, forces `VITE_USE_MOCKS=true`, and executes the compiled suite with the built-in runner.
 - If you integrate Vitest/Jest or another harness, reuse the artifacts in `build-tests/` or mirror the environment configuration (`VITE_USE_MOCKS=true`) to avoid hitting real services.
 
----
 
 ## 15. Development Workflow
 
@@ -326,7 +311,6 @@ Refer to `front-react/files.md` for an exhaustive file list.
 4. Validate with `pnpm run lint` and `pnpm run build` before committing.
 5. If integrating with backends, ensure the SPA runs on the same domain for CSRF cookies to apply.
 
----
 
 ## 16. Deployment Notes
 
@@ -337,7 +321,6 @@ Refer to `front-react/files.md` for an exhaustive file list.
   - Expose WebSocket endpoints (`/ws/fs/:id/`, `/ws/containers/:id/`) via the proxy with proper TLS termination.
 - Ensure backend CSRF cookie domain matches the SPA origin to allow authenticated API calls.
 
----
 
 ## 17. Extensibility Guidelines
 
@@ -357,7 +340,6 @@ Refer to `front-react/files.md` for an exhaustive file list.
   - Follow existing patterns in `useEditor` / `useFileTree` to keep optimistic updates and revision control intact.
   - Extend `langMap` when supporting new file extensions to ensure Monaco highlights correctly.
 
----
 
 ## 18. Troubleshooting
 

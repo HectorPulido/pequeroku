@@ -3,6 +3,7 @@ import socket
 import paramiko
 import settings
 from models import VMRecord
+from qemu_manager.crypto import load_pkey
 
 cache_data: dict[
     str, dict[str, paramiko.SSHClient | paramiko.SFTPClient | paramiko.Channel | None]
@@ -83,7 +84,12 @@ def finalize_and_cache(container_id: str, cli: paramiko.SSHClient):
 
 def _connect(ssh_port: int | None, ssh_user: str | None) -> paramiko.SSHClient:
     """Open and TCP-tune a fresh SSH connection (no caching, no channels)."""
-    key = paramiko.Ed25519Key.from_private_key_file(settings.VM_SSH_PRIVKEY)
+    # Use the shared multi-format loader (Ed25519/RSA/ECDSA) instead of hardcoding
+    # Ed25519Key: prod's VM_SSH_PRIVKEY is not necessarily an ed25519 key, and a
+    # hardcoded Ed25519Key.from_private_key_file raises SSHException("Invalid key")
+    # for RSA/ECDSA keys. wait_ssh already loads the key via load_pkey, so the pool
+    # and the interactive console must do the same to stay consistent.
+    key = load_pkey(settings.VM_SSH_PRIVKEY)
     cli = paramiko.SSHClient()
     cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     cli.connect(

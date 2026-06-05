@@ -53,6 +53,5 @@ Single source of truth for the unit/integration scenarios we still need to cover
 - [ ] Watch mode for tests (optional, would require additional tooling)
 - [ ] Docs: add testing instructions to `front-react/README.md`
 
----
 
 Update this file whenever we mark a scenario complete or discover new edge cases. Cross-reference parity checklist items so nothing slips through the migration plan.

@@ -10,7 +10,6 @@
   <img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-%E2%9C%94-success">
 </p>
 
----
 
 ## Demo
 
@@ -19,7 +18,6 @@
   <em>Open a real Linux VM from any device: laptop, tablet, or phone. No setup, no waiting.</em>
 </p>
 
----
 
 ## What Is It?
 
@@ -31,7 +29,6 @@ It is always on, with no cold starts, no sandbox, and no per-seat billing. The o
 git clone  →  docker compose up  →  http://localhost:8000  →  start coding
 ```
 
----
 
 ## The Problem
 
@@ -46,7 +43,6 @@ Every developer knows the ritual:
 
 Cloud IDEs promised a fix. In practice they are limited, vendor-locked, and their cost scales with your team. You should not have to choose between power and convenience.
 
----
 
 ## Why PequeRoku Is Different
 
@@ -59,7 +55,6 @@ Cloud IDEs promised a fix. In practice they are limited, vendor-locked, and thei
 
 > I built PequeRoku because I could not find a remote dev platform that was open, root-accessible, always-on, reachable from anywhere, and affordable to run myself. So I made one.
 
----
 
 ## Meet Pequenin, the AI That Operates Your VM
 
@@ -80,7 +75,6 @@ Pequenin is an agentic coding agent that operates your environment. It lives in 
 
 The result is not a snippet to copy. Pequenin creates the files, installs the dependencies, starts the server, and confirms it responds. For the agent loop, tools, and event protocol, read [AI.md](./AI.md).
 
----
 
 ## Features
 
@@ -95,7 +89,6 @@ The result is not a snippet to copy. Pequenin creates the files, installs the de
 | **Full root** | Install anything, with no guardrails in the way |
 | **Quotas and roles** | Per-user resource limits for team deployments |
 
----
 
 ## How It Works
 
@@ -123,7 +116,6 @@ The brain (the AI and agentic loop, detailed in [AI.md](./AI.md)) runs in `web_s
 
 Full architecture and setup: [Wiki](https://github.com/HectorPulido/pequeroku/wiki). Deep dive on the AI engine: [AI.md](./AI.md).
 
----
 
 ## Quick Start
 
@@ -141,7 +133,6 @@ docker compose up   # Docker Compose supported out of the box
 
 That gives you a self-hosted, Replit-style workspace under your control.
 
----
 
 ## How It Compares
 
@@ -155,7 +146,6 @@ That gives you a self-hosted, Replit-style workspace under your control.
 | Source | Open source (MIT) | Proprietary |
 | Cost | Your hardware | Per-seat or usage |
 
----
 
 ## Roadmap
 
@@ -166,7 +156,6 @@ That gives you a self-hosted, Replit-style workspace under your control.
 * gRPC internal transport and a standalone AI microservice (see the roadmap in [AI.md](./AI.md))
 * More Pequenin capabilities
 
----
 
 ## Contribute
 
@@ -176,7 +165,6 @@ PequeRoku is open to ideas, bug reports, and pull requests.
 * Share feedback, ideas, or problems. I reply to everything.
 * Deploy it in your homelab and tell me how it went.
 
----
 
 ## Support the Project
 
@@ -188,7 +176,6 @@ If PequeRoku resonates with you:
 
 > PequeRoku is not the ultimate platform. It is your platform, a small way to take back control.
 
----
 
 ## Links
 
@@ -197,7 +184,6 @@ If PequeRoku resonates with you:
 * [Medium Article](https://medium.com/p/19bc757c735d)
 * License: MIT. See the [LICENSE](./LICENSE) file for details.
 
----
 
 <div align="center">
 <h3 align="center">Let's connect</h3>

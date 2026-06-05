@@ -7,7 +7,6 @@ This document explains, end to end, how Pequeroku's AI system works: the
 > Audience: anyone about to touch the agent, the consumer, the tools or the VM
 > access layer. File paths are relative to `source/`.
 
----
 
 ## 1. Overview
 
@@ -39,7 +38,6 @@ vm_service · /vms/{id}/…  (FastAPI)          ── per-VM SSH pool + dedicat
 VM Debian  ── /app (user's workspace)
 ```
 
----
 
 ## 2. Message flow (end-to-end)
 
@@ -62,7 +60,6 @@ VM Debian  ── /app (user's workspace)
 6. When the turn ends, the consumer records `AIUsageLog` (tokens), persists the
    conversation (a file in the VM) and returns the remaining quota.
 
----
 
 ## 3. The `minicode` engine (`ai_services/minicode/`)
 
@@ -86,7 +83,6 @@ step**; "keep going until done" is handled by the `Agent`.
 `general`) with its own loop and a restricted tool set; it forwards their events
 with higher `depth` and returns their final report.
 
----
 
 ## 4. Tools (`ai_services/minicode/tools/`)
 
@@ -111,7 +107,6 @@ Sets per agent type (`tools/__init__.py`): `build` (main) = all;
 
 The VM bridge (client, path resolution, auditing) lives in `tools/vm.py`.
 
----
 
 ## 5. `config.json`, run and preview
 
@@ -136,7 +131,6 @@ The VM bridge (client, path resolution, auditing) lives in `tools/vm.py`.
 The agent is instructed (in `prompts.py`) to keep `config.json` correct and to
 bring up/verify services with `bash(background=true)` + `process`.
 
----
 
 ## 6. Conversations and memory
 
@@ -155,7 +149,6 @@ and replays its history. `/clear` clears the active conversation.
 > Note: the content is VM-only on purpose (no DB backup). The pointer is durable
 > in the DB so reconnecting doesn't depend on the VM.
 
----
 
 ## 7. WebSocket protocol (`/ws/ai/<container_pk>/`)
 
@@ -187,7 +180,6 @@ and replays its history. `/clear` clears the active conversation.
 > The structured events (`tool_call`, `tool_result`, `todos`, `usage`, …) are
 > always emitted; the front end may ignore them until it implements them.
 
----
 
 ## 8. REST endpoints (DRF, `ContainersViewSet`)
 
@@ -199,7 +191,6 @@ and replays its history. `/clear` clears the active conversation.
 
 Auth + ownership via the usual `ContainersViewSet`.
 
----
 
 ## 9. VM access layer (vm_service) — coexistence
 
@@ -220,7 +211,6 @@ Long commands (`pip install`, `pytest`, servers) go through `start-process`
 (detached with `setsid`, surviving the request) and are queried with
 `process-status`.
 
----
 
 ## 10. Configuration and quotas
 
@@ -231,7 +221,6 @@ Long commands (`pip install`, `pytest`, servers) go through `start-process`
   records `AIUsageLog` (model + tokens).
 - **Model**: `agent.model` is read from `Config` (default `gpt-4o`).
 
----
 
 ## 11. File map (the essentials)
 
@@ -262,7 +251,6 @@ vm_service/
     read_from_vm.py  send_file.py
 ```
 
----
 
 ## 12. Constraints and gotchas
 
@@ -276,7 +264,6 @@ vm_service/
 - **`max_steps=50`** per turn (loop cap) — a single message may trigger up to 50
   LLM calls; adjustable in `minicode/config.py`.
 
----
 
 ## 13. Roadmap (direction, not implemented)
 
