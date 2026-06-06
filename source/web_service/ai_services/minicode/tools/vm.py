@@ -28,19 +28,36 @@ class VMUnavailable(Exception):
     """No hay un ``container`` asociado al Config (sesión mal inicializada)."""
 
 
-def get_client(ctx: Any) -> tuple[VMServiceClient, str]:
-    """Devuelve ``(client, container_id)`` para la VM ligada a esta sesión."""
-    container = getattr(ctx.config, "container", None)
+def client_for_config(config: Any) -> tuple[VMServiceClient | None, str | None]:
+    """``(client, container_id)`` para la VM ligada a un ``Config``.
+
+    Devuelve ``(None, None)`` si el Config no tiene container (en vez de lanzar),
+    para que los cargadores best-effort (``project.py`` / ``skills.py``, que corren
+    una vez por turno) puedan degradar a "sin contexto" sin romper el turno. El
+    cliente se cachea en ``config._vm_client`` para reusar la connection pool.
+    """
+    container = getattr(config, "container", None)
     if container is None:
-        raise VMUnavailable("No container bound to this agent session.")
-    client = getattr(ctx.config, "_vm_client", None)
+        return None, None
+    client = getattr(config, "_vm_client", None)
     if client is None:
         client = VMServiceClient(container.node)
         try:
-            ctx.config._vm_client = client
+            config._vm_client = client
         except Exception:
             pass
     return client, str(container.container_id)
+
+
+def get_client(ctx: Any) -> tuple[VMServiceClient, str]:
+    """Devuelve ``(client, container_id)`` para la VM ligada a esta sesión.
+
+    Variante para tools: exige un container (lanza ``VMUnavailable`` si falta).
+    """
+    client, cid = client_for_config(ctx.config)
+    if client is None or cid is None:
+        raise VMUnavailable("No container bound to this agent session.")
+    return client, cid
 
 
 def resolve(ctx: Any, path: str | None) -> str:

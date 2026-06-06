@@ -15,6 +15,7 @@ from .base import Tool, ToolContext, truncate
 from .files import EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .internet import WebReadTool, WebSearchTool
 from .shell import BashTool, ProcessTool
+from .skill import SkillTool
 from .task import TaskTool
 from .todo import TodoWriteTool
 
@@ -29,6 +30,7 @@ ALL = [
     WebSearchTool,
     WebReadTool,
     TodoWriteTool,
+    SkillTool,
     TaskTool,
 ]
 
@@ -47,6 +49,7 @@ def tools_for(agent_type: str = "build") -> list[Tool]:
             ProcessTool,
             WebSearchTool,
             WebReadTool,
+            SkillTool,
         ]
     else:  # build (agente principal)
         classes = ALL

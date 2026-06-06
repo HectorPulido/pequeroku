@@ -31,6 +31,10 @@ from typing import Any, Awaitable, Callable
 
 from ..agent import Agent
 from ..config import Config
+from ..custom_tools import discover_custom_tools
+from ..mcp import discover_mcp_tools
+from ..project import load_project_doc
+from ..skills import discover_skills
 from ..events import (
     AssistantTextDelta,
     AssistantTextEnd,
@@ -109,6 +113,8 @@ def _build_config(container_obj: Any) -> Config:
     """Construye el Config de minicode con credenciales de la DB + el container.
 
     SYNC (toca el ORM y atributos del container): debe ejecutarse en el hilo worker.
+    También carga el contexto de proyecto de la VM (AGENTS.md y skills) UNA vez por
+    turno; ``build_system`` luego solo concatena lo ya cargado (sin I/O por paso).
     """
     cfg = _read_ai_config()
     config = Config(
@@ -118,6 +124,26 @@ def _build_config(container_obj: Any) -> Config:
         workdir="/app",
     )
     config.container = container_obj
+    # Contexto de proyecto (best-effort: un fallo de VM nunca debe tumbar el turno).
+    try:
+        config.project_doc = load_project_doc(config)
+    except Exception:
+        config.project_doc = None
+    try:
+        config.skills = discover_skills(config)
+    except Exception:
+        config.skills = []
+    # MCP: connect to remote servers declared in /app/.pequenin/mcp.json and expose
+    # their tools for this turn (best-effort; a bad server never breaks the turn).
+    try:
+        config.mcp_tools = discover_mcp_tools(config)
+    except Exception:
+        config.mcp_tools = []
+    # Custom tools defined in /app/.pequenin/tools/ (run inside the VM).
+    try:
+        config.custom_tools = discover_custom_tools(config)
+    except Exception:
+        config.custom_tools = []
     return config
 
 

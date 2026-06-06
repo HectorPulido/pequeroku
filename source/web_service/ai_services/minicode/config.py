@@ -47,6 +47,22 @@ class Config:
     container: Any = None
     # Timeout (s) por defecto para comandos foreground vía execute_sh.
     foreground_timeout: int = 25
+    # ---- Contexto de proyecto por turno (lo carga el pipeline UNA vez, en el hilo
+    # worker, leyendo de la VM; ``build_system`` solo concatena, sin I/O). ----
+    # Contenido de AGENTS.md/CLAUDE.md ya envuelto con su encabezado "Instructions
+    # from:", o None si el proyecto no tiene archivo de instrucciones.
+    project_doc: str | None = None
+    # Skills descubiertos para este turno (list[skills.Skill]). Tipado laxo para no
+    # importar el módulo skills aquí (los subagentes heredan el mismo Config).
+    skills: list = field(default_factory=list)
+    # Tools MCP (remotas) descubiertas para este turno (list[mcp.McpTool], ya con su
+    # cliente HTTP conectado). El Agent las añade a su toolset; los subagentes
+    # build/general heredan el mismo Config y, por tanto, las mismas tools.
+    mcp_tools: list = field(default_factory=list)
+    # Custom tools (definidas por el usuario en /app/.pequenin/tools/, ejecutadas en
+    # la VM) descubiertas para este turno (list[custom_tools.CustomTool]). Mismo
+    # tratamiento que mcp_tools: se añaden al toolset de build/general.
+    custom_tools: list = field(default_factory=list)
 
     @classmethod
     def from_env(cls) -> "Config":

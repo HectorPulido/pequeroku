@@ -10,6 +10,7 @@ from internal_config.models import AIUsageLog
 from pequeroku.mixins import ContainerAccessMixin
 
 from .minicode.frontends.pipeline import run_pipeline, agent, TokenUsage
+from .minicode.prompts import INIT_PROMPT
 from . import conversations as convo
 
 # Mensajes en formato OpenAI (role/content/tool_calls/tool), tal como los produce
@@ -308,6 +309,11 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             self.messages = []
             await self._set_memory(self.conversation_id, self.messages)
             return
+
+        # /init: run a normal AI turn (consumes quota) whose instruction is the
+        # canned prompt that creates or improves /app/AGENTS.md.
+        if user_text == "/init":
+            user_text = INIT_PROMPT
 
         await self.send_json({"event": "start_text"})
         await self.send_json({"event": "text", "content": "..."})

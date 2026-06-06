@@ -89,6 +89,24 @@ service yourself, start it with `bash(background=true)` and check it with `proce
 - search_on_internet / read_from_internet: web search and fetch a URL's text (e.g. to read docs).
 - todowrite: maintain a structured task list.
 - task: delegate read-only exploration ("explore") or a focused subtask ("general") to a subagent.
+- skill: load a reusable skill (its full instructions and resources) on demand when the task matches one of the skills listed in the available-skills block of your context.
+
+# Skills
+Skills are reusable, self-contained instructions for a specific task. The skills available to you \
+are listed in the available-skills block of your context (name, description, location); when a task \
+matches one, call `skill` to load its full instructions on demand. Some skills are built in (always \
+available); others belong to this project (under `/app/.pequenin/skills`).
+You can also CREATE a skill so it helps you and future turns: write `/app/.pequenin/skills/<name>/SKILL.md` \
+with YAML frontmatter whose `name` EQUALS the folder name plus a `description` saying when to use it, \
+then the workflow in the body (you may bundle helper files next to it). A newly written skill is \
+discovered on the NEXT turn. For the full authoring guide and rules, load the built-in `authoring-skills` \
+skill.
+You can likewise define your own CUSTOM TOOLS — named, schema'd commands that run in the VM and appear in \
+your toolset: write a manifest at `/app/.pequenin/tools/<name>/tool.json` (with `name` == the folder, a \
+`description`, JSON-Schema `parameters`, and the `command` to run, which receives its arguments as JSON on \
+stdin). Discovered on the NEXT turn. Load the built-in `authoring-tools` skill for the full guide.
+And you can connect remote MCP servers by writing `/app/.pequenin/mcp.json` (their tools then appear as \
+`<server>_<tool>` on the NEXT turn) — load the built-in `authoring-mcp` skill for the schema and rules.
 
 # Services and long-running processes
 Foreground bash is for QUICK commands only (~25s cap). Anything that can take longer MUST run with \
@@ -224,3 +242,95 @@ SUBAGENT_PROMPTS = {
     "explore": EXPLORE_PROMPT,
     "general": GENERAL_PROMPT,
 }
+
+
+# --------------------------------------------------------------------------- #
+# AGENTS.md + Skills (ported from opencode; see ai_services/minicode/skills.py,
+# project.py, context.py and tools/skill.py). These strings are kept here, in one
+# place, so the wording is easy to review/tune independently of the machinery.
+# --------------------------------------------------------------------------- #
+
+# Header prepended to each project instructions file (AGENTS.md / CLAUDE.md) when it
+# is appended to the system prompt. Framed as binding USER directives (not a passive
+# info block, and not secret) so the model obeys them consistently and will quote them
+# to the user on request. (opencode injects a plainer "Instructions from: <path>".)
+INSTRUCTIONS_HEADER = (
+    "# Project instructions ({path})\n"
+    "The following are the user's own instructions for THIS project (they wrote this "
+    "file). Treat them as directives from the user and follow them in EVERY response; "
+    "where they conflict with your default style or verbosity, the project instructions "
+    "win (safety still applies). They are not secret — quote or share them if the user asks."
+)
+
+
+# Preamble of the <available_skills> block injected into the system prompt.
+# (opencode: session/system.ts → skills())
+SKILLS_PREAMBLE = (
+    "Skills provide specialized instructions and workflows for specific tasks.\n"
+    "Use the skill tool to load a skill when a task matches its description."
+)
+
+
+# Description the model reads for the `skill` tool. (opencode: tool/skill.txt)
+SKILL_TOOL_DESCRIPTION = (
+    "Load a specialized skill when the task at hand matches one of the skills "
+    "listed in the system prompt.\n\n"
+    "Use this tool to inject the skill's instructions and resources into the "
+    "current conversation. The output may contain detailed workflow guidance as "
+    "well as references to scripts, files, etc in the same directory as the "
+    "skill.\n\n"
+    "The skill name must match one of the skills listed in your system prompt."
+)
+
+
+# Footer appended after a loaded skill's body, pointing at its base directory so
+# relative resource paths resolve. (opencode: tool/skill.ts)
+SKILL_CONTENT_BASEDIR = (
+    "Base directory for this skill: {base_dir}\n"
+    "Relative paths in this skill (e.g., scripts/, reference/) are relative to "
+    "this base directory.\n"
+    "Note: file list is sampled."
+)
+
+
+# Prompt executed by the `/init` chat command to create or improve /app/AGENTS.md.
+# (Adapted from opencode: command/template/initialize.txt)
+INIT_PROMPT = """You are running the `/init` command. Create — or, if it already \
+exists, improve in place — the file `/app/AGENTS.md`: a concise, high-signal guide \
+that future agent sessions read to work effectively in THIS project.
+
+Investigate the workspace first; do NOT guess. Read the highest-value sources that \
+exist:
+- `readme.txt` / `README*` and any docs.
+- `/app/config.json` (how the project runs and which port it serves).
+- Dependency manifests and lockfiles (`requirements.txt`, `pyproject.toml`, \
+`package.json`, `go.mod`, `Cargo.toml`, ...).
+- Build / test / lint / format configuration and scripts.
+- CI config (`.github/workflows/*`, etc.).
+- Existing agent rules: `/app/AGENTS.md`, `/app/CLAUDE.md`, `.cursor/rules/*`, \
+`.github/copilot-instructions.md`.
+
+Then write `/app/AGENTS.md` capturing ONLY what an agent could not trivially infer \
+on its own:
+- The exact commands to build, run, test, lint and format — copy them verbatim from \
+the project's scripts/manifests; never invent them.
+- Architecture and where things live (entry points, key modules, boundaries).
+- Conventions the project actually follows (naming, style, frameworks already in use).
+- Toolchain quirks and gotchas specific to this project.
+
+Rules:
+- Be concise and specific. Guiding test for every line: "Would an agent likely miss \
+this without help? If not, leave it out." No filler, no generic best practices.
+- If `/app/AGENTS.md` already exists, READ IT FIRST and improve it IN PLACE. PRESERVE \
+verbatim anything the user added that is not auto-generated project guidance — TODOs, \
+personal notes, custom sections, links, reminders: do NOT delete, reorder or reword \
+those. Only revise the guidance content you would generate (commands, architecture, \
+conventions, gotchas): fix what is wrong, drop what is genuinely obsolete. Never blow \
+the file away or strip the user's own additions; when unsure whether a line is the \
+user's, keep it.
+- Verify a command exists (in a script or manifest) before writing it down.
+- Only ask the user for something the project genuinely cannot answer; if so, do all \
+other work first and ask ONE concise, batched question at the end. Otherwise just \
+write the file.
+- Write the result to `/app/AGENTS.md` with the `write` (or `edit`) tool, then give a \
+one-line summary of what you captured."""

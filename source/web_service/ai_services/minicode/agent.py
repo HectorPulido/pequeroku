@@ -55,7 +55,20 @@ class Agent:
         self.config = config
         self.llm = llm
         self.agent_type = agent_type
-        self.tools = tools_for(agent_type)
+        self.tools = list(tools_for(agent_type))
+        # MCP (remote) and custom (VM-side) tools are discovered once per turn and
+        # offered to the agents that carry the full toolset; native tools win on a
+        # name collision (and MCP wins over a custom tool of the same name).
+        if agent_type in ("build", "general"):
+            existing = {t.name for t in self.tools}
+            for extra in (
+                getattr(config, "mcp_tools", None) or [],
+                getattr(config, "custom_tools", None) or [],
+            ):
+                for t in extra:
+                    if t.name not in existing:
+                        self.tools.append(t)
+                        existing.add(t.name)
         self.tool_map = {t.name: t for t in self.tools}
         self.session = session or Session()
         # Nivel de anidamiento (0 = principal, >0 = subagente). Se estampa en cada

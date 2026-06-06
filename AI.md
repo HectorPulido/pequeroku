@@ -100,10 +100,14 @@ filesystem). Relative paths resolve against `/app` (POSIX).
 | `process` | Status/log or stop of a background job | `process-status` / `stop-process` |
 | `todowrite` | Agent's task list (planning) | — (in session) |
 | `task` | Delegate to a subagent (`explore`/`general`) | — (subagent) |
+| `skill` | Load a reusable skill (`SKILL.md`) on demand — progressive disclosure (see §5.5) | `read-file` + `list-dirs` |
 | `search_on_internet` / `read_from_internet` | Web search (DDGS) and URL fetch (requests+bs4) | — (runs on the server) |
+| `<server>_<tool>` (dynamic) | Remote **MCP** tools, added per turn when `/app/.pequenin/mcp.json` declares servers (see §5.6) | HTTP/JSON-RPC from the server |
+| `<name>` (dynamic) | **Custom tools** from `/app/.pequenin/tools/<name>/` — named, schema'd commands run in the VM (see §5.7) | `execute-sh` (args as JSON on stdin) |
 
 Sets per agent type (`tools/__init__.py`): `build` (main) = all;
-`general` = no `task`/`todowrite`; `explore` = read-only + internet.
+`general` = no `task`/`todowrite`; `explore` = read-only + internet (no `skill`).
+MCP and custom tools (if any) are added to `build`/`general` only (see §5.6–§5.7).
 
 The VM bridge (client, path resolution, auditing) lives in `tools/vm.py`.
 
@@ -132,6 +136,111 @@ The agent is instructed (in `prompts.py`) to keep `config.json` correct and to
 bring up/verify services with `bash(background=true)` + `process`.
 
 
+## 5.5 Project instructions (`AGENTS.md`), Skills and `/init`
+
+Ported from opencode, adapted to the VM: everything lives **inside the user's VM**,
+persists with the workspace, and is wiped on a workspace reset (like any file under
+`/app`). All four new prompt strings live together in `prompts.py`.
+
+- **`AGENTS.md` — project rules.** Each turn the pipeline reads `/app/AGENTS.md`
+  (or `/app/CLAUDE.md` as an **alias** — first match wins) from the VM and appends it
+  to the system prompt under an `Instructions from: <path>` header: the project's
+  custom instructions (build/test commands, architecture, conventions, gotchas).
+  Loaded **once per turn** in the worker thread (`project.py`); `build_system` only
+  concatenates the result, so the per-step loop stays I/O-free.
+- **Skills — reusable instructions, loaded on demand.** A skill is a directory
+  `/app/.pequenin/skills/<name>/SKILL.md` with YAML frontmatter (`name` +
+  `description` required) and a markdown body (may bundle `scripts/`, `reference/`,
+  …). **Progressive disclosure**: the system prompt lists only each skill's
+  name/description/location (an `<available_skills>` block); the model loads ONE
+  skill's full body when a task matches, via the `skill` tool. Discovery + load live
+  in `skills.py`; invalid frontmatter (or a `name` that doesn't equal its folder)
+  skips that skill without breaking the turn. Offered to `build` and `general` (not
+  `explore`).
+  - **Built-in skills** ship with the server under `minicode/builtin_skills/<name>/SKILL.md`
+    (read once from the server FS — curated product content, never the user's VM):
+    they are ALWAYS available, project-agnostic, and instruction-only (no VM-side
+    bundled files). A project skill with the same `name` **overrides** a built-in.
+    Today there are three: `authoring-skills` (how the agent writes a skill),
+    `authoring-tools` (how it writes a custom tool — see §5.7), and `authoring-mcp`
+    (how it configures an MCP server — see §5.6).
+  - **The agent can author skills.** The system prompt tells it the convention and
+    `bash`/`write` can create `/app/.pequenin/skills/<name>/SKILL.md`; the new skill
+    is discovered on the **next** turn. The `authoring-skills` built-in carries the
+    full rules.
+- **`/init` — generate `AGENTS.md`.** Sending `/init` in the chat runs a normal AI
+  turn (consumes quota) whose instruction is the canned `prompts.INIT_PROMPT`: the
+  agent scans high-value sources (README, `config.json`, manifests, build/test/lint
+  config, CI) and writes — or improves in place — `/app/AGENTS.md`.
+
+> Not implemented (deliberately): user-configurable **agents** (opencode's
+> `mode`/`permission`/`model` definitions). Pequeroku's subagents stay hardcoded
+> (`explore`/`general`); only `AGENTS.md` + skills were ported.
+
+
+## 5.6 MCP servers (remote, optional)
+
+Pequenin can use external tools via **MCP (Model Context Protocol)** — `mcp.py`. The
+scope is deliberately narrow because opencode's MCP model assumes a single-user CLI on
+the user's own machine, while our agent runs on a **shared, multi-tenant server, per
+turn, with no persistent session process**:
+
+- **Remote HTTP servers only** (Streamable HTTP / JSON-RPC). No local/stdio (spawning
+  user processes on the shared host is unsafe; doing it in the VM would need a new
+  vm_service stdio bridge). **Header / API-key auth only** — no OAuth.
+- Declared **per-VM** in `/app/.pequenin/mcp.json` (persists with the workspace, wiped
+  on reset). Uses the de-facto-standard `mcpServers` key (same as Claude Code / Cursor /
+  `.mcp.json`); the legacy `mcp` key is also accepted. `type` defaults to remote,
+  `enabled` to true, `headers` carries API-key auth:
+
+  ```json
+  { "mcpServers": { "context7": { "url": "https://mcp.context7.com/mcp" } } }
+  ```
+
+- Loaded **once per turn** in the pipeline worker thread (`discover_mcp_tools`):
+  connect → `initialize` → `tools/list`; each tool is wrapped as a normal minicode
+  `Tool` named `<server>_<tool>` and appended to the `build`/`general` toolset for that
+  turn. Native tools win on a name collision; total MCP tools are capped at 60
+  (context-budget guard).
+- **Egress guard (SSRF):** requests leave the shared server, so user URLs pointing at
+  private/loopback/link-local hosts are blocked unless `PEQUENIN_MCP_ALLOW_PRIVATE` is
+  set. (Hostnames are not DNS-resolved here — a known limit.)
+- Everything is **sync** (`requests`), matching the worker-thread model — no async
+  bridge, no new dependency. Best-effort: a bad/slow server is skipped and never breaks
+  the turn (but each declared server adds one connect + `tools/list` round-trip/turn).
+
+
+## 5.7 Custom tools (per-VM)
+
+Beyond MCP, the user — or the agent itself — can define **custom tools** in
+`custom_tools.py`: named, schema'd commands the agent calls like any built-in. This is
+the *safe* extensibility tier — the command runs **inside the user's VM** (the same
+sandbox `bash` uses), so it grants no capability `bash` didn't already have (no
+shared-host RCE, no SSRF).
+
+- A tool is a directory `/app/.pequenin/tools/<name>/` with a `tool.json` manifest:
+
+  ```json
+  { "name": "run-linter",
+    "description": "Run ruff on a path. Use before committing Python.",
+    "parameters": {"type":"object","properties":{"path":{"type":"string"}},"required":["path"]},
+    "command": "python3 run.py" }
+  ```
+
+  `name` must equal the folder; `parameters` is the JSON Schema the model sees;
+  `command` runs with the tool's own folder as the working directory.
+- **Args contract:** the validated arguments are delivered to the command as a JSON
+  object on **stdin** (base64 on the wire → no shell-quoting/injection); whatever the
+  command writes to stdout/stderr is the tool result.
+- Discovered **once per turn** (`discover_custom_tools`, mirrors skills/MCP) and added
+  to the `build`/`general` toolset. A native tool wins a name collision (and MCP wins
+  over a custom tool); an invalid manifest (bad JSON, `name` != folder, missing
+  `description`/`command`) is skipped.
+- **Foreground, ~25s** (via `execute-sh`, like foreground `bash`); for long work the
+  command should background it itself. The built-in `authoring-tools` skill carries the
+  full guide, and the agent is told in its prompt that it can create them.
+
+
 ## 6. Conversations and memory
 
 Supports **multiple conversations** per container, switchable. The single source
@@ -157,6 +266,7 @@ and replays its history. `/clear` clears the active conversation.
 |---|---|
 | `{"text": "..."}` | Chat message in the active conversation (consumes quota) |
 | `"/clear"` (as `text`) | Clears the active conversation |
+| `"/init"` (as `text`) | Generates/improves `/app/AGENTS.md` (a normal AI turn; consumes quota) |
 | `{"action":"list_conversations"}` | Returns `conversations` |
 | `{"action":"new_conversation"}` | Creates the next id and switches to it |
 | `{"action":"switch_conversation","id":N}` | Loads N and replays its history |
@@ -231,8 +341,13 @@ web_service/
     conversations.py           # conversation storage (VM) + pointer (DB)
     minicode/
       agent.py  llm.py  session.py  events.py  context.py  prompts.py  config.py
+      project.py               # loads /app/AGENTS.md (or CLAUDE.md alias) per turn
+      skills.py                # discover/index/load skills (built-in + /app/.pequenin/skills)
+      builtin_skills/          # server-shipped skills, always available (authoring-skills, authoring-tools, authoring-mcp)
+      mcp.py                   # remote MCP servers (/app/.pequenin/mcp.json) → per-turn tools
+      custom_tools.py          # user-defined tools (/app/.pequenin/tools/) run in the VM → per-turn tools
       frontends/pipeline.py    # run_pipeline + agent (Django/Channels bridge)
-      tools/                   # read/write/edit/glob/grep/shell/process/internet/task/todo/vm
+      tools/                   # read/write/edit/glob/grep/shell/process/internet/task/todo/skill/vm
   vm_manager/
     views.py                   # ContainersViewSet (incl. conversation endpoints + curl/preview)
     vm_client.py               # VMServiceClient (HTTP to vm_service)
@@ -263,6 +378,18 @@ vm_service/
   quickly (the internal `curl` has a short timeout).
 - **`max_steps=50`** per turn (loop cap) — a single message may trigger up to 50
   LLM calls; adjustable in `minicode/config.py`.
+- **`AGENTS.md` and skills are VM files**: `/app/AGENTS.md` and
+  `/app/.pequenin/skills/` persist with the workspace but are wiped on a workspace
+  reset (regenerate `AGENTS.md` with `/init`). Loading them adds one `read-file` plus
+  one `list-dirs` per turn (best-effort; a VM hiccup degrades to "no project context"
+  without failing the turn).
+- **MCP is remote-only + best-effort**: only HTTP servers in `/app/.pequenin/mcp.json`
+  (header auth; no stdio, no OAuth). Each declared server adds a connect + `tools/list`
+  round-trip per turn, user URLs to private hosts are blocked (SSRF guard), and big
+  servers are capped at 60 tools to protect the context window.
+- **Custom tools run in the VM, foreground ~25s**: `/app/.pequenin/tools/<name>/tool.json`
+  commands get their args as JSON on stdin and run via `execute-sh` (same ~25s cap as
+  foreground `bash`); they carry the agent's VM privileges — no new risk vs `bash`.
 
 
 ## 13. Roadmap (direction, not implemented)
@@ -273,3 +400,6 @@ vm_service/
 - **gRPC** as the internal RPC layer between web↔vm_service (typed contract, native
   streaming for tty/logs/search). Orthogonal to the coexistence fix (already in the
   pool).
+- **MCP parity** (beyond the remote-only v1, §5.6): local/stdio servers (needs a
+  vm_service stdio bridge or in-VM execution), OAuth for remote servers, connection
+  reuse across turns, and per-server enable/disable UI in the IDE.

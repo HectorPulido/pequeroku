@@ -5,7 +5,7 @@ to a per-job log file, and records its PID. Status/stop reuse the same cached SS
 client, so every call is a fast, non-blocking SSH round-trip — the agent polls
 across turns instead of holding a socket open for a long-running command.
 
-Job artifacts live under ``/app/.pequeroku/jobs/<job_id>.{log,pid,cmd}``.
+Job artifacts live under ``/app/.pequenin/jobs/<job_id>.{log,pid,cmd}``.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from models import VMRecord
 from .ssh_cache import exec_and_close
 from .ssh_pool import borrow
 
-JOBS_DIR = "/app/.pequeroku/jobs"
+JOBS_DIR = "/app/.pequenin/jobs"
 
 
 def _new_job_id() -> str:
