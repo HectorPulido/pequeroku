@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 from typing import Any, cast
 from django.db import DatabaseError
 from asgiref.sync import sync_to_async
@@ -9,7 +10,13 @@ from vm_manager.models import ResourceQuota, Container
 from internal_config.models import AIUsageLog
 from pequeroku.mixins import ContainerAccessMixin
 
-from .minicode.frontends.pipeline import run_pipeline, agent, TokenUsage
+from .minicode.frontends.pipeline import (
+    run_pipeline,
+    agent,
+    TokenUsage,
+    _synth_command,
+    _cap,
+)
 from .minicode.prompts import INIT_PROMPT
 from . import conversations as convo
 
@@ -49,6 +56,85 @@ def _is_renderable_turn(msg: "OpenAIChatMessage") -> bool:
         return False
     content = msg.get("content") or ""
     return len(content.strip()) > 0
+
+
+def _history_events(memory: "list[OpenAIChatMessage]") -> list[dict[str, Any]]:
+    """Rebuild the live WebSocket event stream from a stored conversation.
+
+    The tool timeline the user watches stream live (``tool_call``/``tool_result``/
+    ``todos``) is fully persisted in the OpenAI memory — assistant ``tool_calls``
+    plus their answering ``role: "tool"`` messages — but the history replay used to
+    surface only text turns, so every step vanished on reload. This translates the
+    stored memory back into the SAME events the live pipeline emits (matching the
+    ``_synth_command`` rendering and ``_cap`` output cap), so the frontend reducer
+    rebuilds identical parts whether streaming or replaying.
+
+    Emits ``tool_call`` immediately followed by its paired ``tool_result`` so the
+    client's match-by-name pairing is unambiguous even for repeated tool names.
+    """
+    # tool_call_id -> output, so each assistant call can be paired with its result.
+    results: dict[str, str] = {}
+    for msg in memory:
+        if msg.get("role") == "tool":
+            tid = msg.get("tool_call_id")
+            if tid is not None:
+                results[str(tid)] = msg.get("content") or ""
+
+    events: list[dict[str, Any]] = []
+    for index, msg in enumerate(memory):
+        role = msg.get("role")
+
+        if role == "user":
+            if not _is_renderable_turn(msg):
+                continue
+            # The index lets the client fork at this exact message (see send_history).
+            events.append({"event": "start_text", "role": "user", "index": index})
+            events.append({"event": "text", "content": msg.get("content") or ""})
+            events.append({"event": "finish_text"})
+            continue
+
+        if role != "assistant":
+            # `tool` outputs are replayed below, paired with their originating call.
+            continue
+
+        # The model's visible prose for this step (a tool-call turn may have none).
+        content = msg.get("content") or ""
+        if content.strip():
+            events.append({"event": "start_text", "role": "assistant"})
+            events.append({"event": "text", "content": content})
+            events.append({"event": "finish_text"})
+
+        for tc in msg.get("tool_calls") or []:
+            fn = tc.get("function") or {}
+            name = fn.get("name") or "tool"
+            raw_args = fn.get("arguments")
+            try:
+                parsed = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            except (ValueError, TypeError):
+                parsed = None
+            call_args = parsed if isinstance(parsed, dict) else {}
+            events.append(
+                {
+                    "event": "tool_call",
+                    "name": name,
+                    "args": call_args,
+                    "command": _synth_command(name, call_args),
+                }
+            )
+            # todowrite also drives the checklist UI (a `todos` event live).
+            todos = call_args.get("todos")
+            if name == "todowrite" and isinstance(todos, list):
+                events.append({"event": "todos", "todos": todos})
+            tid = tc.get("id")
+            if tid is not None and str(tid) in results:
+                events.append(
+                    {
+                        "event": "tool_result",
+                        "name": name,
+                        "output": _cap(results[str(tid)]),
+                    }
+                )
+    return events
 
 
 def _memory_index_for_user_ordinal(
@@ -148,27 +234,12 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
         )
 
     async def send_history(self, memory: list[OpenAIChatMessage]):
-        for index, msg in enumerate(memory):
-            # Only user/assistant text turns are shown. Tool messages and assistant
-            # turns with tool_calls (no text) are internal trace.
-            if not _is_renderable_turn(msg):
-                continue
-            role = msg.get("role")
-            content = msg.get("content") or ""
-
-            start: dict[str, Any] = {"event": "start_text", "role": role}
-            # User turns carry their position in the stored memory so the client can
-            # fork at this exact message later without recounting anything.
-            if role == "user":
-                start["index"] = index
-            await self.send_json(start)
-            await self.send_json(
-                {
-                    "event": "text",
-                    "content": content,
-                }
-            )
-            await self.send_json({"event": "finish_text"})
+        # Replay the full timeline — text turns AND the tool_call/tool_result/todos
+        # steps — so a reloaded conversation looks exactly like it did live. User
+        # turns carry their stored-memory index so the client can fork at this exact
+        # message later without recounting. See ``_history_events``.
+        for event in _history_events(memory):
+            await self.send_json(event)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

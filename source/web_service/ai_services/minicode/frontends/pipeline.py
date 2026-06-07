@@ -2,12 +2,17 @@
 
 It is just another frontend of the minicode core: instead of painting to a
 terminal, it maps the agent's event stream to the async callbacks the
-``AIConsumer`` expects. It exposes the ONLY two symbols the consumer imports:
+``AIConsumer`` expects. The symbols the consumer imports:
 
-    from ai_services.minicode.frontends.pipeline import run_pipeline, agent
+    from ai_services.minicode.frontends.pipeline import (
+        run_pipeline, agent, TokenUsage, _synth_command, _cap,
+    )
 
 - ``run_pipeline(...)``  — runs ONE full turn and returns ``(messages, TokenUsage)``.
 - ``agent``             — object with ``.model`` (only for the usage log).
+- ``_synth_command`` / ``_cap`` — shared so history replay (``send_history``) can
+  rebuild the persisted tool timeline using the SAME command synthesis and output
+  cap as the live event stream below, keeping live and replayed steps identical.
 
 SYNC ↔ ASYNC BRIDGE
 The minicode core is synchronous (sync OpenAI client, tools that do HTTP to the
