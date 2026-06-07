@@ -160,9 +160,9 @@ def test_discover_skills_without_container_returns_only_builtins():
 
 def test_discover_skills_includes_valid_project_skill():
     client = FakeVMClient()
-    client.fs[
-        "/app/.pequenin/skills/deploy/SKILL.md"
-    ] = "---\nname: deploy\ndescription: Deploy the app\n---\nRun deploy steps."
+    client.fs["/app/.pequenin/skills/deploy/SKILL.md"] = (
+        "---\nname: deploy\ndescription: Deploy the app\n---\nRun deploy steps."
+    )
     config = make_config(client)
     found = {s.name: s for s in skills_mod.discover_skills(config)}
     assert "deploy" in found
@@ -173,9 +173,9 @@ def test_discover_skills_includes_valid_project_skill():
 def test_discover_skills_project_overrides_builtin():
     client = FakeVMClient()
     # Same name as a builtin -> the project skill must win.
-    client.fs[
-        "/app/.pequenin/skills/authoring-skills/SKILL.md"
-    ] = "---\nname: authoring-skills\ndescription: My override\n---\nOverridden."
+    client.fs["/app/.pequenin/skills/authoring-skills/SKILL.md"] = (
+        "---\nname: authoring-skills\ndescription: My override\n---\nOverridden."
+    )
     config = make_config(client)
     found = {s.name: s for s in skills_mod.discover_skills(config)}
     assert found["authoring-skills"].source == "project"
@@ -185,15 +185,15 @@ def test_discover_skills_project_overrides_builtin():
 def test_discover_skills_skips_invalid_manifests():
     client = FakeVMClient()
     # name != folder
-    client.fs[
-        "/app/.pequenin/skills/folderA/SKILL.md"
-    ] = "---\nname: not-folderA\ndescription: x\n---\nbody"
+    client.fs["/app/.pequenin/skills/folderA/SKILL.md"] = (
+        "---\nname: not-folderA\ndescription: x\n---\nbody"
+    )
     # missing description
     client.fs["/app/.pequenin/skills/nodesc/SKILL.md"] = "---\nname: nodesc\n---\nbody"
     # bad name (uppercase)
-    client.fs[
-        "/app/.pequenin/skills/BadName/SKILL.md"
-    ] = "---\nname: BadName\ndescription: x\n---\nbody"
+    client.fs["/app/.pequenin/skills/BadName/SKILL.md"] = (
+        "---\nname: BadName\ndescription: x\n---\nbody"
+    )
     config = make_config(client)
     names = {s.name for s in skills_mod.discover_skills(config)}
     assert (
@@ -253,9 +253,9 @@ def test_load_skill_body_builtin_returns_wrapped_body():
 
 def test_load_skill_body_project_reads_vm_and_lists_files():
     client = FakeVMClient()
-    client.fs[
-        "/app/.pequenin/skills/deploy/SKILL.md"
-    ] = "---\nname: deploy\ndescription: d\n---\nBODY TEXT"
+    client.fs["/app/.pequenin/skills/deploy/SKILL.md"] = (
+        "---\nname: deploy\ndescription: d\n---\nBODY TEXT"
+    )
     client.fs["/app/.pequenin/skills/deploy/scripts/run.sh"] = "echo hi"
     config = make_config(client)
     config.skills = [
