@@ -390,15 +390,33 @@ class VMServiceClient:
         return cast(dict[str, object], self._handle(resp))
 
     def process_status(
-        self, vm_id: str, job_id: str, lines: int = 80
+        self,
+        vm_id: str,
+        job_id: str,
+        lines: int = 80,
+        since_bytes: int | None = None,
+        wait: int = 0,
     ) -> dict[str, object]:
-        """POST /vms/{vm_id}/process-status — Check a background job + tail its log."""
-        p = {"job_id": job_id, "lines": lines}
+        """POST /vms/{vm_id}/process-status — Check a background job + tail its log.
+
+        ``since_bytes`` returns only log bytes after that offset (delta polling).
+        ``wait`` blocks server-side up to that many seconds for the job to exit; the
+        HTTP timeout is widened to give the wait room before the connection is cut.
+        """
+        p: dict[str, object] = {"job_id": job_id, "lines": lines}
+        if since_bytes is not None:
+            p["since_bytes"] = since_bytes
+        http_timeout = self.timeout
+        if wait and wait > 0:
+            p["wait"] = wait
+            # Outlast the server-side exec timeout (wait + 15) with margin so the
+            # HTTP read isn't cut off right as the wait finishes.
+            http_timeout = max(self.timeout, float(wait) + 25.0)
         resp = self.session.post(
             self._url(f"/vms/{vm_id}/process-status"),
             json=p,
             headers=self.headers,
-            timeout=self.timeout,
+            timeout=http_timeout,
         )
         return cast(dict[str, object], self._handle(resp))
 

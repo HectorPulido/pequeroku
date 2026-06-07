@@ -9,7 +9,8 @@
 #   - DHCP networking via systemd-networkd
 #   - automatic root filesystem growth (cloud-initramfs-growroot)
 #   - pre-generated SSH host keys
-#   - optional packages (docker by default)
+#   - a baseline of dev tooling (git, pip, venv, build toolchain) so cloned repos
+#     configure on the first try, plus any optional --packages extras
 # ...then DISABLES cloud-init so runtime boots skip the ~40s pipeline and SSH is
 # ready in ~10s. Pair with VM_USE_CLOUD_INIT=false in the vm_service env.
 #
@@ -28,7 +29,8 @@
 #   --user      <name>                  SSH user to bake (default: $VM_SSH_USER or root)
 #   --pubkey    <path>                  Public key to inject (default: $VM_SSH_PRIVKEY.pub or ~/.ssh/id_vm_pequeroku.pub)
 #   --size      <GiB>                   Resize image to this size (default: 10)
-#   --packages  <csv>                   Extra apt packages to install (default: none; needs network at bake)
+#   --packages  <csv>                   Extra apt packages on top of the baseline (needs network at bake)
+#   --no-base-packages                  Skip the baked-in dev baseline (offline/minimal bake)
 #   --apt-upgrade                       Run apt update + full-upgrade on the baked image (needs network)
 #   --privkey   <path>                  Private key for the --apt-upgrade SSH pass (default: PUBKEY without .pub)
 #   --method    <auto|virt-customize|boot>  Bake method (default: auto)
@@ -54,7 +56,14 @@ SSH_USER="${VM_SSH_USER:-root}"
 PUBKEY="${VM_SSH_PRIVKEY:-$HOME/.ssh/id_vm_pequeroku}.pub"
 PRIVKEY=""               # private key for the --apt-upgrade pass (default: PUBKEY without .pub)
 SIZE_GIB="10"
-PACKAGES=""              # extra apt packages; empty = no apt at bake (fast, offline)
+PACKAGES=""              # extra apt packages, ON TOP of BASE_PACKAGES below
+# Baseline dev tooling baked into every golden so cloned repos configure on the
+# first try: git to clone, venv+pip to install deps, a compiler + headers for the
+# many wheels with C extensions. Installed unless --no-base-packages (needs network
+# at bake time, same as --packages). Past failures traced straight to these missing:
+# `git: command not found`, venv `ensurepip is not available`, no `pip`.
+BASE_PACKAGES="git,curl,ca-certificates,python3-venv,python3-pip,python3-dev,build-essential,docker.io,docker-compose"
+NO_BASE_PACKAGES="0"     # set by --no-base-packages to restore the old offline/minimal bake
 APT_UPGRADE="0"          # run apt update + full-upgrade on the baked image (needs network)
 METHOD="auto"
 CACHE_DIR=""
@@ -66,7 +75,7 @@ log()  { printf '\033[1;34m[build-golden]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[build-golden] WARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[build-golden] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '2,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() { sed -n '2,41p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; }
 
 # --------------------------------------------------------------------------- #
 # Parse args
@@ -80,6 +89,7 @@ while [[ $# -gt 0 ]]; do
     --pubkey)   PUBKEY="$2"; shift 2 ;;
     --size)     SIZE_GIB="$2"; shift 2 ;;
     --packages) PACKAGES="$2"; shift 2 ;;
+    --no-base-packages) NO_BASE_PACKAGES="1"; shift ;;
     --apt-upgrade) APT_UPGRADE="1"; shift ;;
     --privkey)  PRIVKEY="$2"; shift 2 ;;
     --method)   METHOD="$2"; shift 2 ;;
@@ -115,10 +125,22 @@ case "$ARCH" in amd64|arm64) ;; *) die "Invalid --arch: $ARCH (amd64|arm64)";; e
 [[ -n "$OUT" ]]       || OUT="${DEFAULT_BASE_DIR}/${DISTRO}-golden.qcow2"
 [[ -n "$PRIVKEY" ]]   || PRIVKEY="${PUBKEY%.pub}"
 
+# Effective package list = baked-in baseline (unless --no-base-packages) + extras.
+# apt tolerates a name appearing twice, so a plain CSV concat is fine.
+EFFECTIVE_PACKAGES="$PACKAGES"
+if [[ "$NO_BASE_PACKAGES" != "1" ]]; then
+  if [[ -n "$EFFECTIVE_PACKAGES" ]]; then
+    EFFECTIVE_PACKAGES="${BASE_PACKAGES},${EFFECTIVE_PACKAGES}"
+  else
+    EFFECTIVE_PACKAGES="$BASE_PACKAGES"
+  fi
+fi
+
 log "Host:   ${HOST_OS} / ${HOST_MACHINE}"
 log "Target: distro=${DISTRO} arch=${ARCH} size=${SIZE_GIB}GiB"
 log "User:   ${SSH_USER}   Pubkey: ${PUBKEY}"
 log "Output: ${OUT}"
+log "Packages: ${EFFECTIVE_PACKAGES:-<none>}"
 
 # --------------------------------------------------------------------------- #
 # Preflight
@@ -296,9 +318,10 @@ bake_virt_customize() {
   args+=(--copy-in "${tmp}/growroot.service:/etc/systemd/system")
   args+=(--run-command "systemctl enable growroot.service >/dev/null 2>&1 || true")
 
-  # Optional extra packages (only when requested; needs network at bake time).
-  if [[ -n "$PACKAGES" ]]; then
-    args+=(--install "${PACKAGES}")
+  # Baseline + extra packages (needs network at bake time; empty only with
+  # --no-base-packages and no --packages, which keeps the bake offline).
+  if [[ -n "$EFFECTIVE_PACKAGES" ]]; then
+    args+=(--install "${EFFECTIVE_PACKAGES}")
   fi
 
   # SSH host keys, enable ssh, disable cloud-init + the network-online wait.
@@ -374,15 +397,13 @@ EOF
 )
   fi
 
-  # Packages are optional and require network at bake time; only emit the apt
-  # blocks when explicitly requested so the default bake stays offline + fast.
+  # NOTE: packages are deliberately NOT installed here via cloud-init. During the
+  # cloud-init bake the guest still uses QEMU slirp DNS (10.0.2.3), which is
+  # unreliable (it fails to resolve on macOS hosts: apt hangs ~30s per mirror then
+  # `Ign`s every InRelease, so nothing installs). They are installed AFTER the bake
+  # over SSH (provision_pass), once the baked-in DNS=8.8.8.8 config is active and
+  # resolution actually works. So this block stays empty.
   local pkgs_block=""
-  if [[ -n "$PACKAGES" ]]; then
-    pkgs_block=$'packages:\n'
-    local p
-    for p in ${PACKAGES//,/ }; do pkgs_block+="  - ${p}"$'\n'; done
-    pkgs_block+=$'package_update: true\n'
-  fi
 
   cat > "${tmp}/user-data" <<EOF
 #cloud-config
@@ -469,23 +490,29 @@ EOF
 }
 
 # --------------------------------------------------------------------------- #
-# Optional: apt update + full-upgrade on the baked image, via SSH.
-# Runs against the already-baked golden (cloud-init off, DHCP+DNS working), so
-# the network reliably works — unlike during the cloud-init bake.
+# Post-bake SSH provisioning pass: apt update, install the package set, and
+# optionally full-upgrade — all over SSH against the already-baked golden.
+# This runs with cloud-init OFF and the baked-in DHCP+DNS (DNS=8.8.8.8) ACTIVE,
+# so name resolution actually works here — unlike during the cloud-init bake,
+# where the guest is still on QEMU slirp DNS (broken on macOS, hangs apt). That
+# is why the boot method installs packages HERE instead of via cloud-init.
+#   $1 = "1" to install $EFFECTIVE_PACKAGES (the boot method; virt-customize
+#        already installed them inline on Linux hosts).
 # --------------------------------------------------------------------------- #
-upgrade_pass() {
-  [[ -f "$PRIVKEY" ]] || die "Private key not found for --apt-upgrade: ${PRIVKEY} (set --privkey)"
-  command -v ssh >/dev/null 2>&1 || die "ssh client required for --apt-upgrade"
+provision_pass() {
+  local do_install="${1:-}"
+  [[ -f "$PRIVKEY" ]] || die "Private key not found for the SSH provision pass: ${PRIVKEY} (set --privkey)"
+  command -v ssh >/dev/null 2>&1 || die "ssh client required for the SSH provision pass"
   resolve_qemu
 
   local tmp; tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' RETURN
   local port=$(( 20000 + (RANDOM % 20000) ))
 
-  log "Upgrade pass: booting golden (accel=${ACCEL}) to run apt update + full-upgrade..."
+  log "Provision pass: booting golden (accel=${ACCEL}) to install packages over SSH..."
   "$QBIN" \
     -machine "${MACHINE}" -accel "${ACCEL}" "${QEXTRA[@]}" \
     -smp 2 -m 2048 -nographic \
-    -serial "file:${tmp}/upgrade-console.log" \
+    -serial "file:${tmp}/provision-console.log" \
     -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:${port}-:22" -device virtio-net-pci,netdev=n0 \
     -drive "if=virtio,format=qcow2,file=${OUT}" \
     -no-reboot &
@@ -498,30 +525,42 @@ upgrade_pass() {
   while (( waited < BOOT_TIMEOUT )); do
     if ssh "${sshopts[@]}" "${SSH_USER}@127.0.0.1" true 2>/dev/null; then up=1; break; fi
     if ! kill -0 "$qpid" 2>/dev/null; then
-      warn "Upgrade VM exited early. Console tail:"; tail -20 "${tmp}/upgrade-console.log" >&2; break
+      warn "Provision VM exited early. Console tail:"; tail -20 "${tmp}/provision-console.log" >&2; break
     fi
     sleep 2; waited=$((waited+2))
   done
-  [[ "$up" == "1" ]] || { kill "$qpid" 2>/dev/null || true; die "Upgrade pass: SSH never came up"; }
+  [[ "$up" == "1" ]] || { kill "$qpid" 2>/dev/null || true; die "Provision pass: SSH never came up"; }
 
   local repo_host="deb.debian.org"
   [[ "$DISTRO" == ubuntu* ]] && repo_host="archive.ubuntu.com"
 
-  log "SSH up; running apt update + full-upgrade (can take a few minutes over NAT)..."
-  # The DNS precheck fails loudly instead of letting apt-get update no-op on a
-  # resolver failure (apt returns 0 with only W: warnings, masking the problem).
-  if ! ssh "${sshopts[@]}" "${SSH_USER}@127.0.0.1" \
-        "export DEBIAN_FRONTEND=noninteractive; set -e;
-         getent hosts ${repo_host} >/dev/null || { echo 'DNS FAIL: cannot resolve ${repo_host}'; exit 42; }
-         apt-get update;
-         apt-get -y -o Dpkg::Options::=--force-confold full-upgrade;
-         apt-get -y autoremove --purge;
-         apt-get clean"; then
+  # Build the remote script: always update; install packages and/or full-upgrade
+  # as requested; then clean up. The DNS precheck fails loudly instead of letting
+  # apt-get update no-op on a resolver failure (apt exits 0 with only W: warnings).
+  local remote="export DEBIAN_FRONTEND=noninteractive; set -e;
+    getent hosts ${repo_host} >/dev/null || { echo 'DNS FAIL: cannot resolve ${repo_host}'; exit 42; }
+    apt-get update;"
+  if [[ "$do_install" == "1" && -n "$EFFECTIVE_PACKAGES" ]]; then
+    local pkgs_space="${EFFECTIVE_PACKAGES//,/ }"
+    log "  will install: ${pkgs_space}"
+    remote+="
+    apt-get install -y -o Dpkg::Options::=--force-confold ${pkgs_space};"
+  fi
+  if [[ "$APT_UPGRADE" == "1" ]]; then
+    remote+="
+    apt-get -y -o Dpkg::Options::=--force-confold full-upgrade;"
+  fi
+  remote+="
+    apt-get -y autoremove --purge;
+    apt-get clean"
+
+  log "SSH up; running apt provisioning (can take a few minutes over NAT)..."
+  if ! ssh "${sshopts[@]}" "${SSH_USER}@127.0.0.1" "$remote"; then
     kill "$qpid" 2>/dev/null || true
-    die "apt upgrade failed (see output above)"
+    die "apt provisioning failed (see output above)"
   fi
 
-  log "Upgrade complete; powering off the VM..."
+  log "Provisioning complete; powering off the VM..."
   ssh "${sshopts[@]}" "${SSH_USER}@127.0.0.1" 'systemctl poweroff' 2>/dev/null || true
 
   waited=0
@@ -529,7 +568,7 @@ upgrade_pass() {
     sleep 2; waited=$((waited+2))
     if (( waited > 180 )); then kill "$qpid" 2>/dev/null || true; break; fi
   done
-  log "Upgrade pass finished."
+  log "Provision pass finished."
 }
 
 case "$METHOD" in
@@ -538,7 +577,14 @@ case "$METHOD" in
   *) die "Invalid --method: $METHOD (auto|virt-customize|boot)" ;;
 esac
 
-[[ "$APT_UPGRADE" == "1" ]] && upgrade_pass
+# The boot method couldn't install packages during cloud-init (slirp DNS), so do
+# it now over SSH. virt-customize already installed them inline, so it only needs
+# the pass when --apt-upgrade was requested.
+PKG_PASS=""
+[[ "$METHOD" == "boot" && -n "$EFFECTIVE_PACKAGES" ]] && PKG_PASS="1"
+if [[ -n "$PKG_PASS" || "$APT_UPGRADE" == "1" ]]; then
+  provision_pass "$PKG_PASS"
+fi
 
 # Compact the final image.
 log "Compacting image..."

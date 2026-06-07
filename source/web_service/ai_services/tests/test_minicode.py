@@ -86,13 +86,14 @@ class FakeVMClient:
             "reason": "",
         }
 
-    def process_status(self, cid, job_id, lines=80):
+    def process_status(self, cid, job_id, lines=80, since_bytes=None, wait=0):
         return {
             "ok": True,
             "job_id": job_id,
             "status": "running",
             "pid": 4242,
             "log": "server up\n",
+            "log_size": 9,
             "reason": "",
         }
 

@@ -27,9 +27,15 @@ def _env_block(config: Config) -> str:
     return (
         "<env>\n"
         f"Working directory: {workdir}\n"
-        "Platform: linux (Debian VM)\n"
+        "Platform: linux (Debian 12 VM)\n"
         f"Today's date: {datetime.date.today().isoformat()}\n"
         "Sandbox: a per-user VM in Pequeroku; you are root and act without confirmation.\n"
+        "Preinstalled baseline: python3 + pip3, git, curl, ca-certificates, "
+        "python3-venv, python3-dev, build-essential (gcc/make). Assume these exist; "
+        "for anything else (node, go, docker, postgres, a database server, ...) "
+        "verify with `command -v <tool>` and apt-install it if missing — do not "
+        "discover a missing tool by letting a build fail. (Older VM images may lack "
+        "part of this baseline; a quick `command -v` settles it.)\n"
         "</env>"
     )
 

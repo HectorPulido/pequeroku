@@ -113,11 +113,15 @@ Foreground bash is for QUICK commands only (~25s cap). Anything that can take lo
 background=true, or it will fail with a timeout. This explicitly includes dependency installs (`pip \
 install`, `npm install`, `apt-get install`), test suites (`pytest`, `npm test`), builds, and migrations — \
 not just servers. background=true launches the command detached (it survives this turn and keeps \
-running) and returns a job_id; then **poll** `process(job_id, action="status")` until it reports \
-`exited` (or the log shows it finished) and read the log to check the result — do NOT re-run it. To start \
-a service the user can reach (dev server, `docker compose up`, a worker), also use background=true, verify \
-it came up via `process`, and bind servers to 0.0.0.0 on a high, unprivileged port. Stop anything you \
-started with `process(job_id, action="stop")`.
+running) and returns a job_id; then **WAIT** for it with `process(job_id, action="wait")` — ONE call \
+that blocks server-side until the job finishes (or ~120s, then returns; just call wait again if still \
+running) and hands you the result. Do NOT sit calling `action="status"` over and over in a tight loop: \
+that burns tokens and time for nothing, and is a bug, not diligence. `wait` exists precisely so you don't \
+poll. (`action="status"` is only a quick non-blocking peek and returns just the NEW output since your last \
+check.) Once it `exited`, read the log to check the result — do NOT re-run it. To start a service the user \
+can reach (dev server, `docker compose up -d`, a worker), also use background=true, verify it came up via \
+`process`, and bind servers to 0.0.0.0 on a high, unprivileged port. Stop anything you started with \
+`process(job_id, action="stop")`.
 
 Package installs need EXTRA care: a half-killed `apt`/`dpkg` corrupts the whole machine. Always install \
 non-interactively AND in background, then poll until done — these can take minutes (a `python3-pip` or \

@@ -129,6 +129,16 @@ class StartProcessRequest(BaseModel):
 class ProcessStatusRequest(BaseModel):
     job_id: str = Field(..., description="Job id returned by start-process.")
     lines: int = Field(80, description="Number of trailing log lines to return.")
+    since_bytes: int | None = Field(
+        None,
+        description="If set, return only log bytes AFTER this offset (delta polling) "
+        "instead of the trailing lines.",
+    )
+    wait: int = Field(
+        0,
+        description="If >0, block up to this many seconds for the job to exit before "
+        "returning (server-side wait, so the caller need not poll).",
+    )
 
 
 class ProcessRef(BaseModel):
@@ -149,6 +159,9 @@ class ProcessStatusResponse(BaseModel):
     status: Literal["running", "exited", "unknown"] = "unknown"
     pid: int | None = None
     log: str = ""
+    log_size: int = Field(
+        0, description="Current total byte size of the log (use as next since_bytes)."
+    )
     reason: str = ""
 
 

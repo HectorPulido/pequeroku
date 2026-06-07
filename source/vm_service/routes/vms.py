@@ -372,7 +372,7 @@ def process_status_ep(vm_id: str, req: ProcessStatusRequest) -> ProcessStatusRes
         )
 
     try:
-        data = process_status(vm, req.job_id, req.lines)
+        data = process_status(vm, req.job_id, req.lines, req.since_bytes, req.wait)
     except Exception as e:
         return ProcessStatusResponse(
             ok=False, job_id=req.job_id, reason=f"Process error: {e}"
