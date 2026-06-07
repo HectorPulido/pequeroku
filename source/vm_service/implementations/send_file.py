@@ -45,9 +45,7 @@ def _clean_dest(cli: paramiko.SSHClient, dest_path: str):
     _run_and_check(cli, cmd)
 
 
-def _prepare_vm_for_transfer(
-    sftp, cli, dest_path: str = "/app", clean: bool = True
-):
+def _prepare_vm_for_transfer(sftp, cli, dest_path: str = "/app", clean: bool = True):
     if not sftp:
         return None, None, None
 

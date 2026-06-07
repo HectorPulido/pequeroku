@@ -116,7 +116,9 @@ def test_tool_exception_is_caught_and_fed_back():
     # the loop continued to a clean final answer
     assert session.last_assistant_text() == "handled the error"
     # the history is valid: the tool_call got its answering tool message
-    assert any(m["role"] == "tool" and "kaboom" in m["content"] for m in session.messages)
+    assert any(
+        m["role"] == "tool" and "kaboom" in m["content"] for m in session.messages
+    )
 
 
 def test_invalid_json_arguments_returns_error_without_crashing():
@@ -163,7 +165,9 @@ def test_keyboard_interrupt_aborts_and_skips_remaining_calls():
     events = list(agent.run())
 
     assert any(isinstance(e, Error) and "interrupted" in e.message for e in events)
-    tool_msgs = {m["tool_call_id"]: m["content"] for m in session.messages if m["role"] == "tool"}
+    tool_msgs = {
+        m["tool_call_id"]: m["content"] for m in session.messages if m["role"] == "tool"
+    }
     assert "aborted by the user" in tool_msgs["c1"]
     assert "turn was aborted" in tool_msgs["c2"]  # skipped but answered
 
@@ -192,8 +196,15 @@ def test_generator_tool_events_are_forwarded():
     events, session = run_agent(
         config,
         [
-            _msg(tool_calls=[_tc("c1", "todowrite",
-                                 json.dumps({"todos": [{"content": "x", "status": "pending"}]}))]),
+            _msg(
+                tool_calls=[
+                    _tc(
+                        "c1",
+                        "todowrite",
+                        json.dumps({"todos": [{"content": "x", "status": "pending"}]}),
+                    )
+                ]
+            ),
             _msg(content="planned"),
         ],
     )
@@ -211,13 +222,28 @@ def test_task_tool_spawns_subagent_and_returns_report():
     events, session = run_agent(
         config,
         [
-            _msg(tool_calls=[_tc("c1", "task", json.dumps(
-                {"description": "look", "prompt": "investigate", "subagent_type": "explore"}))]),
-            _msg(content="subagent findings"),   # consumed by the subagent's loop
-            _msg(content="final answer"),        # main agent's final reply
+            _msg(
+                tool_calls=[
+                    _tc(
+                        "c1",
+                        "task",
+                        json.dumps(
+                            {
+                                "description": "look",
+                                "prompt": "investigate",
+                                "subagent_type": "explore",
+                            }
+                        ),
+                    )
+                ]
+            ),
+            _msg(content="subagent findings"),  # consumed by the subagent's loop
+            _msg(content="final answer"),  # main agent's final reply
         ],
     )
-    assert any(isinstance(e, SubagentStarted) and e.agent_type == "explore" for e in events)
+    assert any(
+        isinstance(e, SubagentStarted) and e.agent_type == "explore" for e in events
+    )
     assert any(isinstance(e, SubagentFinished) for e in events)
     assert session.last_assistant_text() == "final answer"
     # the subagent's report was fed back as the task tool's result

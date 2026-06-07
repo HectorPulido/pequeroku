@@ -45,7 +45,9 @@ def test_sanitize_replaces_invalid_chars():
 def test_normalize_schema():
     assert mcp._normalize_schema(None) == {"type": "object", "properties": {}}
     out = mcp._normalize_schema({"properties": "bad", "required": ["x"]})
-    assert out["type"] == "object" and out["properties"] == {} and out["required"] == ["x"]
+    assert (
+        out["type"] == "object" and out["properties"] == {} and out["required"] == ["x"]
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -59,13 +61,13 @@ def test_url_allowed_public_https():
 @pytest.mark.parametrize(
     "url",
     [
-        "ftp://example.com",          # bad scheme
-        "https://",                   # missing host
-        "http://localhost/mcp",       # loopback host
-        "http://foo.localhost/mcp",   # .localhost suffix
-        "http://127.0.0.1/mcp",       # loopback IP
-        "http://10.0.0.5/mcp",        # private IP
-        "http://169.254.1.1/mcp",     # link-local
+        "ftp://example.com",  # bad scheme
+        "https://",  # missing host
+        "http://localhost/mcp",  # loopback host
+        "http://foo.localhost/mcp",  # .localhost suffix
+        "http://127.0.0.1/mcp",  # loopback IP
+        "http://10.0.0.5/mcp",  # private IP
+        "http://169.254.1.1/mcp",  # link-local
     ],
 )
 def test_url_allowed_blocks(url):
@@ -103,8 +105,15 @@ def test_server_map_returns_empty_for_unknown_shapes():
 # parse_servers
 # --------------------------------------------------------------------------- #
 def test_parse_servers_valid_remote_with_timeout():
-    cfg = {"mcp": {"ctx": {"url": "https://mcp.example.com/mcp", "timeout": 5000,
-                           "headers": {"Authorization": "Bearer t"}}}}
+    cfg = {
+        "mcp": {
+            "ctx": {
+                "url": "https://mcp.example.com/mcp",
+                "timeout": 5000,
+                "headers": {"Authorization": "Bearer t"},
+            }
+        }
+    }
     servers = mcp.parse_servers(cfg)
     assert len(servers) == 1
     s = servers[0]
@@ -118,27 +127,33 @@ def test_parse_servers_default_timeout_for_bad_value():
 
 
 def test_parse_servers_skips_disabled_and_enabled_false():
-    cfg = {"mcp": {
-        "a": {"url": "https://a.example.com", "enabled": False},
-        "b": {"url": "https://b.example.com", "disabled": True},
-    }}
+    cfg = {
+        "mcp": {
+            "a": {"url": "https://a.example.com", "enabled": False},
+            "b": {"url": "https://b.example.com", "disabled": True},
+        }
+    }
     assert mcp.parse_servers(cfg) == []
 
 
 def test_parse_servers_skips_local_stdio_and_command_only():
-    cfg = {"mcp": {
-        "a": {"type": "local", "url": "https://a.example.com"},
-        "b": {"type": "stdio", "url": "https://b.example.com"},
-        "c": {"command": "run-me"},
-    }}
+    cfg = {
+        "mcp": {
+            "a": {"type": "local", "url": "https://a.example.com"},
+            "b": {"type": "stdio", "url": "https://b.example.com"},
+            "c": {"command": "run-me"},
+        }
+    }
     assert mcp.parse_servers(cfg) == []
 
 
 def test_parse_servers_skips_missing_and_blocked_url():
-    cfg = {"mcp": {
-        "a": {"type": "remote"},                       # missing url
-        "b": {"url": "http://127.0.0.1/mcp"},          # blocked
-    }}
+    cfg = {
+        "mcp": {
+            "a": {"type": "remote"},  # missing url
+            "b": {"url": "http://127.0.0.1/mcp"},  # blocked
+        }
+    }
     assert mcp.parse_servers(cfg) == []
 
 
@@ -181,13 +196,15 @@ def test_load_mcp_config_non_dict_payload():
 # _flatten_content
 # --------------------------------------------------------------------------- #
 def test_flatten_content_joins_text_and_notes_other_types():
-    result = {"content": [
-        {"type": "text", "text": "hello"},
-        {"type": "image"},
-        {"type": "resource", "resource": {"uri": "file://x"}},
-        {"type": "weird"},
-        "not-a-dict",
-    ]}
+    result = {
+        "content": [
+            {"type": "text", "text": "hello"},
+            {"type": "image"},
+            {"type": "resource", "resource": {"uri": "file://x"}},
+            {"type": "weird"},
+            "not-a-dict",
+        ]
+    }
     out = mcp._flatten_content(result)
     assert "hello" in out and "[image omitted]" in out
     assert "file://x" in out and "[weird]" in out
@@ -196,7 +213,9 @@ def test_flatten_content_joins_text_and_notes_other_types():
 def test_flatten_content_marks_errors_and_handles_edge_cases():
     assert mcp._flatten_content("raw") == "raw"
     assert mcp._flatten_content({"content": []}) == "(no content)"
-    err = mcp._flatten_content({"isError": True, "content": [{"type": "text", "text": "bad"}]})
+    err = mcp._flatten_content(
+        {"isError": True, "content": [{"type": "text", "text": "bad"}]}
+    )
     assert err.startswith("[the tool reported an error]") and "bad" in err
 
 
@@ -204,8 +223,16 @@ def test_flatten_content_marks_errors_and_handles_edge_cases():
 # McpHttpClient against a fake requests.Session
 # --------------------------------------------------------------------------- #
 class FakeResponse:
-    def __init__(self, *, ok=True, status_code=200, headers=None, json_body=None,
-                 sse_lines=None, text=""):
+    def __init__(
+        self,
+        *,
+        ok=True,
+        status_code=200,
+        headers=None,
+        json_body=None,
+        sse_lines=None,
+        text="",
+    ):
         self.ok = ok
         self.status_code = status_code
         self.headers = headers or {"Content-Type": "application/json"}
@@ -259,7 +286,9 @@ def test_http_client_json_rpc_result_and_session_id():
 
 
 def test_http_client_rpc_error_raises():
-    resp = FakeResponse(json_body={"id": 1, "error": {"code": -32000, "message": "nope"}})
+    resp = FakeResponse(
+        json_body={"id": 1, "error": {"code": -32000, "message": "nope"}}
+    )
     c = _client_with([resp])
     with pytest.raises(mcp.McpError, match="nope"):
         c._rpc("ping", {})
@@ -287,12 +316,14 @@ def test_http_client_sse_response_parsed():
 
 
 def test_read_sse_skips_nonmatching_then_returns_match():
-    resp = FakeResponse(sse_lines=[
-        'data: {"id": 9, "result": "other"}',
-        "",
-        'data: {"id": 1, "result": "mine"}',
-        "",
-    ])
+    resp = FakeResponse(
+        sse_lines=[
+            'data: {"id": 9, "result": "other"}',
+            "",
+            'data: {"id": 1, "result": "mine"}',
+            "",
+        ]
+    )
     msg = mcp.McpHttpClient._read_sse(resp, req_id=1)
     assert msg["result"] == "mine"
 
@@ -304,10 +335,16 @@ def test_read_sse_trailing_buffer_without_blank_line():
 
 
 def test_http_client_initialize_list_and_call():
-    init = FakeResponse(json_body={"id": 1, "result": {"protocolVersion": "2099-01-01"}})
-    notif_ok = FakeResponse(json_body={"id": None, "result": {}})  # for notifications/initialized
+    init = FakeResponse(
+        json_body={"id": 1, "result": {"protocolVersion": "2099-01-01"}}
+    )
+    notif_ok = FakeResponse(
+        json_body={"id": None, "result": {}}
+    )  # for notifications/initialized
     listed = FakeResponse(json_body={"id": 3, "result": {"tools": [{"name": "t1"}]}})
-    called = FakeResponse(json_body={"id": 4, "result": {"content": [{"type": "text", "text": "done"}]}})
+    called = FakeResponse(
+        json_body={"id": 4, "result": {"content": [{"type": "text", "text": "done"}]}}
+    )
     c = _client_with([init, notif_ok, listed, called])
     c.initialize()
     assert c._proto == "2099-01-01"
@@ -357,9 +394,11 @@ def test_mcp_tool_execute_error_is_caught():
 # discover_mcp_tools
 # --------------------------------------------------------------------------- #
 def test_discover_mcp_tools_builds_tools(monkeypatch):
-    monkeypatch.setattr(mcp, "_load_mcp_config", lambda config: {
-        "mcp": {"srv": {"url": "https://srv.example.com/mcp"}}
-    })
+    monkeypatch.setattr(
+        mcp,
+        "_load_mcp_config",
+        lambda config: {"mcp": {"srv": {"url": "https://srv.example.com/mcp"}}},
+    )
 
     class _FakeClient:
         def __init__(self, *a, **k):
@@ -369,9 +408,11 @@ def test_discover_mcp_tools_builds_tools(monkeypatch):
             pass
 
         def list_tools(self):
-            return [{"name": "alpha", "description": "d", "inputSchema": {}},
-                    {"not": "a-name"},  # skipped (no name)
-                    "nope"]             # skipped (not a dict)
+            return [
+                {"name": "alpha", "description": "d", "inputSchema": {}},
+                {"not": "a-name"},  # skipped (no name)
+                "nope",
+            ]  # skipped (not a dict)
 
         def close(self):
             pass
@@ -382,9 +423,11 @@ def test_discover_mcp_tools_builds_tools(monkeypatch):
 
 
 def test_discover_mcp_tools_skips_failing_server(monkeypatch):
-    monkeypatch.setattr(mcp, "_load_mcp_config", lambda config: {
-        "mcp": {"srv": {"url": "https://srv.example.com/mcp"}}
-    })
+    monkeypatch.setattr(
+        mcp,
+        "_load_mcp_config",
+        lambda config: {"mcp": {"srv": {"url": "https://srv.example.com/mcp"}}},
+    )
     closed = {"v": False}
 
     class _BoomClient:
@@ -404,9 +447,11 @@ def test_discover_mcp_tools_skips_failing_server(monkeypatch):
 
 def test_discover_mcp_tools_enforces_cap(monkeypatch):
     monkeypatch.setattr(mcp, "_MAX_TOTAL_TOOLS", 2)
-    monkeypatch.setattr(mcp, "_load_mcp_config", lambda config: {
-        "mcp": {"srv": {"url": "https://srv.example.com/mcp"}}
-    })
+    monkeypatch.setattr(
+        mcp,
+        "_load_mcp_config",
+        lambda config: {"mcp": {"srv": {"url": "https://srv.example.com/mcp"}}},
+    )
 
     class _ManyClient:
         def __init__(self, *a, **k):

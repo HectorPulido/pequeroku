@@ -71,8 +71,9 @@ class FakeVMClient:
 _MISSING = object()  # sentinel: simulate a container that does not exist
 
 
-def _patch_consumer(monkeypatch, *, owns=True, owns_error=False, vm_client=None,
-                    container=_MISSING):
+def _patch_consumer(
+    monkeypatch, *, owns=True, owns_error=False, vm_client=None, container=_MISSING
+):
     # Resolve the container the consumer will "find". Default: a fake namespace.
     # Mock _get_container_with_node too so NO real DB read happens in a worker
     # thread (which would deadlock against the test's SQLite transaction lock).
@@ -200,20 +201,29 @@ def test_editor_handlers_happy_path(monkeypatch):
         assert msg["event"] == "ok" and msg["data"]["entries"][0]["name"] == "a.py"
 
         # read_file (rev injected from stubbed _get_rev)
-        await comm.send_json_to({"action": "read_file", "req_id": 2, "path": "/app/a.py"})
+        await comm.send_json_to(
+            {"action": "read_file", "req_id": 2, "path": "/app/a.py"}
+        )
         msg = await comm.receive_json_from()
         assert msg["data"]["content"] == "print(1)" and msg["data"]["rev"] == 5
 
         # create_dir (broadcasts file_changed AND replies ok)
-        await comm.send_json_to({"action": "create_dir", "req_id": 3, "path": "/app/sub"})
+        await comm.send_json_to(
+            {"action": "create_dir", "req_id": 3, "path": "/app/sub"}
+        )
         replies = [await comm.receive_json_from(), await comm.receive_json_from()]
         events = {r["event"] for r in replies}
         assert {"file_changed", "ok"} <= events
 
         # write_file, no conflict (prev_rev=0 skips the check)
         await comm.send_json_to(
-            {"action": "write_file", "req_id": 4, "path": "/app/a.py",
-             "content": "x=2", "prev_rev": 0}
+            {
+                "action": "write_file",
+                "req_id": 4,
+                "path": "/app/a.py",
+                "content": "x=2",
+                "prev_rev": 0,
+            }
         )
         replies = [await comm.receive_json_from(), await comm.receive_json_from()]
         assert any(r["event"] == "ok" and r.get("rev") == 6 for r in replies)
@@ -233,7 +243,9 @@ def test_editor_handlers_happy_path(monkeypatch):
         assert any(r["event"] == "path_moved" for r in replies)
 
         # delete_path
-        await comm.send_json_to({"action": "delete_path", "req_id": 7, "path": "/app/b.py"})
+        await comm.send_json_to(
+            {"action": "delete_path", "req_id": 7, "path": "/app/b.py"}
+        )
         replies = [await comm.receive_json_from(), await comm.receive_json_from()]
         assert any(r["event"] == "path_deleted" for r in replies)
 
@@ -252,11 +264,18 @@ def test_editor_write_conflict(monkeypatch):
         await comm.receive_json_from()  # connected
         # current rev is stubbed to 5; prev_rev=3 mismatches -> conflict
         await comm.send_json_to(
-            {"action": "write_file", "req_id": 1, "path": "/app/a.py",
-             "content": "x", "prev_rev": 3}
+            {
+                "action": "write_file",
+                "req_id": 1,
+                "path": "/app/a.py",
+                "content": "x",
+                "prev_rev": 3,
+            }
         )
         msg = await comm.receive_json_from()
-        assert msg["event"] == "error" and msg["error"] == "conflict" and msg["rev"] == 5
+        assert (
+            msg["event"] == "error" and msg["error"] == "conflict" and msg["rev"] == 5
+        )
         await comm.disconnect()
 
     asyncio.run(_main())
@@ -274,7 +293,9 @@ def test_editor_unknown_action_and_bad_path(monkeypatch):
         assert msg["event"] == "error" and "unknown action" in msg["error"]
 
         # path outside /app raises ValueError -> surfaced as error
-        await comm.send_json_to({"action": "read_file", "req_id": 2, "path": "/etc/passwd"})
+        await comm.send_json_to(
+            {"action": "read_file", "req_id": 2, "path": "/etc/passwd"}
+        )
         msg = await comm.receive_json_from()
         assert msg["event"] == "error" and "under /app" in msg["error"]
 

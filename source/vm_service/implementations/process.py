@@ -97,7 +97,13 @@ def start_process(vm: VMRecord, command: str, cwd: str = "/app") -> dict[str, ob
         # caller relaunches and a second `apt-get`/`pip` collides on the dpkg lock.
         pid = _read_pid_file(vm, pidf)
         if pid is not None:
-            return {"ok": True, "job_id": job_id, "pid": pid, "log_path": log, "reason": ""}
+            return {
+                "ok": True,
+                "job_id": job_id,
+                "pid": pid,
+                "log_path": log,
+                "reason": "",
+            }
         return {
             "ok": False,
             "job_id": job_id,
@@ -146,10 +152,10 @@ def process_status(
     wait_block = ""
     if wait > 0:
         wait_block = (
-            f'PID=$(cat {qpid} 2>/dev/null); '
+            f"PID=$(cat {qpid} 2>/dev/null); "
             f'if [ -n "$PID" ]; then i=0; '
             f'while [ "$i" -lt {wait} ]; do kill -0 "$PID" 2>/dev/null || break; '
-            f'sleep 2; i=$((i+2)); done; fi; '
+            f"sleep 2; i=$((i+2)); done; fi; "
         )
 
     # Log slice: a byte offset (delta polling) when since_bytes is given, else the
@@ -166,7 +172,7 @@ def process_status(
         f'if kill -0 "$PID" 2>/dev/null; then echo "STATUS running $PID"; '
         f'else echo "STATUS exited $PID"; fi; '
         f"else echo 'STATUS unknown 0'; fi; "
-        f"SZ=$(wc -c < {qlog} 2>/dev/null || echo 0); echo \"SIZE $SZ\"; "
+        f'SZ=$(wc -c < {qlog} 2>/dev/null || echo 0); echo "SIZE $SZ"; '
         f"echo '---LOG---'; {log_slice}"
     )
     # The exec timeout must outlast the wait loop.

@@ -157,7 +157,9 @@ def test_start_vm_skips_seed_when_cloud_init_disabled(monkeypatch, tmp_path):
     seed_called = {"n": 0}
     monkeypatch.setattr(qvm, "make_overlay", lambda *a, **k: None)
     monkeypatch.setattr(
-        qvm, "make_seed_iso", lambda *a, **k: seed_called.__setitem__("n", seed_called["n"] + 1)
+        qvm,
+        "make_seed_iso",
+        lambda *a, **k: seed_called.__setitem__("n", seed_called["n"] + 1),
     )
     monkeypatch.setattr(qvm.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(qvm, "wait_ssh", lambda **kwargs: True)

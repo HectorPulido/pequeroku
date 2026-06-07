@@ -21,10 +21,22 @@ from ai_services.minicode.tools import shell as sh
 class FakeVMClient:
     def __init__(self):
         self.exec_resp = {"ok": True, "stdout": "out\n", "stderr": "", "reason": ""}
-        self.start_resp = {"ok": True, "job_id": "j1", "pid": 42,
-                           "log_path": "/app/.pequeroku/jobs/j1.log", "reason": ""}
-        self.status_resp = {"ok": True, "job_id": "j1", "status": "running", "pid": 42,
-                            "log": "server up\n", "log_size": 10, "reason": ""}
+        self.start_resp = {
+            "ok": True,
+            "job_id": "j1",
+            "pid": 42,
+            "log_path": "/app/.pequeroku/jobs/j1.log",
+            "reason": "",
+        }
+        self.status_resp = {
+            "ok": True,
+            "job_id": "j1",
+            "status": "running",
+            "pid": 42,
+            "log": "server up\n",
+            "log_size": 10,
+            "reason": "",
+        }
         self.stop_resp = {"ok": True, "job_id": "j1", "status": "stopped", "reason": ""}
         self.calls = []
 
@@ -49,7 +61,9 @@ def make_ctx(client):
     config = Config(api_key="k", base_url="u", model="m", workdir="/app")
     config.container = SimpleNamespace(container_id="vm-1", node=object())
     config._vm_client = client
-    return ToolContext(config=config, session=Session(), spawn_subagent=lambda *a: iter(()))
+    return ToolContext(
+        config=config, session=Session(), spawn_subagent=lambda *a: iter(())
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -60,13 +74,16 @@ def _no_sleep(monkeypatch):
 # --------------------------------------------------------------------------- #
 # _looks_long_running / _recursive_rm_targets pure helpers
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("cmd", [
-    "pip install flask",
-    "apt-get install -y curl",
-    "npm install",
-    "cargo build",
-    "docker build .",
-])
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "pip install flask",
+        "apt-get install -y curl",
+        "npm install",
+        "cargo build",
+        "docker build .",
+    ],
+)
 def test_looks_long_running_true(cmd):
     assert sh._looks_long_running(cmd)
 
@@ -96,7 +113,9 @@ def test_bash_foreground_failure_suggests_background():
 def test_bash_explicit_timeout_stays_foreground():
     client = FakeVMClient()
     # Long-running verb BUT an explicit timeout -> caller wants foreground.
-    sh.BashTool().execute({"command": "pip install x", "timeout": 5000}, make_ctx(client))
+    sh.BashTool().execute(
+        {"command": "pip install x", "timeout": 5000}, make_ctx(client)
+    )
     assert client.calls[0][0] == "exec"  # not promoted to background
 
 
@@ -188,8 +207,13 @@ def test_process_status_first_then_delta():
     assert client.calls[0] == ("status", "j1", None, 0)
 
     # Second check: offset is set; no new output -> "(no new output...)".
-    client.status_resp = {"ok": True, "status": "running", "pid": 42, "log": "",
-                          "log_size": 10}
+    client.status_resp = {
+        "ok": True,
+        "status": "running",
+        "pid": 42,
+        "log": "",
+        "log_size": 10,
+    }
     out2 = sh.ProcessTool().execute({"job_id": "j1", "action": "status"}, ctx)
     assert "(no new output since last check)" in out2
     assert client.calls[1] == ("status", "j1", 10, 0)
@@ -207,8 +231,13 @@ def test_process_wait_widens_and_blocks():
 
 def test_process_exited_drops_job_from_registry():
     client = FakeVMClient()
-    client.status_resp = {"ok": True, "status": "exited", "pid": 42, "log": "done\n",
-                         "log_size": 5}
+    client.status_resp = {
+        "ok": True,
+        "status": "exited",
+        "pid": 42,
+        "log": "done\n",
+        "log_size": 5,
+    }
     ctx = make_ctx(client)
     ctx.config._bg_jobs = {"j1": "python3 server.py"}
     out = sh.ProcessTool().execute({"job_id": "j1", "action": "status"}, ctx)

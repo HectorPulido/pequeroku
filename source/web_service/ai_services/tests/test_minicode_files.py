@@ -42,10 +42,14 @@ class FakeVMClient:
         out = []
         for p in self.fs:
             if self._under(p, root) and p != root:
-                out.append({"path": p, "name": p.rsplit("/", 1)[-1], "path_type": "file"})
+                out.append(
+                    {"path": p, "name": p.rsplit("/", 1)[-1], "path_type": "file"}
+                )
         for p, _ in self.dirs.items():
             if self._under(p, root) and p != root:
-                out.append({"path": p, "name": p.rsplit("/", 1)[-1], "path_type": "directory"})
+                out.append(
+                    {"path": p, "name": p.rsplit("/", 1)[-1], "path_type": "directory"}
+                )
         return out
 
     def search(self, cid, req):
@@ -63,7 +67,9 @@ def make_ctx(client):
     config = Config(api_key="k", base_url="u", model="m", workdir="/app")
     config.container = SimpleNamespace(container_id="vm-1", node=object())
     config._vm_client = client
-    return ToolContext(config=config, session=Session(), spawn_subagent=lambda *a: iter(()))
+    return ToolContext(
+        config=config, session=Session(), spawn_subagent=lambda *a: iter(())
+    )
 
 
 # --------------------------------------------------------------------------- #

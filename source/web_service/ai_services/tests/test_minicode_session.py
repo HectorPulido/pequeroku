@@ -26,7 +26,9 @@ def test_save_and_load_roundtrip(tmp_path):
     restored = Session.load(path)
     assert restored.last_assistant_text() == "hi there"
     assert restored.todos == [{"content": "do x", "status": "pending"}]
-    assert any(m["role"] == "user" and m["content"] == "hello" for m in restored.messages)
+    assert any(
+        m["role"] == "user" and m["content"] == "hello" for m in restored.messages
+    )
 
 
 def test_save_swallows_unwritable_path(tmp_path):
@@ -64,8 +66,11 @@ def test_load_sanitizes_dangling_tool_calls(tmp_path):
                         "role": "assistant",
                         "content": "",
                         "tool_calls": [
-                            {"id": "c1", "type": "function",
-                             "function": {"name": "read", "arguments": "{}"}}
+                            {
+                                "id": "c1",
+                                "type": "function",
+                                "function": {"name": "read", "arguments": "{}"},
+                            }
                         ],
                     },
                 ],

@@ -44,7 +44,11 @@ class FakeVMClient:
         if self.fail_read:
             raise RuntimeError("boom read")
         found = path in self.fs
-        return {"name": path.rsplit("/", 1)[-1], "content": self.fs.get(path, ""), "found": found}
+        return {
+            "name": path.rsplit("/", 1)[-1],
+            "content": self.fs.get(path, ""),
+            "found": found,
+        }
 
     def list_dirs(self, cid, paths):
         if self.fail_list:
@@ -53,7 +57,9 @@ class FakeVMClient:
         out = []
         for p in self.fs:
             if self._under(p, root) and p != root:
-                out.append({"path": p, "name": p.rsplit("/", 1)[-1], "path_type": "file"})
+                out.append(
+                    {"path": p, "name": p.rsplit("/", 1)[-1], "path_type": "file"}
+                )
         return out
 
     def execute_sh(self, cid, command, timeout=None):
@@ -75,7 +81,9 @@ def make_config(client: FakeVMClient | None = None) -> Config:
 
 def make_ctx(client: FakeVMClient, config: Config | None = None) -> ToolContext:
     config = config or make_config(client)
-    return ToolContext(config=config, session=Session(), spawn_subagent=lambda *a: iter(()))
+    return ToolContext(
+        config=config, session=Session(), spawn_subagent=lambda *a: iter(())
+    )
 
 
 def drive(gen):
@@ -94,7 +102,7 @@ def drive(gen):
 def test_parse_frontmatter_reads_top_level_keys_and_ignores_nested():
     text = (
         "---\n"
-        'name: my-skill\n'
+        "name: my-skill\n"
         'description: "does a thing"\n'
         "metadata:\n"
         "  nested: ignored\n"
@@ -152,9 +160,9 @@ def test_discover_skills_without_container_returns_only_builtins():
 
 def test_discover_skills_includes_valid_project_skill():
     client = FakeVMClient()
-    client.fs["/app/.pequenin/skills/deploy/SKILL.md"] = (
-        "---\nname: deploy\ndescription: Deploy the app\n---\nRun deploy steps."
-    )
+    client.fs[
+        "/app/.pequenin/skills/deploy/SKILL.md"
+    ] = "---\nname: deploy\ndescription: Deploy the app\n---\nRun deploy steps."
     config = make_config(client)
     found = {s.name: s for s in skills_mod.discover_skills(config)}
     assert "deploy" in found
@@ -165,9 +173,9 @@ def test_discover_skills_includes_valid_project_skill():
 def test_discover_skills_project_overrides_builtin():
     client = FakeVMClient()
     # Same name as a builtin -> the project skill must win.
-    client.fs["/app/.pequenin/skills/authoring-skills/SKILL.md"] = (
-        "---\nname: authoring-skills\ndescription: My override\n---\nOverridden."
-    )
+    client.fs[
+        "/app/.pequenin/skills/authoring-skills/SKILL.md"
+    ] = "---\nname: authoring-skills\ndescription: My override\n---\nOverridden."
     config = make_config(client)
     found = {s.name: s for s in skills_mod.discover_skills(config)}
     assert found["authoring-skills"].source == "project"
@@ -177,20 +185,20 @@ def test_discover_skills_project_overrides_builtin():
 def test_discover_skills_skips_invalid_manifests():
     client = FakeVMClient()
     # name != folder
-    client.fs["/app/.pequenin/skills/folderA/SKILL.md"] = (
-        "---\nname: not-folderA\ndescription: x\n---\nbody"
-    )
+    client.fs[
+        "/app/.pequenin/skills/folderA/SKILL.md"
+    ] = "---\nname: not-folderA\ndescription: x\n---\nbody"
     # missing description
-    client.fs["/app/.pequenin/skills/nodesc/SKILL.md"] = (
-        "---\nname: nodesc\n---\nbody"
-    )
+    client.fs["/app/.pequenin/skills/nodesc/SKILL.md"] = "---\nname: nodesc\n---\nbody"
     # bad name (uppercase)
-    client.fs["/app/.pequenin/skills/BadName/SKILL.md"] = (
-        "---\nname: BadName\ndescription: x\n---\nbody"
-    )
+    client.fs[
+        "/app/.pequenin/skills/BadName/SKILL.md"
+    ] = "---\nname: BadName\ndescription: x\n---\nbody"
     config = make_config(client)
     names = {s.name for s in skills_mod.discover_skills(config)}
-    assert "not-folderA" not in names and "nodesc" not in names and "BadName" not in names
+    assert (
+        "not-folderA" not in names and "nodesc" not in names and "BadName" not in names
+    )
 
 
 def test_discover_skills_survives_vm_list_error():
@@ -229,8 +237,12 @@ def test_load_skill_body_builtin_returns_wrapped_body():
     config = make_config(None)
     config.skills = [
         skills_mod.Skill(
-            name="x", description="d", path="builtin:x", base_dir="",
-            source="builtin", body="THE BODY",
+            name="x",
+            description="d",
+            path="builtin:x",
+            base_dir="",
+            source="builtin",
+            body="THE BODY",
         )
     ]
     out = skills_mod.load_skill_body(config, "x")
@@ -241,14 +253,15 @@ def test_load_skill_body_builtin_returns_wrapped_body():
 
 def test_load_skill_body_project_reads_vm_and_lists_files():
     client = FakeVMClient()
-    client.fs["/app/.pequenin/skills/deploy/SKILL.md"] = (
-        "---\nname: deploy\ndescription: d\n---\nBODY TEXT"
-    )
+    client.fs[
+        "/app/.pequenin/skills/deploy/SKILL.md"
+    ] = "---\nname: deploy\ndescription: d\n---\nBODY TEXT"
     client.fs["/app/.pequenin/skills/deploy/scripts/run.sh"] = "echo hi"
     config = make_config(client)
     config.skills = [
         skills_mod.Skill(
-            name="deploy", description="d",
+            name="deploy",
+            description="d",
             path="/app/.pequenin/skills/deploy/SKILL.md",
             base_dir="/app/.pequenin/skills/deploy",
         )
@@ -262,7 +275,9 @@ def test_load_skill_body_project_reads_vm_and_lists_files():
 def test_load_skill_body_project_no_container():
     config = make_config(None)
     config.skills = [
-        skills_mod.Skill(name="deploy", description="d", path="/p/SKILL.md", base_dir="/p")
+        skills_mod.Skill(
+            name="deploy", description="d", path="/p/SKILL.md", base_dir="/p"
+        )
     ]
     assert "no VM is bound" in skills_mod.load_skill_body(config, "deploy")
 
@@ -287,8 +302,11 @@ def test_custom_tool_execute_success_returns_combined_output():
     client = FakeVMClient(exec_ok=True)
     ctx = make_ctx(client)
     tool = ct_mod.CustomTool(
-        "run-linter", "desc", {"type": "object", "properties": {}},
-        "python3 run.py", "/app/.pequenin/tools/run-linter",
+        "run-linter",
+        "desc",
+        {"type": "object", "properties": {}},
+        "python3 run.py",
+        "/app/.pequenin/tools/run-linter",
     )
     out = tool.execute({"path": "src"}, ctx)
     assert "out" in out and "err" in out
@@ -427,8 +445,14 @@ def test_config_from_env_reads_values(monkeypatch):
 def test_config_from_env_defaults(monkeypatch):
     monkeypatch.setattr("ai_services.minicode.config.load_dotenv", lambda *a, **k: None)
     for key in (
-        "OPENAI_API_KEY", "MINICODE_API_KEY", "OPENAI_BASE_URL", "MINICODE_BASE_URL",
-        "MINICODE_MODEL", "OPENAI_MODEL", "MINICODE_TEMPERATURE", "MINICODE_MAX_TOKENS",
+        "OPENAI_API_KEY",
+        "MINICODE_API_KEY",
+        "OPENAI_BASE_URL",
+        "MINICODE_BASE_URL",
+        "MINICODE_MODEL",
+        "OPENAI_MODEL",
+        "MINICODE_TEMPERATURE",
+        "MINICODE_MAX_TOKENS",
         "MINICODE_RESTRICT_WORKDIR",
     ):
         monkeypatch.delenv(key, raising=False)
@@ -448,8 +472,12 @@ def test_skill_tool_loads_builtin_body():
     config = make_config(None)
     config.skills = [
         skills_mod.Skill(
-            name="x", description="d", path="builtin:x", base_dir="",
-            source="builtin", body="LOADED",
+            name="x",
+            description="d",
+            path="builtin:x",
+            base_dir="",
+            source="builtin",
+            body="LOADED",
         )
     ]
     ctx = make_ctx(FakeVMClient(), config=config)  # client present so audit path runs
@@ -460,7 +488,9 @@ def test_skill_tool_loads_builtin_body():
 def test_skill_tool_unknown_skill_returns_error():
     config = make_config(None)
     config.skills = []
-    ctx = ToolContext(config=config, session=Session(), spawn_subagent=lambda *a: iter(()))
+    ctx = ToolContext(
+        config=config, session=Session(), spawn_subagent=lambda *a: iter(())
+    )
     out = SkillTool().execute({"name": "ghost"}, ctx)
     assert "unknown skill 'ghost'" in out
 
@@ -502,7 +532,11 @@ def test_task_tool_delegates_and_wraps_report():
     ctx = ToolContext(config=make_config(None), session=Session(), spawn_subagent=spawn)
     events, ret = drive(
         TaskTool().execute(
-            {"description": "find x", "prompt": "do the thing", "subagent_type": "explore"},
+            {
+                "description": "find x",
+                "prompt": "do the thing",
+                "subagent_type": "explore",
+            },
             ctx,
         )
     )

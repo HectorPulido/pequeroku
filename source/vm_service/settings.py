@@ -28,7 +28,9 @@ VM_TASKSET_CPUS: str = os.environ.get("VM_TASKSET_CPUS", "")
 # VM_BASE_IMAGE is a pre-baked golden image (user + SSH key + sshd config already
 # inside, cloud-init disabled) so VMs skip the ~40s cloud-init pipeline and SSH is
 # ready as soon as sshd starts. See scripts/build-golden.sh.
-VM_USE_CLOUD_INIT: bool = os.environ.get("VM_USE_CLOUD_INIT", "true").strip().lower() in (
+VM_USE_CLOUD_INIT: bool = os.environ.get(
+    "VM_USE_CLOUD_INIT", "true"
+).strip().lower() in (
     "1",
     "true",
     "yes",

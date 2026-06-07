@@ -39,8 +39,12 @@ def _make_template(slug="default"):
     # test controls the template (and its items) deterministically.
     FileTemplate.objects.filter(slug=slug).delete()
     tpl = FileTemplate.objects.create(name=f"tpl-{slug}", slug=slug)
-    FileTemplateItem.objects.create(template=tpl, path="/app/a.py", content="print(1)", order=1)
-    FileTemplateItem.objects.create(template=tpl, path="/app/b.py", content="print(2)", order=0)
+    FileTemplateItem.objects.create(
+        template=tpl, path="/app/a.py", content="print(1)", order=1
+    )
+    FileTemplateItem.objects.create(
+        template=tpl, path="/app/b.py", content="print(2)", order=0
+    )
     return tpl
 
 

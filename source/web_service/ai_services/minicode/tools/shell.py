@@ -233,7 +233,10 @@ class BashTool(Tool):
         targets = _recursive_rm_targets(command)
         if targets is not None:
             for t in targets:
-                if _norm_target(t) in _DANGEROUS_RM_TARGETS or t in _DANGEROUS_RM_TARGETS:
+                if (
+                    _norm_target(t) in _DANGEROUS_RM_TARGETS
+                    or t in _DANGEROUS_RM_TARGETS
+                ):
                     return (
                         f"Refused: `rm -rf {t}` targets a critical path and would wipe "
                         "the workspace/home. If you meant a specific subfolder, delete "
@@ -242,7 +245,9 @@ class BashTool(Tool):
             # Don't delete a directory a background job we launched is still writing
             # into — that is exactly what corrupts a venv mid-install.
             for jid, jcmd in list(_jobs(ctx).items()):
-                if not any(_norm_target(t) and _norm_target(t) in jcmd for t in targets):
+                if not any(
+                    _norm_target(t) and _norm_target(t) in jcmd for t in targets
+                ):
                     continue
                 try:
                     st = client.process_status(cid, jid, lines=1)
@@ -269,7 +274,12 @@ class BashTool(Tool):
 
     # ------------------------------------------------------------------ #
     def _run_background(
-        self, client, cid: str, run_cmd: str, command: str, ctx: ToolContext | None = None
+        self,
+        client,
+        cid: str,
+        run_cmd: str,
+        command: str,
+        ctx: ToolContext | None = None,
     ) -> str:
         resp = client.start_process(cid, run_cmd)
         resp = resp if isinstance(resp, dict) else {}
@@ -328,7 +338,7 @@ class BashTool(Tool):
         msg = (
             f"Started in background. job_id={job_id} pid={pid} status={status}.\n"
             f"Log: {log_path}\n"
-            f'WAIT for it (one call, blocks until it finishes): '
+            f"WAIT for it (one call, blocks until it finishes): "
             f'process(job_id="{job_id}", action="wait")  ·  '
             f'Peek without blocking: process(job_id="{job_id}", action="status")  ·  '
             f'Stop: process(job_id="{job_id}", action="stop")'

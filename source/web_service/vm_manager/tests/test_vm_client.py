@@ -430,7 +430,12 @@ def test_process_lifecycle_endpoints():
     # status with delta polling + server-side wait widens the http timeout
     client.process_status("vm-1", "j1", lines=20, since_bytes=100, wait=120)
     assert session.last_url.endswith("/vms/vm-1/process-status")
-    assert session.last_json == {"job_id": "j1", "lines": 20, "since_bytes": 100, "wait": 120}
+    assert session.last_json == {
+        "job_id": "j1",
+        "lines": 20,
+        "since_bytes": 100,
+        "wait": 120,
+    }
     assert session.last_timeout == max(client.timeout, 145.0)
 
     # plain status: no since_bytes / wait keys
@@ -466,7 +471,9 @@ def test_fs_endpoints_list_read_create_search():
 
     client.search("vm-1", SearchRequest(pattern="TODO", root="/app"))
     assert session.last_url.endswith("/vms/vm-1/search")
-    assert session.last_json["pattern"] == "TODO" and session.last_json["root"] == "/app"
+    assert (
+        session.last_json["pattern"] == "TODO" and session.last_json["root"] == "/app"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -506,8 +513,9 @@ def test_set_healthy_false_marks_unhealthy_on_bad_health():
     node = create_node(healthy=True)
     session = FakeSession()
     # /health returns not-ok -> node marked unhealthy
-    session.queue.append(FakeResponse(ok=False, status_code=503, content=b"x",
-                                      json_data={"ok": "False"}))
+    session.queue.append(
+        FakeResponse(ok=False, status_code=503, content=b"x", json_data={"ok": "False"})
+    )
     client = VMServiceClient(node=node, session=session, blocking=True)
     client.set_healthy(False)
     node.refresh_from_db()
