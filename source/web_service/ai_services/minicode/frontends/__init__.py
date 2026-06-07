@@ -1,7 +1,7 @@
-"""Adaptadores de interfaz (frontends) para el core de mini-code.
+"""Interface adapters (frontends) for the mini-code core.
 
-El core (``minicode.agent``) no conoce ninguna interfaz: hace ``yield`` de eventos
-(``minicode.events``). Cada frontend de este paquete CONSUME ese stream de eventos
-y lo materializa a su manera. Aquí vive el de terminal; una web (SSE/websocket) o
-una API JSON serían módulos hermanos que reutilizan el mismo core sin tocarlo.
+The core (``minicode.agent``) knows about no interface: it ``yield``s events
+(``minicode.events``). Each frontend in this package CONSUMES that event stream and
+materializes it its own way. The terminal one lives here; a web app (SSE/websocket)
+or a JSON API would be sibling modules that reuse the same core without touching it.
 """

@@ -1,11 +1,11 @@
-"""Configuración del agente.
+"""Agent configuration.
 
-Adaptación Pequeroku: el agente NO opera sobre el filesystem local sino sobre una
-VM remota (vía ``VMServiceClient``). Las credenciales/modelo las inyecta el wrapper
-de Django (``frontends.pipeline``) leyéndolas de la tabla ``Config`` de la DB; el
-``container`` se transporta aquí para que las tools puedan hablar con su VM.
+Pequeroku adaptation: the agent does NOT operate on the local filesystem but on a
+remote VM (via ``VMServiceClient``). The credentials/model are injected by the
+Django wrapper (``frontends.pipeline``), which reads them from the DB's ``Config``
+table; the ``container`` is carried here so the tools can talk to their VM.
 
-Sigue siendo compatible con cualquier endpoint estilo OpenAI cambiando ``base_url``.
+It remains compatible with any OpenAI-style endpoint by changing ``base_url``.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import Any
 
 
 def load_dotenv(path: str = ".env") -> None:
-    """Cargador .env mínimo (sin dependencias). No pisa variables ya definidas."""
+    """Minimal .env loader (no dependencies). Does not override already-set variables."""
     p = Path(path)
     if not p.exists():
         return
@@ -37,31 +37,31 @@ class Config:
     max_steps: int = 50
     temperature: float | None = None
     max_output_tokens: int | None = None
-    # En Pequeroku el área de trabajo es la VM del usuario, anclada en /app.
+    # In Pequeroku the workspace is the user's VM, anchored at /app.
     workdir: str = "/app"
-    # El workdir es siempre el área principal. Por defecto SÍ se permite leer/editar
-    # fuera de él si la tarea lo requiere; con restrict_to_workdir=True se prohíbe (muro duro).
+    # The workdir is always the primary area. By default reading/editing OUTSIDE it
+    # IS allowed when the task requires it; restrict_to_workdir=True forbids it (hard wall).
     restrict_to_workdir: bool = False
-    # Container (vm_manager.models.Container) sobre el que operan las tools. Lo fija
-    # el wrapper de Django; los subagentes heredan el mismo objeto (misma VM).
+    # Container (vm_manager.models.Container) the tools operate on. Set by the Django
+    # wrapper; subagents inherit the same object (same VM).
     container: Any = None
-    # Timeout (s) por defecto para comandos foreground vía execute_sh.
+    # Default timeout (s) for foreground commands via execute_sh.
     foreground_timeout: int = 25
-    # ---- Contexto de proyecto por turno (lo carga el pipeline UNA vez, en el hilo
-    # worker, leyendo de la VM; ``build_system`` solo concatena, sin I/O). ----
-    # Contenido de AGENTS.md/CLAUDE.md ya envuelto con su encabezado "Instructions
-    # from:", o None si el proyecto no tiene archivo de instrucciones.
+    # ---- Per-turn project context (loaded by the pipeline ONCE, in the worker
+    # thread, reading from the VM; ``build_system`` only concatenates, no I/O). ----
+    # Contents of AGENTS.md/CLAUDE.md already wrapped with its "Instructions from:"
+    # header, or None if the project has no instructions file.
     project_doc: str | None = None
-    # Skills descubiertos para este turno (list[skills.Skill]). Tipado laxo para no
-    # importar el módulo skills aquí (los subagentes heredan el mismo Config).
+    # Skills discovered for this turn (list[skills.Skill]). Loosely typed to avoid
+    # importing the skills module here (subagents inherit the same Config).
     skills: list = field(default_factory=list)
-    # Tools MCP (remotas) descubiertas para este turno (list[mcp.McpTool], ya con su
-    # cliente HTTP conectado). El Agent las añade a su toolset; los subagentes
-    # build/general heredan el mismo Config y, por tanto, las mismas tools.
+    # MCP (remote) tools discovered for this turn (list[mcp.McpTool], with their HTTP
+    # client already connected). The Agent adds them to its toolset; build/general
+    # subagents inherit the same Config and therefore the same tools.
     mcp_tools: list = field(default_factory=list)
-    # Custom tools (definidas por el usuario en /app/.pequenin/tools/, ejecutadas en
-    # la VM) descubiertas para este turno (list[custom_tools.CustomTool]). Mismo
-    # tratamiento que mcp_tools: se añaden al toolset de build/general.
+    # Custom tools (defined by the user under /app/.pequenin/tools/, executed in the
+    # VM) discovered for this turn (list[custom_tools.CustomTool]). Same treatment as
+    # mcp_tools: they are added to the build/general toolset.
     custom_tools: list = field(default_factory=list)
 
     @classmethod

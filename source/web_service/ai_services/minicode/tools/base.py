@@ -1,8 +1,8 @@
-"""Modelo común de una herramienta + truncado de salida.
+"""Common model of a tool + output truncation.
 
-Equivale a ``tool/tool.ts`` y ``tool/truncate.ts`` de opencode: una interfaz
-uniforme (``Tool``), el ``ToolContext`` que recibe ``execute``, y el truncado
-automático para que una salida enorme no reviente la ventana de contexto.
+Equivalent to opencode's ``tool/tool.ts`` and ``tool/truncate.ts``: a uniform
+interface (``Tool``), the ``ToolContext`` that ``execute`` receives, and automatic
+truncation so a huge output doesn't blow up the context window.
 """
 
 from __future__ import annotations
@@ -39,17 +39,17 @@ def truncate(
 
 @dataclass
 class ToolContext:
-    """Lo que cada herramienta necesita para interactuar con la sesión.
+    """What each tool needs to interact with the session.
 
-    Las tools NO conocen la interfaz: si necesitan comunicar algo a la UI
-    (``todowrite``, ``task``), su ``execute`` es un *generador* que hace ``yield``
-    de eventos del core (ver ``minicode.events``); el ``Agent`` los reenvía.
+    Tools do NOT know the interface: if they need to communicate something to the UI
+    (``todowrite``, ``task``), their ``execute`` is a *generator* that ``yield``s
+    core events (see ``minicode.events``); the ``Agent`` forwards them.
     """
 
     config: Any
     session: Any
-    # Generador: hace ``yield`` de los eventos del subagente y ``return`` de su
-    # reporte final. La tool ``task`` lo consume con ``yield from``.
+    # Generator: ``yield``s the subagent's events and ``return``s its final report.
+    # The ``task`` tool consumes it with ``yield from``.
     spawn_subagent: Callable[[str, str], Iterator[Any]]
 
 
@@ -61,12 +61,12 @@ class Tool:
 
     def execute(
         self, args: dict, ctx: ToolContext
-    ) -> str:  # pragma: no cover - interfaz
+    ) -> str:  # pragma: no cover - interface
         raise NotImplementedError
 
     @property
     def schema(self) -> dict:
-        """Formato de herramienta que entiende la API estilo OpenAI."""
+        """Tool format that the OpenAI-style API understands."""
         return {
             "type": "function",
             "function": {

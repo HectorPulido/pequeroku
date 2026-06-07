@@ -1,13 +1,13 @@
-"""Puente con el modelo (API estilo OpenAI), en streaming.
+"""Bridge to the model (OpenAI-style API), streaming.
 
-Equivale a ``session/llm.ts`` + el adaptador del stream de opencode, pero mucho
-más simple. Punto CLAVE de la arquitectura: NO delegamos el bucle multi-paso al
-SDK. Cada llamada a ``stream`` hace UN solo paso (una respuesta del modelo, que
-puede incluir tool-calls). El bucle "seguir hasta terminar" lo lleva ``Agent``.
+Equivalent to opencode's ``session/llm.ts`` + the stream adapter, but much
+simpler. KEY architectural point: we do NOT delegate the multi-step loop to the
+SDK. Each call to ``stream`` does ONE single step (one model response, which may
+include tool-calls). The "keep going until done" loop is driven by ``Agent``.
 
-``stream`` es un *generador*: hace ``yield`` de eventos de texto (sin saber nada
-de la interfaz) y, al terminar, ``return`` del mensaje final. El ``Agent`` lo
-consume con ``msg = yield from llm.stream(...)``.
+``stream`` is a *generator*: it ``yield``s text events (knowing nothing about the
+interface) and, when finished, ``return``s the final message. The ``Agent``
+consumes it with ``msg = yield from llm.stream(...)``.
 """
 
 from __future__ import annotations
@@ -20,19 +20,19 @@ from .events import AssistantTextDelta, AssistantTextEnd, AssistantTextStart, Ev
 
 class LLM:
     def __init__(self, config: Config) -> None:
-        from openai import OpenAI  # import perezoso: las tools no necesitan openai
+        from openai import OpenAI  # lazy import: the tools don't need openai
 
         self.config = config
-        # api_key dummy para endpoints locales que no la exigen (Ollama, etc.).
+        # dummy api_key for local endpoints that don't require it (Ollama, etc.).
         self.client = OpenAI(
             api_key=config.api_key or "sk-no-key", base_url=config.base_url
         )
 
     def stream(self, messages: list[dict], tools: list[dict] | None) -> Iterator[Event]:
-        """Un paso del modelo. Hace ``yield`` del texto en vivo (como eventos) y
-        acumula los tool-calls.
+        """One model step. ``yield``s the text live (as events) and accumulates the
+        tool-calls.
 
-        Generador: emite ``AssistantText*`` y ``return`` del mensaje final
+        Generator: emits ``AssistantText*`` and ``return``s the final message
         ``{"content": str, "tool_calls": [...], "usage": {...}|None}``.
         """
         kwargs: dict = {
@@ -40,8 +40,8 @@ class LLM:
             "messages": messages,
             "stream": True,
         }
-        # Pide el uso de tokens en el último chunk del stream. Si algún endpoint
-        # no lo soporta, simplemente no llegará y el conteo quedará en cero.
+        # Ask for token usage in the stream's last chunk. If an endpoint does not
+        # support it, it simply won't arrive and the count stays at zero.
         kwargs["stream_options"] = {"include_usage": True}
         if tools:
             kwargs["tools"] = tools
@@ -59,7 +59,7 @@ class LLM:
         usage: dict | None = None
 
         for chunk in stream:
-            # El chunk final de uso (include_usage) trae usage y choices vacío.
+            # The final usage chunk (include_usage) carries usage and empty choices.
             cu = getattr(chunk, "usage", None)
             if cu is not None:
                 usage = {
@@ -96,7 +96,7 @@ class LLM:
             yield AssistantTextEnd()
 
         ordered = [tool_calls[k] for k in sorted(tool_calls)]
-        for i, tc in enumerate(ordered):  # garantiza un id no vacío
+        for i, tc in enumerate(ordered):  # guarantee a non-empty id
             if not tc["id"]:
                 tc["id"] = f"call_{i}"
         return {"content": "".join(content), "tool_calls": ordered, "usage": usage}

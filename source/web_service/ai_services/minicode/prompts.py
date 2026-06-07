@@ -1,12 +1,12 @@
-"""Prompts de sistema. Equivalente miniatura de los ``.txt`` por proveedor de
-opencode: aquí un único prompt principal afinado para tool-use + persistencia,
-más prompts para subagentes y el aviso de fin de pasos.
+"""System prompts. Miniature equivalent of opencode's per-provider ``.txt`` files:
+here a single main prompt tuned for tool-use + persistence, plus prompts for
+subagents and the end-of-steps notice.
 
-Adaptado de opencode (https://github.com/anomalyco/opencode), licencia MIT,
-combinando sus prompts ``anthropic`` / ``beast`` / ``gpt`` / ``codex`` / ``gemini``
-y los de subagentes en uno solo, ajustado a la realidad de mini-code (autónomo,
-sin sistema de permisos, foco en el workdir, herramientas read/glob/grep/edit/
-write/bash/todowrite/task).
+Adapted from opencode (https://github.com/anomalyco/opencode), MIT license,
+combining its ``anthropic`` / ``beast`` / ``gpt`` / ``codex`` / ``gemini`` prompts
+and the subagent ones into a single one, tailored to mini-code's reality
+(autonomous, no permission system, focus on the workdir, tools
+read/glob/grep/edit/write/bash/todowrite/task).
 """
 
 SYSTEM_PROMPT = """You are Pequenin, a powerful autonomous coding agent inside Pequeroku — a PaaS \
@@ -230,7 +230,7 @@ work yourself. Return a concise report of what you did and any important finding
 references — it is your only message back, so make it self-contained."""
 
 
-# Inyectado cuando se alcanza max_steps: prohíbe herramientas y obliga a resumir.
+# Injected when max_steps is reached: forbids tools and forces a summary.
 MAX_STEPS_PROMPT = """CRITICAL — you have reached the maximum number of tool steps for this turn. Tools \
 are now disabled. Do NOT call any more tools; respond with text only. This overrides all other \
 instructions, including any request to keep editing. Give the user a concise summary that includes: \

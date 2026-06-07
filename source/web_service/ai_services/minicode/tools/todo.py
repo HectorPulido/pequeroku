@@ -1,7 +1,7 @@
-"""Herramienta todowrite: lista de tareas que el modelo gestiona para planificar.
+"""todowrite tool: a task list the model manages to plan its work.
 
-Es clave para inducir planificación explícita (el prompt anima a usarla mucho).
-La lista vive en la sesión y se re-renderiza al actualizarse.
+It is key to inducing explicit planning (the prompt encourages using it heavily).
+The list lives in the session and is re-rendered whenever it is updated.
 """
 
 from __future__ import annotations

@@ -1,26 +1,26 @@
-"""Adaptador del *Agent integration contract* de Pequeroku (Django Channels).
+"""Adapter for Pequeroku's *Agent integration contract* (Django Channels).
 
-Es un frontend más del core de minicode: en vez de pintar en una terminal, mapea el
-stream de eventos del agente a los callbacks async que espera el ``AIConsumer``.
-Expone los DOS únicos símbolos que el consumer importa:
+It is just another frontend of the minicode core: instead of painting to a
+terminal, it maps the agent's event stream to the async callbacks the
+``AIConsumer`` expects. It exposes the ONLY two symbols the consumer imports:
 
     from ai_services.minicode.frontends.pipeline import run_pipeline, agent
 
-- ``run_pipeline(...)``  — corre UN turno completo y devuelve ``(messages, TokenUsage)``.
-- ``agent``             — objeto con ``.model`` (solo para el log de uso).
+- ``run_pipeline(...)``  — runs ONE full turn and returns ``(messages, TokenUsage)``.
+- ``agent``             — object with ``.model`` (only for the usage log).
 
-PUENTE SÍNCRONO ↔ ASÍNCRONO
-El core de minicode es síncrono (cliente OpenAI sync, tools que hacen HTTP a la VM),
-y el contrato es async. Corremos el generador del agente en un hilo
-(``asyncio.to_thread``) — ahí vive TODO lo bloqueante (OpenAI, llamadas a la VM,
-ORM de Django) — y por cada evento agendamos su callback async en el event loop con
-``run_coroutine_threadsafe`` y esperamos: así nada bloquea el loop de Channels y se
-respeta el orden de los eventos. Esto resuelve de raíz el bloqueo del event loop que
-tenía el agente anterior.
+SYNC ↔ ASYNC BRIDGE
+The minicode core is synchronous (sync OpenAI client, tools that do HTTP to the
+VM), and the contract is async. We run the agent's generator in a thread
+(``asyncio.to_thread``) — that is where ALL the blocking work lives (OpenAI, VM
+calls, Django ORM) — and for each event we schedule its async callback on the event
+loop with ``run_coroutine_threadsafe`` and wait: this way nothing blocks the
+Channels loop and event order is preserved. This fundamentally fixes the event-loop
+blocking the previous agent had.
 
-CREDENCIALES
-Se leen de la tabla ``Config`` de la DB (openai_api_key / openai_api_url /
-openai_model). La lectura ocurre dentro del hilo worker, nunca en el event loop.
+CREDENTIALS
+Read from the DB's ``Config`` table (openai_api_key / openai_api_url /
+openai_model). The read happens inside the worker thread, never on the event loop.
 """
 
 from __future__ import annotations
@@ -62,8 +62,8 @@ def _cap(text: object, limit: int = _EVENT_TEXT_CAP) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Tipo de uso de tokens (compatible con lo que el consumer espera:
-# atributos enteros prompt_tokens / completion_tokens / total_tokens + add_usage).
+# Token-usage type (compatible with what the consumer expects: integer
+# attributes prompt_tokens / completion_tokens / total_tokens + add_usage).
 # --------------------------------------------------------------------------- #
 @dataclass
 class TokenUsage:
@@ -80,14 +80,14 @@ class TokenUsage:
 
 
 # --------------------------------------------------------------------------- #
-# Credenciales / símbolo ``agent``
+# Credentials / the ``agent`` symbol
 # --------------------------------------------------------------------------- #
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_MODEL = "gpt-4o"
 
 
 def _read_ai_config() -> dict[str, str]:
-    """Lee credenciales/modelo de la tabla Config (SYNC; llamar en un hilo)."""
+    """Read credentials/model from the Config table (SYNC; call from a thread)."""
     from internal_config.models import Config as DjangoConfig
 
     return DjangoConfig.get_config_values(
@@ -96,7 +96,7 @@ def _read_ai_config() -> dict[str, str]:
 
 
 class _AgentInfo:
-    """Objeto ``agent`` del contrato: solo necesita ``.model`` (para el log de uso)."""
+    """The contract's ``agent`` object: it only needs ``.model`` (for the usage log)."""
 
     @property
     def model(self) -> str:
@@ -110,11 +110,11 @@ agent = _AgentInfo()
 
 
 def _build_config(container_obj: Any) -> Config:
-    """Construye el Config de minicode con credenciales de la DB + el container.
+    """Build minicode's Config with DB credentials + the container.
 
-    SYNC (toca el ORM y atributos del container): debe ejecutarse en el hilo worker.
-    También carga el contexto de proyecto de la VM (AGENTS.md y skills) UNA vez por
-    turno; ``build_system`` luego solo concatena lo ya cargado (sin I/O por paso).
+    SYNC (touches the ORM and container attributes): must run in the worker thread.
+    It also loads the VM's project context (AGENTS.md and skills) ONCE per turn;
+    ``build_system`` then only concatenates what is already loaded (no I/O per step).
     """
     cfg = _read_ai_config()
     config = Config(
@@ -124,7 +124,7 @@ def _build_config(container_obj: Any) -> Config:
         workdir="/app",
     )
     config.container = container_obj
-    # Contexto de proyecto (best-effort: un fallo de VM nunca debe tumbar el turno).
+    # Project context (best-effort: a VM failure must never bring the turn down).
     try:
         config.project_doc = load_project_doc(config)
     except Exception:
@@ -148,7 +148,7 @@ def _build_config(container_obj: Any) -> Config:
 
 
 def _synth_command(name: str, args: dict) -> str:
-    """Texto compacto para ``on_tool_call`` (el front lo pinta como contexto)."""
+    """Compact text for ``on_tool_call`` (the frontend renders it as context)."""
     if name == "bash":
         return str(args.get("command", ""))
     if name == "process":
@@ -166,8 +166,8 @@ def _synth_command(name: str, args: dict) -> str:
 
 
 def _final_messages(session: Session, fallback: str) -> list[dict]:
-    """Devuelve el historial garantizando que ``messages[-1]`` sea el assistant
-    final con ``content`` string NO vacío (lo exige el consumer para el log)."""
+    """Return the history, guaranteeing that ``messages[-1]`` is the final assistant
+    with a NON-empty string ``content`` (the consumer requires it for the log)."""
     out = list(session.messages)
     last = out[-1] if out else None
     ok = (
@@ -183,7 +183,7 @@ def _final_messages(session: Session, fallback: str) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
-# El único punto de entrada del contrato
+# The contract's single entry point
 # --------------------------------------------------------------------------- #
 async def run_pipeline(
     query: str,
@@ -205,23 +205,23 @@ async def run_pipeline(
     """
     loop = asyncio.get_running_loop()
 
-    session = Session()  # sin memory_path: la persistencia la hace el consumer
-    # El consumer nos devuelve verbatim lo que retornamos el turno anterior
-    # (formato OpenAI); Session.sanitize() repara cualquier desajuste al arrancar.
+    session = Session()  # no memory_path: persistence is handled by the consumer
+    # The consumer hands us back verbatim what we returned on the previous turn
+    # (OpenAI format); Session.sanitize() repairs any mismatch on startup.
     session.messages = [m for m in (messages or []) if isinstance(m, dict)]
     session.add_user(query)
 
     usage = TokenUsage()
 
     async def _safe(callback, *call_args, **call_kwargs) -> None:
-        # Callbacks best-effort: una excepción en la UI nunca debe romper el turno.
+        # Best-effort callbacks: an exception in the UI must never break the turn.
         try:
             await callback(*call_args, **call_kwargs)
         except Exception:
             pass
 
     def _on_loop(coro) -> None:
-        # Desde el hilo worker: agenda el callback en el loop y espera (preserva orden).
+        # From the worker thread: schedule the callback on the loop and wait (preserves order).
         asyncio.run_coroutine_threadsafe(coro, loop).result()
 
     def _emit(payload: dict) -> None:
@@ -229,7 +229,7 @@ async def run_pipeline(
             _on_loop(_safe(on_event, payload))
 
     def drive() -> None:
-        # Corre en un hilo: aquí vive todo el trabajo bloqueante (OpenAI, VM, ORM).
+        # Runs in a thread: this is where all the blocking work lives (OpenAI, VM, ORM).
         config = _build_config(container_obj)
         llm = LLM(config)
         block: list[str] = []
@@ -308,7 +308,7 @@ async def run_pipeline(
                             "depth": event.depth,
                         }
                     )
-        except Exception as e:  # nunca tumbamos el turno: lo reportamos como texto
+        except Exception as e:  # we never crash the turn: we report it as text
             err = f"Error running the agent: {e}"
             _on_loop(_safe(on_start_chunking))
             _on_loop(_safe(on_chunk, err))

@@ -29,7 +29,15 @@ export type SubagentPart = {
 export type NotePart = { kind: "info" | "error"; id: string; message: string };
 export type AssistantPart = TextPart | ToolPart | TodosPart | SubagentPart | NotePart;
 
-export type UserMessage = { id: string; role: "user"; content: string };
+export type UserMessage = {
+	id: string;
+	role: "user";
+	content: string;
+	// Position of this message in the backend's stored OpenAI memory, supplied by
+	// the server (history replay or the `user_index` event). Used to fork the
+	// conversation at this exact point — the client never computes it.
+	memoryIndex?: number;
+};
 export type AssistantMessage = { id: string; role: "assistant"; parts: AssistantPart[] };
 export type ChatMessage = UserMessage | AssistantMessage;
 
@@ -151,6 +159,21 @@ export const useAiChat = (containerId: string) => {
 					setIsSending(false);
 					return;
 				}
+				case "user_index": {
+					// The server reports the memory index of the just-sent user turn
+					// (always the latest user bubble). Stash it so a later fork is exact.
+					// Metadata only — no commit needed; the state array shares this object.
+					const idx = payload.index;
+					if (typeof idx !== "number" || !Number.isFinite(idx)) return;
+					for (let i = messagesRef.current.length - 1; i >= 0; i--) {
+						const m = messagesRef.current[i];
+						if (m.role === "user") {
+							m.memoryIndex = idx;
+							break;
+						}
+					}
+					return;
+				}
 				case "conversations": {
 					const list = Array.isArray(payload.conversations)
 						? payload.conversations.filter((n): n is number => typeof n === "number")
@@ -181,7 +204,11 @@ export const useAiChat = (containerId: string) => {
 					if (role === "user") {
 						currentAssistantIdRef.current = null;
 						currentTextPartIdRef.current = null;
-						messagesRef.current.push({ id: genId(), role: "user", content: "" });
+						const memoryIndex =
+							typeof payload.index === "number" && Number.isFinite(payload.index)
+								? payload.index
+								: undefined;
+						messagesRef.current.push({ id: genId(), role: "user", content: "", memoryIndex });
 						commit();
 						return;
 					}
@@ -424,6 +451,21 @@ export const useAiChat = (containerId: string) => {
 		(id: number) => sendAction("delete_conversation", { id }),
 		[sendAction],
 	);
+	// Branch the current conversation just before a user message. The backend
+	// resolves the fork point from the server-supplied memory `index` when known,
+	// otherwise from `userOrdinal` (which user bubble it is), then creates a new
+	// conversation with the prior context and switches to it. We always send the
+	// ordinal so editing works even for messages rendered before an index arrived.
+	const forkConversation = useCallback(
+		(opts: { index?: number; userOrdinal: number }) => {
+			const payload: Record<string, number> = { user_ordinal: opts.userOrdinal };
+			if (typeof opts.index === "number" && Number.isFinite(opts.index)) {
+				payload.index = opts.index;
+			}
+			return sendAction("fork_conversation", payload);
+		},
+		[sendAction],
+	);
 
 	useEffect(() => {
 		messagesRef.current = [];
@@ -455,6 +497,7 @@ export const useAiChat = (containerId: string) => {
 		newConversation,
 		switchConversation,
 		deleteConversation,
+		forkConversation,
 		reconnect: connect,
 	};
 };

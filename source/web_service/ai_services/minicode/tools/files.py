@@ -1,10 +1,10 @@
-"""Herramientas de archivos sobre la VM: read, write, edit, glob, grep.
+"""File tools over the VM: read, write, edit, glob, grep.
 
-Adaptación Pequeroku: en vez del filesystem local, todo se hace contra la VM del
-usuario vía ``VMServiceClient`` (read_file / upload_files / list_dirs / search).
-La cascada de estrategias de matching de ``edit`` (exact → flexible → block-anchor)
-se conserva tal cual de minicode: es pura y muy valiosa para que el ``oldString``
-del modelo encaje aunque no copie el whitespace exacto.
+Pequeroku adaptation: instead of the local filesystem, everything is done against
+the user's VM via ``VMServiceClient`` (read_file / upload_files / list_dirs /
+search). The ``edit`` matching-strategy cascade (exact → flexible → block-anchor)
+is kept verbatim from minicode: it is pure and very valuable for getting the
+model's ``oldString`` to match even when it doesn't copy the exact whitespace.
 """
 
 from __future__ import annotations
@@ -26,16 +26,16 @@ GLOB_SHALLOW_DEPTH = 4
 
 
 # --------------------------------------------------------------------------- #
-# helpers de VM
+# VM helpers
 # --------------------------------------------------------------------------- #
 def _read_file(client, cid: str, path: str) -> dict:
-    """``read_file`` de la VM → dict {name, content, length, found}."""
+    """The VM's ``read_file`` → dict {name, content, length, found}."""
     resp = client.read_file(cid, path)
     return resp if isinstance(resp, dict) else {}
 
 
 def _write_file(client, cid: str, path: str, content: str) -> None:
-    """Escribe (crea/sobrescribe) un archivo de texto en la VM."""
+    """Write (create/overwrite) a text file on the VM."""
     client.upload_files(
         cid,
         VMUploadFiles(
@@ -64,12 +64,12 @@ def _similar(client, cid: str, path: str) -> list[str]:
 
 def _mini_diff(old: str, new: str) -> str:
     diff = difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm="", n=1)
-    lines = list(diff)[2:]  # quita las cabeceras ---/+++
+    lines = list(diff)[2:]  # strip the ---/+++ headers
     return "\n".join(lines[:40])
 
 
 # --------------------------------------------------------------------------- #
-# edit: cascada de estrategias de matching (sin cambios respecto a minicode)
+# edit: matching-strategy cascade (unchanged from minicode)
 # --------------------------------------------------------------------------- #
 class EditError(Exception):
     pass
@@ -84,8 +84,8 @@ def _exact(content: str, old: str) -> list[tuple[int, int]]:
 
 
 def _flexible(content: str, old: str) -> list[tuple[int, int]]:
-    """Tolera diferencias de whitespace/indentación: cada bloque de espacios de
-    ``old`` se convierte en ``\\s+`` y el resto se escapa."""
+    """Tolerates whitespace/indentation differences: each run of spaces in ``old``
+    becomes ``\\s+`` and the rest is escaped."""
     parts = [p for p in re.split(r"(\s+)", old) if p != ""]
     if not parts:
         return []
@@ -97,7 +97,7 @@ def _flexible(content: str, old: str) -> list[tuple[int, int]]:
 
 
 def _block_anchor(content: str, old: str) -> list[tuple[int, int]]:
-    """Último recurso: ancla primera y última línea del bloque (>=3 líneas)."""
+    """Last resort: anchor the block's first and last line (>=3 lines)."""
     old_lines = old.split("\n")
     if len(old_lines) < 3:
         return []
@@ -144,7 +144,7 @@ def apply_edit(content: str, old: str, new: str, replace_all: bool = False) -> s
 
 
 # --------------------------------------------------------------------------- #
-# herramientas
+# tools
 # --------------------------------------------------------------------------- #
 class ReadTool(Tool):
     name = "read"
@@ -178,7 +178,7 @@ class ReadTool(Tool):
         resp = _read_file(client, cid, path)
 
         if not resp.get("found"):
-            # Puede ser un directorio o no existir: intentamos listarlo.
+            # It may be a directory or not exist: we try to list it.
             entries = _list_dir(client, cid, path, depth=1)
             real = [e for e in entries if e.get("path") != path]
             if real:

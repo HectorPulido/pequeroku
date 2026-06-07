@@ -1,9 +1,9 @@
-"""mini-code: una versión miniatura (pero potente) del núcleo agéntico de opencode.
+"""mini-code: a miniature (but powerful) version of opencode's agentic core.
 
-El corazón del sistema es el *bucle agéntico* (``agent.Agent.run``): pensar →
-llamar herramientas → ver resultados → repetir, hasta que el modelo responde sin
-pedir más herramientas. El resto son piezas de soporte: herramientas (manos del
-modelo), ensamblado de contexto, y el puente con un LLM compatible con OpenAI.
+The heart of the system is the *agentic loop* (``agent.Agent.run``): think → call
+tools → see results → repeat, until the model responds without requesting more
+tools. The rest are supporting pieces: tools (the model's hands), context
+assembly, and the bridge to an OpenAI-compatible LLM.
 """
 
 __version__ = "0.1.0"

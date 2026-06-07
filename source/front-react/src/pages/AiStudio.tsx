@@ -85,9 +85,11 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 		newConversation,
 		switchConversation,
 		deleteConversation,
+		forkConversation,
 		reconnect,
 	} = useAiChat(containerId);
 	const [input, setInput] = useState("");
+	const [composerFocus, setComposerFocus] = useState(0);
 	const [leftOpen, setLeftOpen] = useState(() => readPanelState(`ai:${containerId}:left`, true));
 	// Browser starts hidden by default; the user expands it via the right rail.
 	const [rightOpen, setRightOpen] = useState(() =>
@@ -133,6 +135,29 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 			sendMessage(prompt);
 		},
 		[sendMessage],
+	);
+
+	// Fork at the edited user message: send its backend memory index when known
+	// plus its user-bubble ordinal (always available as a fallback), then drop its
+	// text in the composer and focus it to edit and re-send.
+	const handleEditMessage = useCallback(
+		(messageId: string, content: string, memoryIndex: number | undefined) => {
+			let ordinal = -1;
+			let found = false;
+			for (const message of messages) {
+				if (message.role !== "user") continue;
+				ordinal += 1;
+				if (message.id === messageId) {
+					found = true;
+					break;
+				}
+			}
+			if (!found) return;
+			forkConversation({ index: memoryIndex, userOrdinal: ordinal });
+			setInput(content);
+			setComposerFocus((n) => n + 1);
+		},
+		[messages, forkConversation],
 	);
 
 	const handleNewChat = useCallback(() => newConversation(), [newConversation]);
@@ -193,6 +218,11 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 										streaming={
 											isSending && index === messages.length - 1 && message.role === "assistant"
 										}
+										onEdit={
+											message.role === "user"
+												? () => handleEditMessage(message.id, message.content, message.memoryIndex)
+												: undefined
+										}
 									/>
 								))}
 								{showStandaloneThinking ? (
@@ -213,6 +243,7 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 								onSubmit={handleSend}
 								disabled={connectionState !== "connected"}
 								canSend={canSend}
+								focusSignal={composerFocus}
 							/>
 						</div>
 					</div>

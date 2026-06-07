@@ -1,8 +1,8 @@
-"""Herramientas de internet: búsqueda web y lectura de URLs.
+"""Internet tools: web search and reading URLs.
 
-No dependen de la VM (corren en el servidor de Django, dentro del hilo worker).
-Portadas del agente viejo de Pequeroku. Las dependencias (ddgs, requests, bs4) se
-importan de forma perezosa para no cargarlas si el agente nunca las usa.
+They do not depend on the VM (they run on the Django server, inside the worker
+thread). Ported from Pequeroku's old agent. The dependencies (ddgs, requests, bs4)
+are imported lazily so they aren't loaded if the agent never uses them.
 """
 
 from __future__ import annotations

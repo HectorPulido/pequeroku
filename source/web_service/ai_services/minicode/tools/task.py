@@ -1,9 +1,9 @@
-"""Herramienta task: delega en un subagente.
+"""task tool: delegates to a subagent.
 
-Versión reducida de ``tool/task.ts``: crea una sesión hija con su propio bucle
-agéntico y un conjunto de herramientas restringido (aislamiento de contexto y de
-privilegios). La ejecución es en foreground: devuelve el reporte final del hijo.
-El puente real lo aporta ``ctx.spawn_subagent`` (lo provee el ``Agent``).
+A trimmed-down version of ``tool/task.ts``: it creates a child session with its own
+agentic loop and a restricted toolset (context and privilege isolation). Execution
+is foreground: it returns the child's final report. The actual bridge is provided by
+``ctx.spawn_subagent`` (supplied by the ``Agent``).
 """
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ class TaskTool(Tool):
     }
 
     def execute(self, args: dict, ctx: ToolContext) -> Iterator[Event]:
-        # Generador: reenvía (con ``yield from``) los eventos del subagente en vivo
-        # y devuelve su reporte final como texto para el modelo.
+        # Generator: forwards (with ``yield from``) the subagent's live events and
+        # returns its final report as text for the model.
         agent_type = args.get("subagent_type", "general")
         if agent_type not in ("explore", "general"):
             agent_type = "general"

@@ -1,12 +1,11 @@
-"""Registro de herramientas y selección por tipo de agente.
+"""Tool registry and selection by agent type.
 
-El agente principal (``build``) tiene todas las herramientas. Los subagentes
-reciben un subconjunto con menos privilegios (aislamiento), y nunca ``task``
-(para evitar recursión descontrolada).
+The main agent (``build``) has all the tools. Subagents get a less-privileged
+subset (isolation), and never ``task`` (to avoid runaway recursion).
 
-Adaptación Pequeroku: las tools de archivos/shell operan sobre la VM remota; se
-añaden ``process`` (control de jobs en background) y las de internet
-(``search_on_internet`` / ``read_from_internet``).
+Pequeroku adaptation: the file/shell tools operate on the remote VM; ``process``
+(background job control) and the internet ones (``search_on_internet`` /
+``read_from_internet``) are added.
 """
 
 from __future__ import annotations
@@ -51,7 +50,7 @@ def tools_for(agent_type: str = "build") -> list[Tool]:
             WebReadTool,
             SkillTool,
         ]
-    else:  # build (agente principal)
+    else:  # build (main agent)
         classes = ALL
     return [c() for c in classes]
 

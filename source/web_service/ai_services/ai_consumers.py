@@ -13,8 +13,8 @@ from .minicode.frontends.pipeline import run_pipeline, agent, TokenUsage
 from .minicode.prompts import INIT_PROMPT
 from . import conversations as convo
 
-# Mensajes en formato OpenAI (role/content/tool_calls/tool), tal como los produce
-# y consume el motor minicode; se persisten verbatim en los archivos de la VM.
+# Messages in OpenAI format (role/content/tool_calls/tool), exactly as the minicode
+# engine produces and consumes them; persisted verbatim in the VM's files.
 OpenAIChatMessage = dict[str, Any]
 
 
@@ -24,6 +24,50 @@ def _as_int(value: object) -> int | None:
     except (TypeError, ValueError):
         return None
     return n if n > 0 else None
+
+
+def _as_int_nonneg(value: object) -> int | None:
+    """Like ``_as_int`` but accepts 0 (memory indices / ordinals are 0-based)."""
+    try:
+        n = int(cast(Any, value))
+    except (TypeError, ValueError):
+        return None
+    return n if n >= 0 else None
+
+
+def _is_renderable_turn(msg: "OpenAIChatMessage") -> bool:
+    """Whether ``send_history`` surfaces this message as a chat bubble.
+
+    User/assistant turns with non-empty text and no ``tool_calls``. Tool messages
+    and tool-call-only assistant turns are internal trace. Kept in ONE place so the
+    history replay and the fork-by-ordinal fallback enumerate identically.
+    """
+    role = msg.get("role")
+    if role not in ("user", "assistant"):
+        return False
+    if msg.get("tool_calls"):
+        return False
+    content = msg.get("content") or ""
+    return len(content.strip()) > 0
+
+
+def _memory_index_for_user_ordinal(
+    memory: "list[OpenAIChatMessage]", ordinal: int
+) -> int | None:
+    """Map the Nth rendered user bubble (0-based) to its index in stored memory.
+
+    Uses the same filter as ``send_history`` so the client's bubble ordinal and the
+    server's memory index always agree.
+    """
+    if ordinal < 0:
+        return None
+    seen = -1
+    for i, msg in enumerate(memory):
+        if msg.get("role") == "user" and _is_renderable_turn(msg):
+            seen += 1
+            if seen == ordinal:
+                return i
+    return None
 
 
 class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
@@ -104,19 +148,20 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
         )
 
     async def send_history(self, memory: list[OpenAIChatMessage]):
-        for msg in memory:
-            # Solo se muestran turnos de texto de user/assistant. Los mensajes de
-            # tool y los assistant con tool_calls (sin texto) son traza interna.
+        for index, msg in enumerate(memory):
+            # Only user/assistant text turns are shown. Tool messages and assistant
+            # turns with tool_calls (no text) are internal trace.
+            if not _is_renderable_turn(msg):
+                continue
             role = msg.get("role")
-            if role not in ("user", "assistant"):
-                continue
-            if msg.get("tool_calls"):
-                continue
             content = msg.get("content") or ""
-            if len(content.strip()) == 0:
-                continue
 
-            await self.send_json({"event": "start_text", "role": role})
+            start: dict[str, Any] = {"event": "start_text", "role": role}
+            # User turns carry their position in the stored memory so the client can
+            # fork at this exact message later without recounting anything.
+            if role == "user":
+                start["index"] = index
+            await self.send_json(start)
             await self.send_json(
                 {
                     "event": "text",
@@ -240,6 +285,41 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             await self._send_conversations(self.conversation_id)
             return
 
+        if action == "fork_conversation":
+            # Branch the CURRENT conversation at one of its user messages. The new
+            # conversation keeps every message *before* it (prior context, assistant
+            # replies included) while the edited message itself is re-sent fresh by
+            # the client. The source conversation is left untouched.
+            #
+            # Fork point resolution: prefer the explicit memory ``index`` the client
+            # got from ``send_history`` / the ``user_index`` event (no recounting);
+            # fall back to the user-bubble ``user_ordinal`` — resolved with the SAME
+            # enumeration as ``send_history`` — so editing still works for messages
+            # rendered before an index was available.
+            source = await self._get_memory(self.conversation_id)
+            index = _as_int_nonneg(content.get("index"))
+            if index is None:
+                ordinal = _as_int_nonneg(content.get("user_ordinal"))
+                if ordinal is not None:
+                    index = _memory_index_for_user_ordinal(source, ordinal)
+            if (
+                index is None
+                or index >= len(source)
+                or source[index].get("role") != "user"
+            ):
+                return
+
+            ids = await self._list_conversation_ids()
+            new_id = (max(ids) + 1) if ids else 1
+            self.conversation_id = new_id
+            self.messages = source[:index]  # slice → source file stays intact
+            await self._set_memory(new_id, self.messages)
+            await self._set_current_id(new_id)
+            await self.send_json({"event": "clear"})
+            await self.send_history(self.messages)
+            await self._send_conversations(new_id)
+            return
+
     async def receive_json(self, content: dict[str, str], **kwargs: dict[str, Any]):
         async def send_text(text: str):
             await self.send_json({"event": "start_text"})
@@ -314,6 +394,11 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
         # canned prompt that creates or improves /app/AGENTS.md.
         if user_text == "/init":
             user_text = INIT_PROMPT
+
+        # The user turn will be appended to memory at this index (run_pipeline adds
+        # it to the end of the current history); hand it to the client so it can
+        # later fork at this exact message without recounting.
+        await self.send_json({"event": "user_index", "index": len(self.messages)})
 
         await self.send_json({"event": "start_text"})
         await self.send_json({"event": "text", "content": "..."})

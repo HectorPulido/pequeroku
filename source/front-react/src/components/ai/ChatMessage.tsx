@@ -1,12 +1,17 @@
-import { Sparks, WarningTriangle } from "iconoir-react";
+import { EditPencil, Sparks, WarningTriangle } from "iconoir-react";
 import type React from "react";
 import type { AssistantPart, ChatMessage as ChatMessageType, ToolPart } from "@/hooks/useAiChat";
+import CopyButton from "./CopyButton";
 import Markdown from "./Markdown";
 import ToolGroup from "./ToolGroup";
 
 interface ChatMessageProps {
 	message: ChatMessageType;
 	streaming?: boolean;
+	// Branch the conversation at this (user) message: keep everything before it in
+	// a fresh conversation and pre-fill the composer with its text. Only wired for
+	// user messages.
+	onEdit?: () => void;
 }
 
 type RenderNode =
@@ -48,19 +53,43 @@ const TypingDots: React.FC = () => (
 	</span>
 );
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, streaming = false }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, streaming = false, onEdit }) => {
 	if (message.role === "user") {
+		const hasContent = message.content.trim().length > 0;
 		return (
-			<div className="flex flex-col items-end gap-1">
+			<div className="group flex flex-col items-end gap-0.5">
 				<span className="px-1 text-xs uppercase tracking-wide text-gray-500">You</span>
 				<div className="max-w-[85%] whitespace-pre-wrap wrap-break-word rounded-2xl rounded-tr-sm bg-indigo-600/15 px-4 py-2.5 text-sm text-indigo-50">
 					{message.content}
 				</div>
+				{hasContent ? (
+					<div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+						{onEdit ? (
+							<button
+								type="button"
+								onClick={onEdit}
+								title="Edit in a new branch"
+								aria-label="Edit message in a new branch"
+								className="inline-flex items-center rounded p-1 text-gray-500 transition hover:text-gray-200"
+							>
+								<EditPencil className="h-3.5 w-3.5" />
+							</button>
+						) : null}
+						<CopyButton text={message.content} />
+					</div>
+				) : null}
 			</div>
 		);
 	}
 
 	const hasRenderable = message.parts.length > 0;
+	// Plain-text answer used by the copy button — tool/todo/notice parts are
+	// internal trace and excluded so the clipboard holds only the reply prose.
+	const copyText = message.parts
+		.map((part) => (part.kind === "text" ? part.content : ""))
+		.filter(Boolean)
+		.join("\n\n")
+		.trim();
 
 	return (
 		<div className="flex flex-col gap-1">
@@ -138,6 +167,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, streaming = false })
 				})}
 				{streaming ? <TypingDots /> : null}
 				{!hasRenderable && !streaming ? <span className="text-gray-600">…</span> : null}
+				{!streaming && copyText ? (
+					<div className="mt-0.5 flex">
+						<CopyButton text={copyText} label="Copy answer" />
+					</div>
+				) : null}
 			</div>
 		</div>
 	);

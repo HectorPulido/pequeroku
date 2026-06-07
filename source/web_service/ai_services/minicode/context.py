@@ -1,16 +1,16 @@
-"""Ensamblado del contexto de sistema en cada vuelta del bucle.
+"""Assembling the system context on each turn of the loop.
 
-Adaptación Pequeroku: el agente trabaja sobre una VM remota (Debian), NO sobre el
-filesystem del servidor de Django. Por eso el bloque ``<env>`` describe la VM y los
-lookups NO se hacen sobre el FS del servidor (el minicode original leía
-AGENTS.md/CLAUDE.md subiendo por el árbol local e incluso ``~/.claude/CLAUDE.md``,
-lo que filtraría config del servidor). En su lugar, el contexto de proyecto se lee
-de la VM del usuario (``/app/AGENTS.md``) y los skills de ``/app/.pequenin/skills``;
-ambos los carga el pipeline UNA vez por turno y los deja en el ``Config``.
+Pequeroku adaptation: the agent works on a remote VM (Debian), NOT on the Django
+server's filesystem. That is why the ``<env>`` block describes the VM and the
+lookups are NOT done against the server FS (the original minicode read
+AGENTS.md/CLAUDE.md by walking up the local tree and even ``~/.claude/CLAUDE.md``,
+which would leak server config). Instead, the project context is read from the
+user's VM (``/app/AGENTS.md``) and the skills from ``/app/.pequenin/skills``; both
+are loaded by the pipeline ONCE per turn and stashed on the ``Config``.
 
-``build_system`` se llama en CADA vuelta del bucle, así que se mantiene barato: solo
-strings, sin I/O ni round-trips a la VM (lee ``config.project_doc`` / ``config.skills``
-ya cargados).
+``build_system`` is called on EVERY turn of the loop, so it stays cheap: only
+strings, no I/O or round-trips to the VM (it reads the already-loaded
+``config.project_doc`` / ``config.skills``).
 """
 
 from __future__ import annotations
@@ -37,13 +37,13 @@ def _env_block(config: Config) -> str:
 def build_system(config: Config, agent_type: str = "build") -> str:
     base = SUBAGENT_PROMPTS.get(agent_type, SYSTEM_PROMPT)
     parts = [base, _env_block(config)]
-    # Skills: solo para los agentes que tienen la tool `skill` (build/general);
-    # listarlos en `explore` (read-only, sin la tool) sería ruido inactivo.
+    # Skills: only for agents that have the `skill` tool (build/general); listing
+    # them in `explore` (read-only, without the tool) would be inert noise.
     if agent_type in ("build", "general"):
         block = skills_index_block(getattr(config, "skills", []) or [])
         if block:
             parts.append(block)
-    # Instrucciones del proyecto (AGENTS.md/CLAUDE.md): aplican a cualquier agente.
+    # Project instructions (AGENTS.md/CLAUDE.md): they apply to any agent.
     doc = getattr(config, "project_doc", None)
     if doc:
         parts.append(doc)

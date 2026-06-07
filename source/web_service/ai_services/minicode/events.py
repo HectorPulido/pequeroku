@@ -1,15 +1,15 @@
-"""Eventos del núcleo: el ÚNICO canal de salida del core hacia el exterior.
+"""Core events: the ONLY output channel from the core to the outside world.
 
-El bucle agéntico (``Agent.run``) es un *generador*: en vez de escribir en una
-terminal, hace ``yield`` de eventos tipados (estas dataclasses). Quien consume el
-generador decide cómo materializarlos: una terminal (ANSI), una web (SSE/websocket)
-o una API (serializar a JSON). Así el core no sabe nada de ``stdout``, colores ni
-``input()`` — está totalmente desacoplado de la interfaz.
+The agentic loop (``Agent.run``) is a *generator*: instead of writing to a
+terminal, it ``yield``s typed events (these dataclasses). Whoever consumes the
+generator decides how to materialize them: a terminal (ANSI), a web app
+(SSE/websocket) or an API (serialize to JSON). This way the core knows nothing
+about ``stdout``, colors or ``input()`` — it is fully decoupled from the interface.
 
-Cada evento lleva ``depth``: 0 = agente principal, >0 = anidamiento de subagentes.
-Lo rellena el agente que posee ese nivel; un evento con ``depth=None`` aún no ha
-sido "sellado" (lo crean ``LLM`` y la tool ``todowrite``, que no conocen el nivel)
-y el agente más cercano le pone su profundidad antes de reenviarlo hacia fuera.
+Each event carries ``depth``: 0 = main agent, >0 = subagent nesting. It is filled
+in by the agent that owns that level; an event with ``depth=None`` has not been
+"sealed" yet (created by ``LLM`` and the ``todowrite`` tool, which don't know the
+level) and the nearest agent stamps its depth before forwarding it outward.
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ from typing import Optional
 
 
 class Event:
-    """Base común de todos los eventos (solo para ``isinstance`` y tipado)."""
+    """Common base of all events (only for ``isinstance`` and typing)."""
 
 
-# -- texto del asistente en streaming ------------------------------------- #
+# -- streaming assistant text --------------------------------------------- #
 @dataclass
 class AssistantTextStart(Event):
     depth: Optional[int] = None
@@ -40,7 +40,7 @@ class AssistantTextEnd(Event):
     depth: Optional[int] = None
 
 
-# -- herramientas --------------------------------------------------------- #
+# -- tools ---------------------------------------------------------------- #
 @dataclass
 class ToolCallStarted(Event):
     name: str
@@ -61,7 +61,7 @@ class TodosUpdated(Event):
     depth: Optional[int] = None
 
 
-# -- subagentes ----------------------------------------------------------- #
+# -- subagents ------------------------------------------------------------ #
 @dataclass
 class SubagentStarted(Event):
     agent_type: str
@@ -75,7 +75,7 @@ class SubagentFinished(Event):
     depth: Optional[int] = None
 
 
-# -- mensajes sueltos del bucle ------------------------------------------- #
+# -- one-off loop messages ------------------------------------------------ #
 @dataclass
 class Info(Event):
     message: str
@@ -88,11 +88,11 @@ class Error(Event):
     depth: Optional[int] = None
 
 
-# -- conteo de tokens ----------------------------------------------------- #
+# -- token usage ---------------------------------------------------------- #
 @dataclass
 class Usage(Event):
-    """Uso de tokens de UN paso del modelo. El agente lo emite tras cada llamada
-    al LLM (también los subagentes), así un consumidor puede sumarlos por turno."""
+    """Token usage for ONE model step. The agent emits it after each LLM call
+    (subagents too), so a consumer can sum them per turn."""
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -101,10 +101,10 @@ class Usage(Event):
 
 
 def event_to_dict(event: Event) -> dict:
-    """Serializa un evento a un dict JSON-able (``{"type": ..., ...campos}``).
+    """Serialize an event to a JSON-able dict (``{"type": ..., ...fields}``).
 
-    Útil para una API/web: ``json.dumps(event_to_dict(ev))`` por cada evento
-    del stream (p. ej. en Server-Sent Events o un websocket).
+    Useful for an API/web: ``json.dumps(event_to_dict(ev))`` for each event in the
+    stream (e.g. in Server-Sent Events or a websocket).
     """
     data = dataclasses.asdict(event)
     data["type"] = type(event).__name__

@@ -1,16 +1,16 @@
-"""Estado de la conversación + memoria persistente + auto-reparación.
+"""Conversation state + persistent memory + self-repair.
 
-Guarda los mensajes en el formato exacto que entiende la API estilo OpenAI
-(``role``/``content``/``tool_calls``/``tool``), que es lo que se reenvía al modelo
-en cada vuelta del bucle. Persistir y releer este historial es justo lo que permite
-que el modelo "vea" los resultados de sus herramientas en el paso siguiente.
+Stores the messages in the exact format the OpenAI-style API understands
+(``role``/``content``/``tool_calls``/``tool``), which is what gets sent back to the
+model on each turn of the loop. Persisting and re-reading this history is precisely
+what lets the model "see" the results of its tools on the next step.
 
-Memoria: si ``memory_path`` está definido, ``save()`` vuelca la conversación a un
-archivo JSON. Al iniciar en el mismo workdir, ``load()`` la recupera.
+Memory: if ``memory_path`` is set, ``save()`` dumps the conversation to a JSON
+file. When starting in the same workdir, ``load()`` restores it.
 
-Resiliencia: ``sanitize()`` repara historiales rotos (un assistant con
-``tool_calls`` sin su ``tool`` de respuesta), que de otro modo hacen que la API
-devuelva 400 en TODAS las llamadas siguientes.
+Resilience: ``sanitize()`` repairs broken histories (an assistant with
+``tool_calls`` lacking its answering ``tool``), which would otherwise make the API
+return 400 on EVERY subsequent call.
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ _ABORTED = "Tool execution was interrupted; no result was produced."
 
 class Session:
     def __init__(self, memory_path: Optional[str] = None) -> None:
-        # Mensajes en formato OpenAI (sin incluir el system, que se antepone en cada vuelta).
+        # Messages in OpenAI format (excluding the system, which is prepended each turn).
         self.messages: list[dict] = []
-        # Lista de tareas gestionada por la herramienta todowrite.
+        # Task list managed by the todowrite tool.
         self.todos: list[dict] = []
         self.memory_path = memory_path
 
-    # -- mutaciones ------------------------------------------------------
+    # -- mutations -------------------------------------------------------
     def add_user(self, text: str) -> None:
         self.messages.append({"role": "user", "content": text})
 
@@ -58,10 +58,10 @@ class Session:
                 return m["content"]
         return ""
 
-    # -- resiliencia -----------------------------------------------------
+    # -- resilience ------------------------------------------------------
     def sanitize(self) -> None:
-        """Garantiza que cada ``assistant`` con ``tool_calls`` va seguido de un
-        ``tool`` por cada id, y descarta mensajes ``tool`` huérfanos. Idempotente.
+        """Ensure each ``assistant`` with ``tool_calls`` is followed by one ``tool``
+        per id, and drop orphan ``tool`` messages. Idempotent.
         """
         repaired: list[dict] = []
         msgs = self.messages
@@ -86,13 +86,13 @@ class Session:
                     )
                 i = j
             elif m.get("role") == "tool":
-                i += 1  # huérfano (sin assistant.tool_calls previo): se descarta
+                i += 1  # orphan (no preceding assistant.tool_calls): discard it
             else:
                 repaired.append(m)
                 i += 1
         self.messages = repaired
 
-    # -- persistencia ----------------------------------------------------
+    # -- persistence -----------------------------------------------------
     def save(self) -> None:
         if not self.memory_path:
             return
@@ -105,7 +105,7 @@ class Session:
                 encoding="utf-8",
             )
         except Exception:
-            pass  # la memoria es best-effort; nunca debe tumbar el agente
+            pass  # memory is best-effort; it must never bring the agent down
 
     @classmethod
     def load(cls, memory_path: str) -> "Session":
