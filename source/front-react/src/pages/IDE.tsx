@@ -1232,6 +1232,7 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 				isOpen={isAiPanelOpen}
 				onClose={() => setAiPanelOpen(false)}
 				containerId={containerId}
+				onOpenStudio={openAiStudio}
 			/>
 		</div>
 	);

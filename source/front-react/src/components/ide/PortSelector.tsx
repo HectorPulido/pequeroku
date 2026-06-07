@@ -12,8 +12,9 @@ interface PortSelectorProps {
 
 /**
  * Preview port dropdown shared by the IDE editor and the AI preview browser.
- * Renders nothing when there are no ports to choose from; styling is supplied by
- * the caller via `className` so it matches each surrounding panel.
+ * Stays visible even with no ports — it shows a "No ports" state instead of
+ * vanishing, and opening it still re-scans so ports appear on the next open.
+ * Styling is supplied by the caller via `className` so it matches each panel.
  */
 const PortSelector: React.FC<PortSelectorProps> = ({
 	value,
@@ -22,10 +23,10 @@ const PortSelector: React.FC<PortSelectorProps> = ({
 	onOpen,
 	className,
 }) => {
-	if (options.length === 0) return null;
+	const isEmpty = options.length === 0;
 	return (
 		<select
-			value={value ?? ""}
+			value={isEmpty ? "" : (value ?? "")}
 			onChange={(event) => {
 				const parsed = Number.parseInt(event.target.value, 10);
 				onChange(Number.isFinite(parsed) ? parsed : null);
@@ -34,18 +35,27 @@ const PortSelector: React.FC<PortSelectorProps> = ({
 			// in flight; freshly-started ports show on the next open.
 			onMouseDown={() => onOpen?.()}
 			title="Preview port"
+			aria-label="Preview port"
 			className={className}
 		>
-			{value === null && (
+			{isEmpty ? (
 				<option value="" disabled>
-					Port…
+					No ports
 				</option>
+			) : (
+				<>
+					{value === null && (
+						<option value="" disabled>
+							Port…
+						</option>
+					)}
+					{options.map((option) => (
+						<option key={option.port} value={option.port}>
+							{option.label}
+						</option>
+					))}
+				</>
 			)}
-			{options.map((option) => (
-				<option key={option.port} value={option.port}>
-					{option.label}
-				</option>
-			))}
 		</select>
 	);
 };

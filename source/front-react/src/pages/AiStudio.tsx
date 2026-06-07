@@ -1,15 +1,14 @@
-import { Globe, MultiBubble, NavArrowLeft, NavArrowRight } from "iconoir-react";
+import { Code, Globe, MultiBubble, NavArrowLeft, NavArrowRight } from "iconoir-react";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ChatComposer from "@/components/ai/ChatComposer";
-import ChatMessage from "@/components/ai/ChatMessage";
+import ChatThread from "@/components/ai/ChatThread";
 import CommandsPanel from "@/components/ai/CommandsPanel";
 import PreviewBrowser from "@/components/ai/PreviewBrowser";
-import WelcomeScreen from "@/components/ai/WelcomeScreen";
 import Header from "@/components/Header";
 import ResizablePanel from "@/components/ide/ResizablePanel";
-import { useAiChat } from "@/hooks/useAiChat";
+import { useAiChatSession } from "@/hooks/useAiChatSession";
 
 const MissingContainer: React.FC<{ showHeader: boolean }> = ({ showHeader }) => (
 	<div className="min-h-screen bg-[#0B1220] text-gray-200">
@@ -81,21 +80,33 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 		isSending,
 		conversations,
 		currentConversation,
-		sendMessage,
 		newConversation,
 		switchConversation,
 		deleteConversation,
-		forkConversation,
 		reconnect,
-	} = useAiChat(containerId);
-	const [input, setInput] = useState("");
-	const [composerFocus, setComposerFocus] = useState(0);
+		input,
+		setInput,
+		composerFocus,
+		scrollerRef,
+		handleSend,
+		handlePick,
+		handleEditMessage,
+		canSend,
+		showStandaloneThinking,
+	} = useAiChatSession(containerId);
 	const [leftOpen, setLeftOpen] = useState(() => readPanelState(`ai:${containerId}:left`, true));
 	// Browser starts hidden by default; the user expands it via the right rail.
 	const [rightOpen, setRightOpen] = useState(() =>
 		readPanelState(`ai:${containerId}:right`, false),
 	);
-	const scrollerRef = useRef<HTMLDivElement | null>(null);
+	const navigate = useNavigate();
+
+	// Mirror of the IDE's "Open AI studio" button, going the other way. Preserve
+	// the embedded mode (showHeader=false) so the chrome stays hidden in the IDE.
+	const openIde = useCallback(() => {
+		const suffix = showHeader ? "" : "&showHeader=1";
+		navigate(`/ide?containerId=${containerId}${suffix}`);
+	}, [containerId, navigate, showHeader]);
 
 	const persistPanel = useCallback((key: string, open: boolean) => {
 		if (typeof window === "undefined") return;
@@ -117,59 +128,6 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 		[containerId, persistPanel],
 	);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: pin the view to the bottom whenever the conversation grows or a turn starts/ends.
-	useEffect(() => {
-		const el = scrollerRef.current;
-		if (!el) return;
-		el.scrollTop = el.scrollHeight;
-	}, [messages, isSending]);
-
-	const handleSend = useCallback(() => {
-		if (sendMessage(input)) {
-			setInput("");
-		}
-	}, [input, sendMessage]);
-
-	const handlePick = useCallback(
-		(prompt: string) => {
-			sendMessage(prompt);
-		},
-		[sendMessage],
-	);
-
-	// Fork at the edited user message: send its backend memory index when known
-	// plus its user-bubble ordinal (always available as a fallback), then drop its
-	// text in the composer and focus it to edit and re-send.
-	const handleEditMessage = useCallback(
-		(messageId: string, content: string, memoryIndex: number | undefined) => {
-			let ordinal = -1;
-			let found = false;
-			for (const message of messages) {
-				if (message.role !== "user") continue;
-				ordinal += 1;
-				if (message.id === messageId) {
-					found = true;
-					break;
-				}
-			}
-			if (!found) return;
-			forkConversation({ index: memoryIndex, userOrdinal: ordinal });
-			setInput(content);
-			setComposerFocus((n) => n + 1);
-		},
-		[messages, forkConversation],
-	);
-
-	const handleNewChat = useCallback(() => newConversation(), [newConversation]);
-
-	const canSend = useMemo(
-		() => connectionState === "connected" && input.trim().length > 0 && !isSending,
-		[connectionState, input, isSending],
-	);
-
-	const lastMessage = messages[messages.length - 1];
-	const showStandaloneThinking = isSending && (!lastMessage || lastMessage.role === "user");
-
 	return (
 		<div className="flex h-screen flex-col bg-[#0B1220] text-gray-200">
 			{showHeader ? <Header /> : null}
@@ -185,7 +143,7 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 						isCollapsed={false}
 					>
 						<CommandsPanel
-							onNewChat={handleNewChat}
+							onNewChat={newConversation}
 							onCollapse={() => toggleLeft(false)}
 							onReconnect={reconnect}
 							onSwitchConversation={switchConversation}
@@ -206,34 +164,26 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 				)}
 
 				<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-					<div ref={scrollerRef} className="flex-1 overflow-y-auto">
-						{messages.length === 0 ? (
-							<WelcomeScreen onPick={handlePick} />
-						) : (
-							<div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
-								{messages.map((message, index) => (
-									<ChatMessage
-										key={message.id}
-										message={message}
-										streaming={
-											isSending && index === messages.length - 1 && message.role === "assistant"
-										}
-										onEdit={
-											message.role === "user"
-												? () => handleEditMessage(message.id, message.content, message.memoryIndex)
-												: undefined
-										}
-									/>
-								))}
-								{showStandaloneThinking ? (
-									<ChatMessage
-										message={{ id: "thinking", role: "assistant", parts: [] }}
-										streaming
-									/>
-								) : null}
-							</div>
-						)}
+					<div className="flex items-center justify-end border-b border-gray-800 px-4 py-2">
+						<button
+							type="button"
+							className="inline-flex items-center gap-1 md:gap-2 rounded border border-gray-700 px-3 py-1.5 text-xs text-gray-200 transition hover:border-indigo-500 hover:text-white"
+							onClick={openIde}
+							aria-label="Open IDE"
+							title="Open IDE"
+						>
+							<Code className="h-4 w-4" />
+							<span className="hidden md:inline">IDE</span>
+						</button>
 					</div>
+					<ChatThread
+						messages={messages}
+						isSending={isSending}
+						showStandaloneThinking={showStandaloneThinking}
+						onPick={handlePick}
+						onEditMessage={handleEditMessage}
+						scrollerRef={scrollerRef}
+					/>
 
 					<div className="border-t border-gray-800 bg-[#0B1220] px-4 py-3">
 						<div className="mx-auto max-w-3xl">

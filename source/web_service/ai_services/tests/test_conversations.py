@@ -42,6 +42,22 @@ class FakeService:
         return {"ok": True, "stdout": "", "stderr": ""}
 
 
+class RaisingService:
+    """Every VM call blows up — simulates an unreachable / not-ready VM."""
+
+    def read_file(self, vm_id, path):
+        raise RuntimeError("vm unreachable")
+
+    def upload_files(self, vm_id, payload):
+        raise RuntimeError("vm unreachable")
+
+    def list_dirs(self, vm_id, paths):
+        raise RuntimeError("vm unreachable")
+
+    def execute_sh(self, vm_id, command):
+        raise RuntimeError("vm unreachable")
+
+
 @pytest.fixture
 def container():
     return types.SimpleNamespace(container_id="vm-1", node=object())
@@ -99,6 +115,48 @@ def test_delete_conversation_runs_rm(monkeypatch, container):
     _patch(monkeypatch, svc)
     convo.delete_conversation(container, 3)
     assert any("rm -f" in c and "ai_memory_3.json" in c for c in svc.execced)
+
+
+# --------------------------------------------------------------------------- #
+# error handling: a failing VM never propagates (best-effort, degrade quietly)
+# --------------------------------------------------------------------------- #
+def test_read_json_swallows_vm_error(monkeypatch, container):
+    _patch(monkeypatch, RaisingService())
+    assert convo.read_json(container, "/app/.pequenin/x.json") is None
+    assert convo.read_conversation(container, 1) == []
+
+
+def test_read_json_swallows_bad_json(monkeypatch, container):
+    _patch(monkeypatch, FakeService(files={"/app/.pequenin/x.json": "{not json"}))
+    assert convo.read_json(container, "/app/.pequenin/x.json") is None
+
+
+def test_write_json_swallows_vm_error(monkeypatch, container):
+    _patch(monkeypatch, RaisingService())
+    # must not raise even though upload blows up
+    convo.write_conversation(container, 1, [{"role": "user", "content": "hi"}])
+
+
+def test_list_conversation_ids_swallows_vm_error(monkeypatch, container):
+    _patch(monkeypatch, RaisingService())
+    assert convo.list_conversation_ids(container) == []
+    assert convo.next_conversation_id(container) == 1  # falls back to 1
+
+
+def test_delete_conversation_swallows_vm_error(monkeypatch, container):
+    _patch(monkeypatch, RaisingService())
+    convo.delete_conversation(container, 3)  # must not raise
+
+
+@pytest.mark.django_db
+def test_get_current_id_swallows_db_error(monkeypatch):
+    # Force the ORM query to raise -> get_current_id returns None, not a crash.
+    def boom(*a, **k):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(convo.AIMemory.objects, "filter", boom)
+    container = types.SimpleNamespace(container_id="vm-1", node=object())
+    assert convo.get_current_id(object(), container) is None
 
 
 # --------------------------------------------------------------------------- #

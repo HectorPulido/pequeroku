@@ -4,9 +4,13 @@ import requests
 from vm_manager.vm_client import (
     VMServiceClient,
     VMCreate,
+    VMEnsure,
     VMAction,
     VMUploadFiles,
     VMFile,
+    VMPaths,
+    VMPath,
+    SearchRequest,
 )
 from vm_manager.test_utils import create_node
 
@@ -346,3 +350,177 @@ def test_listening_ports_gets_list_from_node():
     assert isinstance(data, list)
     assert {p["port"] for p in data} == {3000, 8000}
     assert session.last_url.endswith("/vms/vm-9/listening-ports")
+
+
+# --------------------------------------------------------------------------- #
+# _handle: 204 / empty body returns None
+# --------------------------------------------------------------------------- #
+def test_handle_no_content_returns_none():
+    node = create_node()
+    session = FakeSession()
+    session.queue.append(FakeResponse(status_code=204, content=b""))
+    client = VMServiceClient(node=node, session=session)
+    assert client.delete_vm("vm-1") is None
+    assert session.calls[0]["method"] == "DELETE"
+
+
+# --------------------------------------------------------------------------- #
+# remaining GET/POST endpoints
+# --------------------------------------------------------------------------- #
+def test_list_vms_and_ensure_vm():
+    node = create_node()
+    session = FakeSession()
+    session.queue.append(FakeResponse(json_data=[{"id": "a"}], content=b"ok"))
+    session.queue.append(FakeResponse(json_data={"id": "a"}, content=b"ok"))
+    client = VMServiceClient(node=node, session=session)
+
+    assert client.list_vms() == [{"id": "a"}]
+    assert session.last_url.endswith("/vms")
+
+    client.ensure_vm("a", VMEnsure(vcpus=1, mem_mib=128, disk_gib=2, base_image=None))
+    assert session.last_url.endswith("/vms/a/ensure")
+    assert session.last_json == {"vcpus": 1, "mem_mib": 128, "disk_gib": 2}
+
+
+def test_get_health_and_tail_console_and_statistics():
+    node = create_node()
+    session = FakeSession()
+    session.queue.append(FakeResponse(json_data={"ok": "True"}, content=b"ok"))
+    session.queue.append(FakeResponse(json_data={"log": "boot"}, content=b"ok"))
+    session.queue.append(FakeResponse(json_data={"cpu": 1.0}, content=b"ok"))
+    client = VMServiceClient(node=node, session=session)
+
+    h = client.get_health()
+    assert h.json() == {"ok": "True"} and session.last_url.endswith("/health")
+
+    client.tail_console("vm-1", lines=10)
+    assert session.last_url.endswith("/vms/vm-1/console/tail")
+    assert session.last_params == {"lines": 10}
+
+    client.statistics("vm-1")
+    assert session.last_url.endswith("/metrics/vm-1")
+
+
+def test_execute_sh_widens_timeout_when_given():
+    node = create_node()
+    session = FakeSession()
+    session.queue.append(FakeResponse(json_data={"ok": True}, content=b"ok"))
+    session.queue.append(FakeResponse(json_data={"ok": True}, content=b"ok"))
+    client = VMServiceClient(node=node, session=session)
+
+    client.execute_sh("vm-1", "echo hi")  # no timeout -> default http timeout
+    assert session.last_json == {"command": "echo hi"}
+    assert session.last_timeout == client.timeout
+
+    client.execute_sh("vm-1", "make", timeout=60)
+    assert session.last_json == {"command": "make", "timeout": 60}
+    assert session.last_timeout == max(client.timeout, 70.0)  # widened
+
+
+def test_process_lifecycle_endpoints():
+    node = create_node()
+    session = FakeSession()
+    for _ in range(4):
+        session.queue.append(FakeResponse(json_data={"ok": True}, content=b"ok"))
+    client = VMServiceClient(node=node, session=session)
+
+    client.start_process("vm-1", "python3 main.py")
+    assert session.last_url.endswith("/vms/vm-1/start-process")
+
+    # status with delta polling + server-side wait widens the http timeout
+    client.process_status("vm-1", "j1", lines=20, since_bytes=100, wait=120)
+    assert session.last_url.endswith("/vms/vm-1/process-status")
+    assert session.last_json == {"job_id": "j1", "lines": 20, "since_bytes": 100, "wait": 120}
+    assert session.last_timeout == max(client.timeout, 145.0)
+
+    # plain status: no since_bytes / wait keys
+    client.process_status("vm-1", "j1")
+    assert session.last_json == {"job_id": "j1", "lines": 80}
+
+    client.stop_process("vm-1", "j1")
+    assert session.last_url.endswith("/vms/vm-1/stop-process")
+    assert session.last_json == {"job_id": "j1"}
+
+
+def test_fs_endpoints_list_read_create_search():
+    node = create_node()
+    session = FakeSession()
+    for _ in range(5):
+        session.queue.append(FakeResponse(json_data={"ok": True}, content=b"ok"))
+    client = VMServiceClient(node=node, session=session)
+
+    # list_dirs accepts a VMPaths...
+    client.list_dirs("vm-1", VMPaths(paths=["/app"], depth=2))
+    assert session.last_json == {"paths": ["/app"], "depth": 2}
+    # ...or a bare list (wrapped with depth=1)
+    client.list_dirs("vm-1", ["/app", "/tmp"])
+    assert session.last_json == {"paths": ["/app", "/tmp"], "depth": 1}
+
+    # read_file accepts a str...
+    client.read_file("vm-1", "/app/a.py")
+    assert session.last_json == {"path": "/app/a.py"}
+    # ...or a VMPath
+    client.create_dir("vm-1", VMPath(path="/app/new"))
+    assert session.last_url.endswith("/vms/vm-1/create-dir")
+    assert session.last_json == {"path": "/app/new"}
+
+    client.search("vm-1", SearchRequest(pattern="TODO", root="/app"))
+    assert session.last_url.endswith("/vms/vm-1/search")
+    assert session.last_json["pattern"] == "TODO" and session.last_json["root"] == "/app"
+
+
+# --------------------------------------------------------------------------- #
+# set_healthy (blocking mode persists node health)
+# --------------------------------------------------------------------------- #
+def test_set_healthy_noop_when_not_blocking():
+    node = create_node()
+    client = VMServiceClient(node=node, session=FakeSession(), blocking=False)
+    client.set_healthy(False)  # must be a no-op and not touch the node
+    # healthy unchanged from the factory default (True)
+    assert node.healthy is True
+
+
+@pytest.mark.django_db
+def test_set_healthy_true_marks_node_healthy():
+    node = create_node(healthy=False)
+    client = VMServiceClient(node=node, session=FakeSession(), blocking=True)
+    client.set_healthy(True)
+    node.refresh_from_db()
+    assert node.healthy is True and node.heartbeat_at is not None
+
+
+@pytest.mark.django_db
+def test_set_healthy_false_consults_health_endpoint():
+    node = create_node(healthy=True)
+    session = FakeSession()
+    # /health says ok -> node stays healthy
+    session.queue.append(FakeResponse(json_data={"ok": "True"}, content=b"ok"))
+    client = VMServiceClient(node=node, session=session, blocking=True)
+    client.set_healthy(False)
+    node.refresh_from_db()
+    assert node.healthy is True
+
+
+@pytest.mark.django_db
+def test_set_healthy_false_marks_unhealthy_on_bad_health():
+    node = create_node(healthy=True)
+    session = FakeSession()
+    # /health returns not-ok -> node marked unhealthy
+    session.queue.append(FakeResponse(ok=False, status_code=503, content=b"x",
+                                      json_data={"ok": "False"}))
+    client = VMServiceClient(node=node, session=session, blocking=True)
+    client.set_healthy(False)
+    node.refresh_from_db()
+    assert node.healthy is False
+
+
+@pytest.mark.django_db
+def test_set_healthy_false_marks_unhealthy_on_exception():
+    node = create_node(healthy=True)
+    session = FakeSession()
+    # /health body is not JSON -> .json() raises -> bare except -> unhealthy
+    session.queue.append(FakeResponse(content=b"not-json"))
+    client = VMServiceClient(node=node, session=session, blocking=True)
+    client.set_healthy(False)
+    node.refresh_from_db()
+    assert node.healthy is False
