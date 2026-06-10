@@ -258,6 +258,16 @@ class ContainerType(models.Model):
         default=False,
         help_text="If true, do not auto-assign to new user quotas",
     )
+    poolable = models.BooleanField(
+        default=False,
+        help_text="If true, this type may be pre-warmed in the warm pool. "
+        "Heavy types should stay false so they are never pre-built.",
+    )
+    pool_target = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of warm VMs of this type to keep ready per healthy node "
+        "(only when poolable is true).",
+    )
 
     def __str__(self):
         return f"Type {self.vcpus} vCPU / {self.memory_mb} MB / {self.disk_gib} GiB (cost {self.credits_cost})"
@@ -298,6 +308,11 @@ class Container(models.Model):
         help_text="Selected container type; may be null for legacy containers",
     )
     first_start = models.BooleanField(default=True)
+    is_pool = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True while the VM sits in the warm pool, unclaimed by a real user",
+    )
     memory_mb = models.PositiveIntegerField(
         default=256, help_text="memory for the container"
     )
@@ -318,6 +333,12 @@ class Container(models.Model):
         choices=DesirableStatus.choices,
         help_text="Desired state for reconciliation",
     )
+
+    class Meta:
+        indexes = [
+            # Speeds up the warm-pool claim query in vm_manager.pool.
+            models.Index(fields=["is_pool", "status", "container_type"]),
+        ]
 
     def save(self, *args, **kwargs):
         if self.user_id and hasattr(self.user, "quota"):

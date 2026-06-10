@@ -56,6 +56,22 @@ def create_default_node(sender, **kwargs):
 
 
 @receiver(post_migrate)
+def create_pool_user(sender, **kwargs):
+    """
+    Create the system user that owns warm-pool VMs (pre-booted, unclaimed).
+
+    Kept inactive so it can never log in; its auto-created quota is harmless since
+    warm VMs do not check the pool user's credits.
+    """
+    if getattr(sender, "name", None) != "vm_manager":
+        return
+
+    from .pool import get_pool_user
+
+    get_pool_user()
+
+
+@receiver(post_migrate)
 def create_default_file_templates(sender, **kwargs):
     """
     Create the default templates
@@ -132,6 +148,8 @@ def create_default_container_types(sender, **kwargs):
             "vcpus": 1,
             "disk_gib": 5,
             "credits_cost": 1,
+            "poolable": True,
+            "pool_target": 2,
         },
         {
             "container_type_name": "medium",
@@ -139,13 +157,18 @@ def create_default_container_types(sender, **kwargs):
             "vcpus": 2,
             "disk_gib": 10,
             "credits_cost": 2,
+            "poolable": True,
+            "pool_target": 2,
         },
         {
+            # Heavy type stays out of the pool: never pre-built, boots on demand.
             "container_type_name": "large",
             "memory_mb": 4096,
             "vcpus": 4,
             "disk_gib": 25,
             "credits_cost": 4,
+            "poolable": False,
+            "pool_target": 0,
         },
     ]
     for s in specs:

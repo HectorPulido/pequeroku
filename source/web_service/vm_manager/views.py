@@ -33,6 +33,8 @@ from .templates import (
     apply_template,
 )
 
+from . import pool
+
 from .mixin import VMSyncMixin
 
 from ai_services import conversations as convo
@@ -49,10 +51,14 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         if not user.is_authenticated:
             return Container.objects.none()
 
+        # Warm-pool VMs are infrastructure (owned by the __pool__ system user) and
+        # are managed by the prewarm command, not the user-facing API. Hide them
+        # from every API view, including superusers; once claimed (is_pool=False)
+        # they show up normally. Operators can still inspect them in the admin.
         if user.is_superuser:
-            return super().get_queryset().select_related("node")
+            return super().get_queryset().exclude(is_pool=True).select_related("node")
 
-        return Container.visible_containers_for(user)
+        return Container.visible_containers_for(user).exclude(is_pool=True)
 
     def list(self, request, *args, **kwargs):
         """
@@ -172,6 +178,35 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         vcpus = int(ct.vcpus)
         mem_mb = int(ct.memory_mb)
         disk_gib = int(ct.disk_gib)
+
+        # Fast path: hand the user a pre-booted VM from the warm pool if one of
+        # this type is ready. This is a plain DB re-assignment (no QEMU boot), so
+        # creation is near-instant. The default template still applies lazily on
+        # the first editor connect, exactly as for a freshly booted container.
+        claimed = pool.claim_warm_container(
+            user=request.user,
+            ct=ct,
+            candidate_nodes=self._candidate_nodes(heartbeat_ttl_s=3600),
+            name=ct_name,
+        )
+        if claimed is not None:
+            audit_log_http(
+                request,
+                action="container.create",
+                target_type="container",
+                target_id=claimed.pk,
+                message="Container claimed from warm pool",
+                metadata={
+                    "container_id": str(claimed.container_id),
+                    "container_type": str(ct.pk),
+                    "credits_cost": getattr(ct, "credits_cost", None),
+                    "pool": True,
+                },
+                success=True,
+            )
+            return Response(
+                self.get_serializer(claimed).data, status=status.HTTP_201_CREATED
+            )
 
         node = self.choose_node(vcpus, mem_mb)
 

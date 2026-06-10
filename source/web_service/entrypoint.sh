@@ -18,6 +18,11 @@ fi
   python manage.py reconcile_containers --loop --interval "${RECONCILE_INTERVAL:-30}"
 ) &
 
+(
+  sleep 5
+  python manage.py prewarm_pool --loop --interval "${PREWARM_INTERVAL:-30}"
+) &
+
 echo "Starting gunicorn..."
 DJANGO_MODULE="${DJANGO_MODULE:-pequeroku}"
 exec gunicorn "${DJANGO_MODULE}.asgi:application" \

@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -7,15 +8,44 @@ import settings
 from .crypto import spec_hash
 
 
+def _virtual_size_bytes(image: str) -> int | None:
+    """Virtual size of an image in bytes, or None if it can't be read."""
+    try:
+        out = subprocess.run(
+            ["qemu-img", "info", "--output=json", image],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return int(json.loads(out.stdout)["virtual-size"])
+    except Exception as e:
+        print("Could not read virtual size of", image, e)
+        return None
+
+
 def make_overlay(base_image: str, overlay: str, disk_gib: int) -> None:
     """
     Create a qcow2 overlay disk if it doesn't already exist.
 
-    Behavior is unchanged; still prints and no-op if overlay exists.
+    The overlay is floored to the backing image's virtual size: a qcow2 overlay
+    must never be smaller than its backing image. The backing's partition table
+    references blocks past a too-small overlay's end, so the root partition (and
+    its PARTUUID) is truncated and the guest can't boot ("PARTUUID ... does not
+    exist"). Larger is fine — the extra space stays unallocated until growpart.
     """
     print("Creating the overlay with: ", base_image, overlay, disk_gib)
     if os.path.exists(overlay):
         return
+
+    size_bytes = int(disk_gib) * 1024**3
+    backing_bytes = _virtual_size_bytes(base_image)
+    if backing_bytes is not None and backing_bytes > size_bytes:
+        print(
+            f"Requested disk {disk_gib} GiB is smaller than the backing image "
+            f"({backing_bytes / 1024**3:.0f} GiB); flooring the overlay to the "
+            "backing size so the guest can boot."
+        )
+        size_bytes = backing_bytes
 
     args = [
         "qemu-img",
@@ -27,7 +57,7 @@ def make_overlay(base_image: str, overlay: str, disk_gib: int) -> None:
         "-b",
         base_image,
         overlay,
-        f"{disk_gib}G",
+        str(size_bytes),
     ]
     print(args)
 

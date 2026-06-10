@@ -22,7 +22,10 @@ class ContainerTypeAdmin(admin.ModelAdmin):
         "vcpus",
         "disk_gib",
         "credits_cost",
+        "poolable",
+        "pool_target",
     )
+    list_filter = ("poolable",)
 
 
 class TeamMembershipItemInline(admin.TabularInline):
@@ -83,7 +86,8 @@ class NodeAdmin(admin.ModelAdmin):
 
 @admin.register(Container)
 class ContainerAdmin(admin.ModelAdmin):
-    list_display = ("name", "node", "user", "status", "created_at")
+    list_display = ("name", "node", "user", "status", "is_pool", "created_at")
+    list_filter = ("is_pool", "status")
     readonly_fields = (
         "ai_logs",
         "extra_details",
