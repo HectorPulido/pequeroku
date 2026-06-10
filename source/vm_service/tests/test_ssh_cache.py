@@ -247,6 +247,75 @@ def test_open_helpers_and_generate_console(monkeypatch, fake_paramiko, vm_record
     assert chan._timeout == 0.2  # generate_console sets a small blocking timeout
 
 
+def test_exec_and_close_status_returns_exit_code():
+    """exec_and_close_status drains stdout/stderr, returns the exit code, closes."""
+
+    class _Chan:
+        def __init__(self, code):
+            self._code = code
+            self.closed = False
+            self.timeout = None
+
+        def settimeout(self, t):
+            self.timeout = t
+
+        def recv_exit_status(self):
+            return self._code
+
+        def close(self):
+            self.closed = True
+
+    class _File:
+        def __init__(self, data, chan):
+            self._data = data
+            self.channel = chan
+
+        def read(self):
+            return self._data
+
+    class _Cli:
+        def __init__(self, code):
+            self._chan = _Chan(code)
+
+        def exec_command(self, command):
+            chan = self._chan
+            return None, _File(b"out", chan), _File(b"err", chan)
+
+    cli = _Cli(7)
+    out, err, code = sc.exec_and_close_status(cli, "false", timeout=3)
+    assert out == b"out"
+    assert err == b"err"
+    assert code == 7
+    assert cli._chan.closed is True
+    assert cli._chan.timeout == 3
+
+
+def test_exec_and_close_status_falls_back_on_missing_status():
+    """If the channel can't report a status, code falls back to -1 (no raise)."""
+
+    class _Chan:
+        def settimeout(self, t):
+            pass
+
+        def close(self):
+            pass
+
+    class _File:
+        def __init__(self, data):
+            self._data = data
+            self.channel = _Chan()
+
+        def read(self):
+            return self._data
+
+    class _Cli:
+        def exec_command(self, command):
+            return None, _File(b""), _File(b"")
+
+    out, err, code = sc.exec_and_close_status(_Cli(), "noop")
+    assert code == -1
+
+
 def test_clear_cache_and_clear_all(monkeypatch, fake_paramiko):
     # Populate some entries
     sc.cache_data["x"] = {"cli": FakeSSHClient(), "sftp": FakeSFTPClient()}

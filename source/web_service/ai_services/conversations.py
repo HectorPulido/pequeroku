@@ -18,6 +18,7 @@ readme.txt/config.json, so conversations are cleared on reset / VM rebuild.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shlex
 from typing import Any, cast
@@ -25,6 +26,8 @@ from typing import Any, cast
 from vm_manager.models import Container
 from vm_manager.vm_client import VMServiceClient, VMUploadFiles, VMFile, VMPaths
 from internal_config.models import AIMemory
+
+logger = logging.getLogger(__name__)
 
 MEMORY_DIR = "/app/.pequenin"
 _NAME_RE = re.compile(r"^ai_memory_(\d+)\.json$")
@@ -44,7 +47,7 @@ def read_json(container: Container, path: str) -> dict | None:
         if isinstance(resp, dict) and resp.get("found"):
             return cast(dict, json.loads(cast(str, resp.get("content")) or "{}"))
     except Exception as exc:  # VM unreachable / not ready / bad JSON
-        print(f"[conversations] read {path} failed: {exc}")
+        logger.warning("read %s failed: %s", path, exc)
     return None
 
 
@@ -59,7 +62,7 @@ def write_json(container: Container, path: str, data: dict) -> None:
             ),
         )
     except Exception as exc:
-        print(f"[conversations] write {path} failed: {exc}")
+        logger.warning("write %s failed: %s", path, exc)
 
 
 def list_conversation_ids(container: Container) -> list[int]:
@@ -76,7 +79,7 @@ def list_conversation_ids(container: Container) -> list[int]:
                 if m:
                     ids.append(int(m.group(1)))
     except Exception as exc:
-        print(f"[conversations] list failed: {exc}")
+        logger.warning("list failed: %s", exc)
     return sorted(set(ids))
 
 
@@ -97,7 +100,7 @@ def get_current_id(user: Any, container: Container) -> int | None:
     try:
         row = AIMemory.objects.filter(user=user, container=container).first()
     except Exception as exc:
-        print(f"[conversations] get_current_id failed: {exc}")
+        logger.warning("get_current_id failed: %s", exc)
         return None
     if not row:
         return None
@@ -113,7 +116,7 @@ def set_current_id(user: Any, container: Container, conversation_id: int) -> Non
             defaults={"current_conversation": int(conversation_id)},
         )
     except Exception as exc:
-        print(f"[conversations] set_current_id failed: {exc}")
+        logger.warning("set_current_id failed: %s", exc)
 
 
 def delete_conversation(container: Container, conversation_id: int) -> None:
@@ -123,7 +126,7 @@ def delete_conversation(container: Container, conversation_id: int) -> None:
             cast(str, container.container_id), f"rm -f {shlex.quote(path)}"
         )
     except Exception as exc:
-        print(f"[conversations] delete {conversation_id} failed: {exc}")
+        logger.warning("delete conversation %s failed: %s", conversation_id, exc)
 
 
 def next_conversation_id(container: Container) -> int:

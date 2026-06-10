@@ -22,6 +22,7 @@ type PendingRequest = {
 	reject: (error: Error) => void;
 	action: string;
 	payload: Record<string, unknown>;
+	timer: ReturnType<typeof setTimeout>;
 };
 
 export type FileSystemSearchMatch = {
@@ -90,10 +91,9 @@ class FileSystemWebService {
 
 				if (eventType === "ok") {
 					const reqId = "req_id" in parsed ? Number(parsed.req_id) : Number.NaN;
-					const pendingRequest = Number.isFinite(reqId) ? this.pending.get(reqId) : undefined;
+					const pendingRequest = Number.isFinite(reqId) ? this.takePending(reqId) : undefined;
 					if (pendingRequest) {
 						const okMessage = parsed as OkMessage;
-						this.pending.delete(reqId);
 						this.trackRevisionFromResponse(
 							pendingRequest.action,
 							pendingRequest.payload,
@@ -106,9 +106,8 @@ class FileSystemWebService {
 
 				if (eventType === "error") {
 					const reqId = "req_id" in parsed ? Number(parsed.req_id) : Number.NaN;
-					const pendingRequest = Number.isFinite(reqId) ? this.pending.get(reqId) : undefined;
+					const pendingRequest = Number.isFinite(reqId) ? this.takePending(reqId) : undefined;
 					if (pendingRequest) {
-						this.pending.delete(reqId);
 						const rawError = (parsed as ErrorMessage).error;
 						const message = typeof rawError === "string" ? rawError : "WS error";
 						pendingRequest.reject(new Error(message));
@@ -156,9 +155,20 @@ class FileSystemWebService {
 		}
 	}
 
+	// Remove a pending request and cancel its timeout timer in one step, so a
+	// settled request never leaves its timer running until callTimeoutMs.
+	private takePending(reqId: number): PendingRequest | undefined {
+		const request = this.pending.get(reqId);
+		if (!request) return undefined;
+		clearTimeout(request.timer);
+		this.pending.delete(reqId);
+		return request;
+	}
+
 	private failAllPending(error: Error) {
 		if (this.pending.size === 0) return;
 		this.pending.forEach((request) => {
+			clearTimeout(request.timer);
 			try {
 				request.reject(error);
 			} catch (rejectError) {
@@ -208,19 +218,21 @@ class FileSystemWebService {
 		const msg = { action, req_id, ...payload };
 		this.ws.send(JSON.stringify(msg));
 		return new Promise<T>((resolve, reject) => {
-			this.pending.set(req_id, {
-				resolve: (data: unknown) => resolve(data as T),
-				reject,
-				action,
-				payload,
-			});
-			// TODO, this is always being called
-			setTimeout(() => {
+			// The timer only fires if the request is still unsettled when it
+			// elapses; takePending() clears it on a normal ok/error response.
+			const timer = setTimeout(() => {
 				if (this.pending.has(req_id)) {
 					this.pending.delete(req_id);
 					reject(new Error(`timeout calling ${originalAction}`));
 				}
 			}, FSWS.callTimeoutMs);
+			this.pending.set(req_id, {
+				resolve: (data: unknown) => resolve(data as T),
+				reject,
+				action,
+				payload,
+				timer,
+			});
 		});
 	}
 

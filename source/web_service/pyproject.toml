@@ -44,13 +44,13 @@ pytest-asyncio = "^1.0.0"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "pequeroku.settings"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
-testpaths = ["vm_manager", "ai_services", "internal_config", "pequeroku"]
+testpaths = ["vm_manager", "ai_services", "internal_config", "pequeroku", "platform_api"]
 addopts = "--maxfail=10 -q --disable-warnings --cov=. --ds=pequeroku.settings_test"
 asyncio_mode = "auto"
 
 [tool.coverage.run]
 branch = true
-source = ["vm_manager", "ai_services", "internal_config", "pequeroku"]
+source = ["vm_manager", "ai_services", "internal_config", "pequeroku", "platform_api"]
 
 [tool.coverage.report]
 fail_under = 70

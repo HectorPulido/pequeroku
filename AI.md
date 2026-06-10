@@ -322,6 +322,41 @@ Long commands (`pip install`, `pytest`, servers) go through `start-process`
 `process-status`.
 
 
+## 9.5 Platform API + the PequeRoku MCP server (NOT the agent)
+
+PequeRoku exposes its substrate as a public API (`platform_api`, `/api/v1`) and
+ships its **own** MCP server (`source/mcp_service/`). Don't confuse the two
+MCP-shaped things in this codebase:
+
+| | Who is the agent | Direction |
+|---|---|---|
+| **§5.6 MCP servers (remote)** | Pequenin | Pequenin is the **client**: it *consumes* external MCP servers as extra tools. |
+| **The PequeRoku MCP server** | the external client (Claude Code, Desktop, …) | PequeRoku is the **server**: it *exposes* platform tools; the caller is the brain. |
+
+**Hard boundary — the MCP server never touches the agent.** `mcp_service` and
+`platform_api` import **zero** of `ai_services`: no Pequenin, no prompts, no
+agent sessions, no chat tools. They are a thin facade over `/api/v1` (containers,
+exec, files, ports, one-shot runs). The MCP client already *is* the agent;
+PequeRoku provides the hands, not the brain. If you're working on Pequenin, keep
+it that way — do not wire `ai_services` into the public API or the MCP server.
+
+Conversely, Pequenin and the public API are **siblings over one substrate**: both
+reach VMs through `vm_service` (the agent via `VMServiceClient`; the API via the
+shared `vm_manager/orchestration.py` helpers that `ContainersViewSet` and
+`platform_api` both call). The agent is, in effect, just another client of the
+same machine layer.
+
+- Auth: API keys (`platform_api.APIKey`, scopes `read`<`exec`<`admin`), separate
+  from the IDE session. Self-serve from the dashboard's **API & MCP** page
+  (`/dashboard/keys`, session-authed `/api/account/api-keys/`); CLI
+  `manage.py create_api_key`.
+- One-shot ephemeral runs (`POST /api/v1/runs`, sync + async) create + run +
+  destroy a VM; `Container.expires_at` + the `reap_expired` reaper guarantee no
+  orphans. The run's VM inherits the same network isolation as every other VM.
+- Surface, decisions and phases: `docs/platform-api-and-mcp.md` and
+  `docs/platform-api-implementation-plan.md`. SDK: `sdk/` (repo root).
+
+
 ## 10. Configuration and quotas
 
 - **LLM credentials**: the `Config` table (`internal_config`) with

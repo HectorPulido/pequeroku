@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "internal_config",
     "vm_manager",
     "ai_services",
+    "platform_api",
 ]
 
 MIDDLEWARE = [
@@ -87,8 +88,22 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Easy way to share a piece of your machine...",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
-    # OTHER SETTINGS
+    # Keep the public /api/v1 surface out of the IDE schema; it ships its own
+    # schema at /api/v1/schema/ (see platform_api.schema).
+    "PREPROCESSING_HOOKS": ["platform_api.schema.exclude_v1_from_default"],
 }
+
+# Django cache: Redis in prod (shared across gunicorn workers, so Idempotency-Key
+# and per-key throttling are consistent). Tests override this with locmem.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+}
+
+# Per-API-key rate limit for the public surface (overridable by ops).
+PLATFORM_API_THROTTLE_RATE = os.getenv("PLATFORM_API_THROTTLE_RATE", "120/min")
 
 CHANNEL_LAYERS = {
     "default": {
@@ -151,3 +166,36 @@ STATIC_URL = "static/"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media/")
+
+# Logging: single console handler (stdout) so output is captured by the container
+# runtime / gunicorn. Level is overridable per deploy via LOG_LEVEL; our own apps
+# default to that level while noisy third-party loggers stay at WARNING.
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s %(levelname)s %(name)s: %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
+    "loggers": {
+        app: {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        }
+        for app in ("vm_manager", "ai_services", "internal_config", "platform_api")
+    },
+}

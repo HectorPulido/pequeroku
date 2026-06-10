@@ -67,7 +67,6 @@ def provision_container(
         name=name or "",
         user=user,
         container_id=vm["id"],
-        base_image="",
         status="creating",
         memory_mb=int(ct.memory_mb),
         vcpus=int(ct.vcpus),

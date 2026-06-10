@@ -23,6 +23,7 @@ class AIUsageLogAdmin(admin.ModelAdmin):
         "query",
         "prompt_tokens",
         "completion_tokens",
+        "total_tokens",
         "total_cost",
         "created_at",
     )

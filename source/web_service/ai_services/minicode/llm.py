@@ -12,10 +12,72 @@ consumes it with ``msg = yield from llm.stream(...)``.
 
 from __future__ import annotations
 
+import json
+import logging
 from typing import Iterator
 
 from .config import Config
 from .events import AssistantTextDelta, AssistantTextEnd, AssistantTextStart, Event
+
+logger = logging.getLogger(__name__)
+
+
+def _estimate_tokens(obj: object) -> int:
+    """Rough, dependency-free token estimate (~4 chars/token).
+
+    Used ONLY as a fallback when the provider does not report usage, so a real
+    model call is never recorded as zero tokens (the historic silent undercount).
+    An approximation beats dropping the spend entirely.
+    """
+    if not obj:
+        return 0
+    if isinstance(obj, str):
+        text = obj
+    else:
+        try:
+            text = json.dumps(obj, ensure_ascii=False)
+        except Exception:
+            text = str(obj)
+    return (len(text) + 3) // 4
+
+
+def _finalize_usage(
+    raw: dict | None,
+    messages: list[dict],
+    content: str,
+    tool_calls: list[dict],
+) -> dict:
+    """Normalize a step's token usage so it is never silently lost.
+
+    - If the provider reported usage, trust it but keep ``total_tokens`` at least
+      ``prompt + completion`` (some endpoints send only the aggregate, or fold
+      reasoning tokens into completion).
+    - If it reported nothing usable, estimate from the payload and warn, so a
+      call that really happened is never logged as zero tokens.
+    """
+    if raw:
+        prompt = raw["prompt_tokens"]
+        completion = raw["completion_tokens"]
+        total = max(raw["total_tokens"], prompt + completion)
+        if prompt or completion or total:
+            return {
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "total_tokens": total,
+            }
+
+    prompt = _estimate_tokens(messages)
+    completion = _estimate_tokens(content) + _estimate_tokens(tool_calls)
+    logger.warning(
+        "LLM step returned no token usage; estimating ~%d prompt / %d completion tokens",
+        prompt,
+        completion,
+    )
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": prompt + completion,
+    }
 
 
 class LLM:
@@ -56,16 +118,16 @@ class LLM:
         content: list[str] = []
         tool_calls: dict[int, dict] = {}
         started_text = False
-        usage: dict | None = None
+        raw_usage: dict | None = None
 
         for chunk in stream:
             # The final usage chunk (include_usage) carries usage and empty choices.
             cu = getattr(chunk, "usage", None)
             if cu is not None:
-                usage = {
-                    "prompt_tokens": getattr(cu, "prompt_tokens", 0) or 0,
-                    "completion_tokens": getattr(cu, "completion_tokens", 0) or 0,
-                    "total_tokens": getattr(cu, "total_tokens", 0) or 0,
+                raw_usage = {
+                    "prompt_tokens": int(getattr(cu, "prompt_tokens", 0) or 0),
+                    "completion_tokens": int(getattr(cu, "completion_tokens", 0) or 0),
+                    "total_tokens": int(getattr(cu, "total_tokens", 0) or 0),
                 }
             if not chunk.choices:
                 continue
@@ -99,4 +161,6 @@ class LLM:
         for i, tc in enumerate(ordered):  # guarantee a non-empty id
             if not tc["id"]:
                 tc["id"] = f"call_{i}"
-        return {"content": "".join(content), "tool_calls": ordered, "usage": usage}
+        full_text = "".join(content)
+        usage = _finalize_usage(raw_usage, messages, full_text, ordered)
+        return {"content": full_text, "tool_calls": ordered, "usage": usage}

@@ -97,7 +97,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, streaming = false, o
 				<span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-300">
 					<Sparks className="h-3 w-3" />
 				</span>
-				<span className="text-xs font-semibold uppercase tracking-wide text-gray-400">IA</span>
+				<span className="text-xs font-semibold uppercase tracking-wide text-gray-400">AI</span>
 			</div>
 			<div className="flex flex-col gap-1 pl-7 text-sm text-gray-200">
 				{toRenderNodes(message.parts).map((node) => {

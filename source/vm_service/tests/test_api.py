@@ -96,6 +96,9 @@ class FakeChannel:
     def settimeout(self, t):
         self._timeout = t
 
+    def recv_exit_status(self) -> int:
+        return 0
+
 
 class FakeFile:
     def __init__(self, data: bytes):
@@ -459,6 +462,8 @@ def test_execute_sh(client: TestClient, auth_header, monkeypatch):
     assert r.status_code == 200
     data = r.json()
     assert data["ok"] is True
+    # The exit status is now part of the contract (captured via recv_exit_status).
+    assert data["exit_code"] == 0
     reason = data.get("reason", "")
     assert (reason == "") or ("ok" in reason)
 

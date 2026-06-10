@@ -55,7 +55,7 @@ from implementations import (
     proxy_request,
 )
 
-from implementations.ssh_cache import exec_and_close
+from implementations.ssh_cache import exec_and_close, exec_and_close_status
 from implementations.ssh_pool import borrow
 from middleware import verify_bearer_token
 
@@ -292,16 +292,21 @@ def execute_sh(vm_id: str, vm_command: VMSh) -> VMShResponse:
     command = vm_command.command
     try:
         with borrow(vm) as conn:
-            # exec_and_close applies the timeout to the channel and CLOSES it,
-            # so the session slot is freed instead of leaking toward MaxSessions.
-            out, err = exec_and_close(conn.cli, command, vm_command.timeout)
+            # exec_and_close_status applies the timeout to the channel and CLOSES
+            # it (freeing the session slot instead of leaking toward MaxSessions)
+            # and also captures the command's exit status for the API contract.
+            out, err, code = exec_and_close_status(
+                conn.cli, command, vm_command.timeout
+            )
 
         try:
-            return VMShResponse(ok=True, stdout=out.decode(), stderr=err.decode())
+            return VMShResponse(
+                ok=True, stdout=out.decode(), stderr=err.decode(), exit_code=code
+            )
         except:
             out_b64 = base64.b64encode(out).decode("ascii")
             err_txt = err.decode("utf-8", errors="replace")
-            return VMShResponse(ok=True, stdout=out_b64, stderr=err_txt)
+            return VMShResponse(ok=True, stdout=out_b64, stderr=err_txt, exit_code=code)
 
     except Exception as e:
         print("Error sending data", e)

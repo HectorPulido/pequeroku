@@ -14,6 +14,7 @@ class VMShResponse(BaseModel):
     reason: str = ""
     stdout: str | bytes = ""
     stderr: str | bytes = ""
+    exit_code: int | None = None
 
 
 class ListDirItem(BaseModel):

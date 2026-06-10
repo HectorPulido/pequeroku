@@ -2,25 +2,25 @@ from collections import defaultdict
 from collections.abc import Iterable
 from typing import Any
 
-from datetime import timedelta
-from django.utils import timezone
-
 from .models import Container, Node, ResourceQuota
 from .vm_client import VMServiceClient, VMEnsure
+from . import orchestration
 
 
 class VMSyncMixin:
+    """Thin DRF-facing wrapper over :mod:`vm_manager.orchestration`.
+
+    The scheduling/quota/service helpers now live as pure functions in
+    ``orchestration`` so the public ``platform_api`` app can reuse them. These
+    methods just adapt ``self``/``request`` to those functions; the status-sync
+    helpers below stay here because they're IDE-specific (bulk list refresh).
+    """
+
     BATCH_SIZE: int = 100
 
-    # Scheduler helpers
+    # Scheduler helpers (delegate to orchestration)
     def _candidate_nodes(self, heartbeat_ttl_s: int = 60) -> list[Node]:
-        """
-        Return active nodes with a recent heartbeat.
-        """
-        cutoff = timezone.now() - timedelta(seconds=heartbeat_ttl_s)
-        return list(
-            Node.objects.filter(active=True, healthy=True, heartbeat_at__gte=cutoff)
-        )
+        return orchestration.candidate_nodes(heartbeat_ttl_s)
 
     def choose_node(
         self,
@@ -28,21 +28,7 @@ class VMSyncMixin:
         needed_mem_mb: int,
         heartbeat_ttl_s: int = 3600,
     ) -> Node | None:
-        """
-        Choose the best node by capacity and recent heartbeat. Returns None if no feasible node.
-        """
-        candidates = self._candidate_nodes(heartbeat_ttl_s)
-        best: Node | None = None
-        best_score = float("-inf")
-        for n in candidates:
-            free_v, free_m = n.get_free_resources()
-            if free_v < int(needed_vcpus) or free_m < int(needed_mem_mb):
-                continue
-            score = n.get_node_score()
-            if score > best_score:
-                best = n
-                best_score = score
-        return best
+        return orchestration.choose_node(needed_vcpus, needed_mem_mb, heartbeat_ttl_s)
 
     def _group_by_node(self, objs: Iterable) -> dict[Node, list]:
         groups: dict[Node, list] = defaultdict(list)
@@ -133,24 +119,16 @@ class VMSyncMixin:
                     vcpus=int(c.vcpus),
                     mem_mib=int(c.memory_mb),
                     disk_gib=int(c.disk_gib),
-                    base_image=(c.base_image or None),
                 ),
             )
         except Exception:
             pass
 
     def _check_quota(self, request) -> ResourceQuota | None:
-        quota = getattr(request.user, "quota", None)
-        if not quota:
-            return None
-
-        if not quota.active:
-            return None
-
-        return quota
+        return orchestration.check_quota(request.user)
 
     def _get_service_by_node(self, node: Node) -> VMServiceClient:
-        return VMServiceClient(node, blocking=True)
+        return orchestration.get_service_by_node(node)
 
     def _get_service(self, obj: Container) -> VMServiceClient:
-        return VMServiceClient(obj.node, blocking=True)
+        return orchestration.get_service(obj)

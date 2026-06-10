@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import base64
+import logging
 from urllib.parse import parse_qs
 
 from typing import Any, cast
@@ -13,6 +14,8 @@ from django.contrib.auth.models import User
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from pequeroku.mixins import ContainerAccessMixin, AuditMixin
+
+logger = logging.getLogger(__name__)
 
 
 class ConsoleConsumer(AsyncWebsocketConsumer, ContainerAccessMixin, AuditMixin):
@@ -146,7 +149,7 @@ class ConsoleConsumer(AsyncWebsocketConsumer, ContainerAccessMixin, AuditMixin):
 
             return True
         except Exception as e:
-            print("[ConsoleConsumer] _open_upstream error", e)
+            logger.warning("_open_upstream error: %s", e)
             return False
 
     async def disconnect(self, code):

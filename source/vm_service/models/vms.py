@@ -44,7 +44,6 @@ class VMCreate(BaseModel):
     )
     mem_mib: int = Field(default=..., ge=256, json_schema_extra={"example": 2})
     disk_gib: int = Field(default=..., ge=5, json_schema_extra={"example": 10})
-    base_image: str | None = Field(None, description="VM_BASE_IMAGE Override")
     timeout_boot_s: int | None = Field(None, description="VM_TIMEOUT_BOOT_S Override")
 
 
@@ -62,7 +61,6 @@ class VMEnsure(BaseModel):
     vcpus: int = Field(default=..., ge=1, json_schema_extra={"example": 2})
     mem_mib: int = Field(default=..., ge=256, json_schema_extra={"example": 2})
     disk_gib: int = Field(default=..., ge=5, json_schema_extra={"example": 10})
-    base_image: str | None = Field(None, description="VM_BASE_IMAGE Override")
 
 
 class VMAction(BaseModel):

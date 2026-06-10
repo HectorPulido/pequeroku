@@ -23,6 +23,16 @@ fi
   python manage.py prewarm_pool --loop --interval "${PREWARM_INTERVAL:-30}"
 ) &
 
+(
+  sleep 5
+  python manage.py run_worker --loop --interval "${RUN_WORKER_INTERVAL:-5}"
+) &
+
+(
+  sleep 5
+  python manage.py reap_expired --loop --interval "${REAP_INTERVAL:-30}"
+) &
+
 echo "Starting gunicorn..."
 DJANGO_MODULE="${DJANGO_MODULE:-pequeroku}"
 exec gunicorn "${DJANGO_MODULE}.asgi:application" \

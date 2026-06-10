@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import admin
 from django.db import models
 from django.utils.html import format_html, format_html_join
@@ -8,10 +10,10 @@ from .models import (
     FileTemplate,
     FileTemplateItem,
     Node,
-    Team,
-    TeamMembership,
     ContainerType,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @admin.register(ContainerType)
@@ -26,29 +28,6 @@ class ContainerTypeAdmin(admin.ModelAdmin):
         "pool_target",
     )
     list_filter = ("poolable",)
-
-
-class TeamMembershipItemInline(admin.TabularInline):
-    model = TeamMembership
-    extra = 1
-    fields = ("user", "team", "role", "active")
-    readonly_fields = ("joined_at",)
-    formfield_overrides = {
-        models.TextField: {
-            "widget": Textarea(attrs={"rows": 18, "style": "font-family: monospace;"})
-        }
-    }
-
-
-@admin.register(Team)
-class TeamAdmin(admin.ModelAdmin):
-    list_display = (
-        "name",
-        "slug",
-        "owner",
-        "created_at",
-    )
-    inlines = [TeamMembershipItemInline]
 
 
 @admin.register(Node)
@@ -147,30 +126,10 @@ class ContainerAdmin(admin.ModelAdmin):
         )
 
 
-class ContainersInline(admin.TabularInline):
-    model = Container
-    extra = 1
-    fields = (
-        "node",
-        "name",
-        "memory_mb",
-        "vcpus",
-        "disk_gib",
-        "desired_state",
-        "status",
-    )
-    formfield_overrides = {
-        models.TextField: {
-            "widget": Textarea(attrs={"rows": 18, "style": "font-family: monospace;"})
-        }
-    }
-
-
 @admin.register(ResourceQuota)
 class ResourceQuotaAdmin(admin.ModelAdmin):
     list_display = ("user", "ai_use_per_day", "credits", "active")
     readonly_fields = ("logs", "ai_logs")
-    inlines = [ContainersInline]
 
     @admin.display(description="Logs")
     def logs(self, obj):
@@ -180,8 +139,8 @@ class ResourceQuotaAdmin(admin.ModelAdmin):
         logs = []
         try:
             logs = obj.get_user_logs()
-        except Exception as e:
-            print(e)
+        except Exception:
+            logger.exception("Failed to load user logs")
 
         logs.insert(
             0,

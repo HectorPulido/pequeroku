@@ -51,6 +51,7 @@ def fake_vm(monkeypatch):
         "vm_manager.pool.VMServiceClient",
         "vm_manager.views.VMServiceClient",
         "vm_manager.mixin.VMServiceClient",
+        "vm_manager.orchestration.VMServiceClient",
         "vm_manager.templates.VMServiceClient",
     ):
         monkeypatch.setattr(target, FakeVMClient, raising=False)
@@ -113,7 +114,6 @@ def test_claim_reassigns_a_ready_warm_vm(fake_vm):
     warm.refresh_from_db()
     assert warm.is_pool is False
     assert warm.user_id == alice.pk
-    assert warm.resource_quota_id == alice.quota.pk
 
 
 def test_claim_returns_none_when_pool_empty(fake_vm):

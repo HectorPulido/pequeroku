@@ -121,7 +121,6 @@ def create_container(
         container_id = f"vm-{int(timezone.now().timestamp()*1_000_000_000)}"
     defaults = dict(
         name="my-container",
-        base_image="",
         memory_mb=512,
         vcpus=2,
         disk_gib=10,

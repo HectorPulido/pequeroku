@@ -1,5 +1,6 @@
 import os
 import base64
+import logging
 from dataclasses import asdict
 from typing import cast
 
@@ -26,18 +27,20 @@ from .serializers import (
     ApplyTemplateResponseSerializer,
     ContainerTypeSerializer,
 )
-from .models import Container, FileTemplate, Node, ContainerType
-from .vm_client import VMServiceClient, VMCreate, VMAction, VMUploadFiles, VMFile
+from .models import Container, FileTemplate, ContainerType
+from .vm_client import VMAction, VMUploadFiles, VMFile
 
 from .templates import (
     apply_template,
 )
 
-from . import pool
+from . import orchestration
 
 from .mixin import VMSyncMixin
 
 from ai_services import conversations as convo
+
+logger = logging.getLogger(__name__)
 
 
 class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
@@ -175,93 +178,48 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        vcpus = int(ct.vcpus)
-        mem_mb = int(ct.memory_mb)
-        disk_gib = int(ct.disk_gib)
+        # Claim a warm-pool VM if one is ready, else boot on demand. The shared
+        # orchestration helper is also what powers the public /api/v1 surface, so
+        # both paths stay in sync.
+        try:
+            c, warn_msg, from_pool = orchestration.claim_or_create_container(
+                user=request.user, ct=ct, name=ct_name
+            )
+        except orchestration.NoNodeAvailable:
+            return Response(
+                "No node available",
+                status=status.HTTP_501_NOT_IMPLEMENTED,
+            )
 
-        # Fast path: hand the user a pre-booted VM from the warm pool if one of
-        # this type is ready. This is a plain DB re-assignment (no QEMU boot), so
-        # creation is near-instant. The default template still applies lazily on
-        # the first editor connect, exactly as for a freshly booted container.
-        claimed = pool.claim_warm_container(
-            user=request.user,
-            ct=ct,
-            candidate_nodes=self._candidate_nodes(heartbeat_ttl_s=3600),
-            name=ct_name,
-        )
-        if claimed is not None:
+        if from_pool:
             audit_log_http(
                 request,
                 action="container.create",
                 target_type="container",
-                target_id=claimed.pk,
+                target_id=c.pk,
                 message="Container claimed from warm pool",
                 metadata={
-                    "container_id": str(claimed.container_id),
+                    "container_id": str(c.container_id),
                     "container_type": str(ct.pk),
                     "credits_cost": getattr(ct, "credits_cost", None),
                     "pool": True,
                 },
                 success=True,
             )
-            return Response(
-                self.get_serializer(claimed).data, status=status.HTTP_201_CREATED
+        else:
+            audit_log_http(
+                request,
+                action="container.create",
+                target_type="container",
+                target_id=c.pk,
+                message="Container record created and VM boot scheduled",
+                metadata={
+                    "container_id": str(c.container_id),
+                    "container_type": str(ct.pk),
+                    "credits_cost": getattr(ct, "credits_cost", None),
+                },
+                success=True,
             )
-
-        node = self.choose_node(vcpus, mem_mb)
-
-        warn_msg = None
-        if not node:
-            node = Node.get_random_node()
-            warn_msg = "No available nodes with enough capacity; proceeding on best-effort node"
-            print(f"requested vcpus: {vcpus}, requested mem_mb: {mem_mb}")
-            print(warn_msg)
-
-        if not node:
-            return Response(
-                "No node available",
-                status=status.HTTP_501_NOT_IMPLEMENTED,
-            )
-
-        service = VMServiceClient(node)
-
-        vm = service.create_vm(
-            VMCreate(
-                vcpus=vcpus,
-                mem_mib=mem_mb,
-                disk_gib=disk_gib,
-            )
-        )
-
-        c = Container.objects.create(
-            name=ct_name,
-            user=request.user,
-            container_id=vm["id"],
-            base_image="",
-            status="creating",
-            memory_mb=mem_mb,
-            vcpus=vcpus,
-            disk_gib=disk_gib,
-            node=node,
-            container_type=ct,
-        )
-
-        metadata: dict[str, object] = {
-            "container_id": str(c.container_id),
-            "image": str(c.base_image),
-            "container_type": str(ct.pk),
-            "credits_cost": getattr(ct, "credits_cost", None),
-        }
-
-        audit_log_http(
-            request,
-            action="container.create",
-            target_type="container",
-            target_id=c.pk,
-            message="Container record created and VM boot scheduled",
-            metadata=metadata,
-            success=True,
-        )
 
         ser = self.get_serializer(c)
         data = dict(ser.data)
@@ -282,7 +240,7 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         try:
             service.delete_vm(obj.container_id)
         except Exception as e:
-            print("Could not stop vm, deleting anyway", e)
+            logger.warning("Could not stop vm, deleting anyway: %s", e)
 
         audit_log_http(
             request,

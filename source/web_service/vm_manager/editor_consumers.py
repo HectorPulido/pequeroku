@@ -2,6 +2,7 @@ from __future__ import annotations
 import shlex
 import re
 import asyncio
+import logging
 from typing import Never, cast
 
 # from datetime import datetime, timezone
@@ -18,6 +19,7 @@ from .vm_client import VMServiceClient, VMUploadFiles, VMFile, SearchRequest
 from .templates import first_start_of_container
 from .models import Container, Node
 
+logger = logging.getLogger(__name__)
 
 SAFE_ROOT = "/app"
 
@@ -139,7 +141,7 @@ class EditorConsumer(
                     }
                 )
         except Exception as e:
-            print("Error receive_json: ", e)
+            logger.warning("receive_json error: %s", e)
             await self.send_json({"event": "error", "req_id": req_id, "error": str(e)})
 
     async def ws_broadcast(self, event: dict[str, list[str] | dict[str, str]]) -> None:

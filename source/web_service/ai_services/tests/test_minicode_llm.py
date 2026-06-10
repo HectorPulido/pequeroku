@@ -103,7 +103,39 @@ def test_stream_tool_call_only_has_no_text_events_and_fills_missing_id():
     assert result["tool_calls"] == [
         {"id": "call_0", "name": "read", "arguments": '{"filePath":"a.py"}'}
     ]
-    assert result["usage"] is None
+    # No usage chunk from the provider -> usage is ESTIMATED (never None / zero for
+    # a real call). Messages were empty so prompt is 0; the tool call drives a
+    # small positive completion estimate.
+    assert result["usage"]["prompt_tokens"] == 0
+    assert result["usage"]["completion_tokens"] > 0
+    assert result["usage"]["total_tokens"] == result["usage"]["completion_tokens"]
+
+
+def test_stream_estimates_usage_when_provider_omits_it():
+    # The stream has no _usage_chunk: the endpoint reported nothing. We must still
+    # record a non-zero estimate instead of silently logging zero tokens.
+    chunks = [_text_chunk("Hello world, this is a longer answer.")]
+    llm = _make_llm(chunks)
+    messages = [{"role": "user", "content": "a fairly long user prompt to estimate"}]
+    _events, result = _drive(llm.stream(messages, tools=None))
+
+    usage = result["usage"]
+    assert usage is not None
+    assert usage["prompt_tokens"] > 0
+    assert usage["completion_tokens"] > 0
+    assert usage["total_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"]
+
+
+def test_stream_total_tokens_never_below_prompt_plus_completion():
+    # Some endpoints under-report the aggregate; total must not drop below parts.
+    chunks = [_text_chunk("hi"), _usage_chunk(3, 4, 0)]
+    llm = _make_llm(chunks)
+    _events, result = _drive(llm.stream([{"role": "user", "content": "x"}], tools=None))
+    assert result["usage"] == {
+        "prompt_tokens": 3,
+        "completion_tokens": 4,
+        "total_tokens": 7,  # floored up from the reported 0
+    }
 
 
 def test_stream_accumulates_streamed_tool_arguments():

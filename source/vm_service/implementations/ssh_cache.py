@@ -38,6 +38,38 @@ def exec_and_close(
             pass
 
 
+def exec_and_close_status(
+    cli: paramiko.SSHClient, command: str, timeout: float | None = None
+) -> tuple[bytes, bytes, int]:
+    """Like ``exec_and_close`` but also return the command's exit status.
+
+    The status is read with ``channel.recv_exit_status()`` AFTER stdout/stderr are
+    fully drained, so the command has already finished and the call returns
+    immediately (no extra round-trip). On any error reading the status (e.g. a
+    test fake without the method) we fall back to ``-1`` rather than raising, so
+    the caller always gets a usable exit code.
+    """
+    _, stdout, stderr = cli.exec_command(command)
+    try:
+        if timeout is not None:
+            try:
+                stdout.channel.settimeout(timeout)
+            except Exception:
+                pass
+        out = stdout.read()
+        err = stderr.read()
+        try:
+            code = int(stdout.channel.recv_exit_status())
+        except Exception:
+            code = -1
+        return out, err, code
+    finally:
+        try:
+            stdout.channel.close()
+        except Exception:
+            pass
+
+
 def clear_cache(vm_id: str):
     cache_data[vm_id] = {}
 

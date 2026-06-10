@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import posixpath
 import re
 import shlex
@@ -32,6 +33,8 @@ import shlex
 from vm_manager.vm_client import VMPaths
 
 from .tools.base import Tool, truncate
+
+logger = logging.getLogger(__name__)
 
 CUSTOM_TOOLS_DIR = "/app/.pequenin/tools"
 # Same naming rule as skills: lowercase alphanumerics joined by single hyphens, and
@@ -144,7 +147,7 @@ def discover_custom_tools(config) -> list[CustomTool]:
         try:
             man = json.loads(content)
         except Exception:
-            print(f"[custom_tools] {folder}/tool.json is not valid JSON; skipped")
+            logger.warning("%s/tool.json is not valid JSON; skipped", folder)
             continue
         if not isinstance(man, dict):
             continue
@@ -152,13 +155,13 @@ def discover_custom_tools(config) -> list[CustomTool]:
         desc = " ".join(str(man.get("description") or "").split())
         command = str(man.get("command") or "").strip()
         if not name or not _NAME_RE.match(name) or len(name) > _MAX_NAME_CHARS:
-            print(f"[custom_tools] {folder}: invalid/missing name; skipped")
+            logger.warning("%s: invalid/missing name; skipped", folder)
             continue
         if name != folder:
-            print(f"[custom_tools] {folder}: name '{name}' != folder; skipped")
+            logger.warning("%s: name '%s' != folder; skipped", folder, name)
             continue
         if not desc or not command:
-            print(f"[custom_tools] {name}: missing description or command; skipped")
+            logger.warning("%s: missing description or command; skipped", name)
             continue
         tools[name] = CustomTool(
             name, desc, _normalize_schema(man.get("parameters")), command, base_dir

@@ -20,7 +20,6 @@ class ContainerSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "base_image",
             "created_at",
             "status",
             "user",
@@ -34,7 +33,6 @@ class ContainerSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "user",
-            "base_image",
             "created_at",
             "status",
             "container_type_name",

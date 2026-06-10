@@ -10,7 +10,11 @@ class AIUsageLog(models.Model):
     )
     container = models.ForeignKey(
         Container,
-        on_delete=models.CASCADE,
+        # SET_NULL (not CASCADE): usage logs are durable billing/quota records and
+        # must outlive the container. With CASCADE, deleting a container wiped its
+        # logs and silently reset the user's daily AI-use counter (an exploit, since
+        # ai_uses_left_today counts the user's logs for the day).
+        on_delete=models.SET_NULL,
         related_name="r_container",
         null=True,
         blank=True,
@@ -26,6 +30,12 @@ class AIUsageLog(models.Model):
     completion_tokens = models.PositiveIntegerField(
         default=0, help_text="Total output token used"
     )
+    total_tokens = models.PositiveIntegerField(
+        default=0,
+        help_text="Provider-reported total tokens; authoritative for "
+        "reconciliation. May exceed prompt+completion (e.g. reasoning tokens) "
+        "or be the only figure some endpoints report.",
+    )
 
     class Meta:
         indexes = [
@@ -37,8 +47,17 @@ class AIUsageLog(models.Model):
         token_input_price = float(pricing.get("token_input_price", 0))
         token_output_price = float(pricing.get("token_output_price", 0))
 
+        # Tokens the provider counts in the total but not in prompt/completion
+        # (e.g. reasoning tokens some endpoints report only in total_tokens) are
+        # billed at the output rate so they are not silently free.
+        extra_tokens = max(
+            int(self.total_tokens)
+            - int(self.prompt_tokens)
+            - int(self.completion_tokens),
+            0,
+        )
         cost_input = int(self.prompt_tokens) * token_input_price
-        cost_output = int(self.completion_tokens) * token_output_price
+        cost_output = (int(self.completion_tokens) + extra_tokens) * token_output_price
         cost_total = cost_input + cost_output
         return {
             "cost_input": cost_input,
@@ -55,7 +74,6 @@ class AIMemory(models.Model):
     # Conversation content lives in the VM (/app/.pequenin/); the DB only keeps the
     # durable pointer to which conversation is currently active per (user, container)
     # so it survives a VM reset/rebuild and is known without hitting the VM.
-    memory = models.JSONField(blank=True, null=True, default=dict)
     current_conversation = models.PositiveIntegerField(default=1)
 
 

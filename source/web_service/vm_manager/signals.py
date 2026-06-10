@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.db import transaction
 from django.dispatch import receiver
@@ -11,6 +13,8 @@ from .models import (
     Node,
     ContainerType,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
@@ -52,7 +56,8 @@ def create_default_node(sender, **kwargs):
         },
     )
 
-    print("Base node created...")
+    if created:
+        logger.info("Base node created")
 
 
 @receiver(post_migrate)
@@ -102,7 +107,7 @@ def create_default_file_templates(sender, **kwargs):
     if getattr(sender, "name", None) != "vm_manager":
         return
 
-    print("Generating base templates...")
+    logger.info("Generating base templates")
 
     with transaction.atomic():
         for tpl in default_templates:

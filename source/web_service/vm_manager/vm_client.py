@@ -53,7 +53,6 @@ class VMCreate:
     vcpus: int
     mem_mib: int
     disk_gib: int
-    base_image: str | None = None
     timeout_boot_s: int | None = None
 
 
@@ -64,7 +63,6 @@ class VMEnsure:
     vcpus: int
     mem_mib: int
     disk_gib: int
-    base_image: str | None = None
 
 
 @dataclass

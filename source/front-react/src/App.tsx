@@ -4,6 +4,7 @@ import AlertStack from "@/components/AlertStack";
 import LoaderOverlay from "@/components/LoaderOverlay";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AiStudio from "./pages/AiStudio";
+import ApiKeys from "./pages/ApiKeys";
 import Dashboard from "./pages/Dashboard";
 import IDE from "./pages/IDE";
 import Login from "./pages/Login";
@@ -61,6 +62,14 @@ function App() {
 					element={
 						<ProtectedRoute>
 							<Metrics />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/keys"
+					element={
+						<ProtectedRoute>
+							<ApiKeys />
 						</ProtectedRoute>
 					}
 				/>

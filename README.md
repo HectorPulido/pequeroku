@@ -88,6 +88,7 @@ The result is not a snippet to copy. Pequenin creates the files, installs the de
 | **Disposable workspaces** | Reset to a clean slate while keeping your config |
 | **Full root** | Install anything, with no guardrails in the way |
 | **Quotas and roles** | Per-user resource limits for team deployments |
+| **Public API & MCP** | Drive everything from scripts, the [Python SDK](./sdk/), or an MCP agent ([`/api/v1`](#public-api--mcp-server) + MCP server) |
 
 
 ## How It Works
@@ -115,6 +116,102 @@ The brain (the AI and agentic loop, detailed in [AI.md](./AI.md)) runs in `web_s
 **Stack:** Django · DRF · Channels · FastAPI · QEMU/KVM · React · Monaco · Xterm.js · Postgres · Redis · Docker
 
 Full architecture and setup: [Wiki](https://github.com/HectorPulido/pequeroku/wiki). Deep dive on the AI engine: [AI.md](./AI.md).
+
+
+## Public API & MCP server
+
+The same substrate that powers the IDE is exposed as a versioned, public API —
+*infra as API*. Anything the dashboard does, a script, the SDK, or an AI agent
+can do too, authenticated with an API key. There are no privileged side paths:
+the SDK and the MCP server are just clients of `/api/v1`.
+
+```
+client (script / SDK / CLI / MCP agent)
+   │  Authorization: Bearer pk_<prefix>_<secret>
+   ▼
+web_service  /api/v1/   (API keys, quotas, stable contract)   ── + MCP server at /mcp
+   ▼
+vm_service   /vms/...    (QEMU VMs, isolated network)
+```
+
+### Get a key + the MCP string
+
+In the dashboard, click **API & MCP** in the header (route `/dashboard/keys`).
+It's a self-serve page to create, list, and revoke API keys, and it shows your
+MCP connection string and a ready-to-paste `claude mcp add` command. The secret
+is shown **once** — only its hash is stored.
+
+Operators can also mint keys from the CLI:
+
+```bash
+docker compose exec web python manage.py create_api_key <username> --scopes read,exec,admin
+```
+
+Keys carry scopes — `read` < `exec` < `admin` — so you decide how much power each
+script or agent gets (`read` can't run code; `exec` can't create/destroy).
+
+### REST API (`/api/v1`)
+
+The spec **is** the documentation: OpenAPI at `/api/v1/schema/`, Swagger UI at
+`/api/v1/schema/swagger-ui/`. Errors use a stable envelope
+`{"error": {"code", "message"}}` with enumerated codes (`quota_exceeded`,
+`machine_not_running`, `forbidden_scope`, `timeout`, …).
+
+| Method & path | Does |
+|---|---|
+| `POST /api/v1/containers` | Create a container (`{type, name?, ttl_seconds?}`) |
+| `GET /api/v1/containers` | List your containers |
+| `POST /api/v1/containers/{id}/exec` | Run a command → `{stdout, stderr, exit_code}` (or `background` → `process_id`) |
+| `PUT /api/v1/containers/{id}/files` | Batch-write files |
+| `GET /api/v1/containers/{id}/ports` | Listening ports + preview paths |
+| `POST /api/v1/runs` | **One-shot**: create + run + destroy, sync or `async` |
+| `GET /api/v1/runs/{id}` | Poll an async run |
+| `GET /api/v1/types` | Flavors available to you + credit cost |
+
+One-shot run in a throwaway VM:
+
+```bash
+curl -X POST http://localhost/api/v1/runs \
+  -H "Authorization: Bearer pk_xxx" -H "Content-Type: application/json" \
+  -d '{"command":"python main.py","files":[{"path":"main.py","content":"print(\"hi\")"}]}'
+# → {"status":"succeeded","stdout":"hi\n","exit_code":0, ...}
+```
+
+### Python SDK
+
+```python
+from pequeroku import PequeRoku                # sdk/
+pq = PequeRoku(api_key="pk_xxx", base_url="http://localhost")
+print(pq.run("echo hello").stdout)             # one-shot
+c = pq.create_container(type="small", name="blog")
+pq.exec(c["id"], "python -m http.server 8000", background=True)
+```
+
+See [`sdk/README.md`](./sdk/README.md).
+
+### MCP server
+
+PequeRoku ships an [MCP](https://modelcontextprotocol.io) server so any
+MCP-capable agent (Claude Code, Claude Desktop, …) gets **hands** on a real
+sandbox — create VMs, run code, move files, inspect ports — over streamable HTTP
+at `/mcp`. Connect it with the key from the dashboard's **API & MCP** page:
+
+```bash
+claude mcp add --transport http pequeroku http://localhost/mcp \
+  --header "Authorization: Bearer pk_xxx"
+```
+
+It exposes 9 task-shaped tools (`run_code`, `list_containers`,
+`get_or_create_container`, `container_exec`, `process_status`, `write_files`,
+`read_path`, `get_preview`, `destroy_container`). The blast radius of anything an
+agent runs is **one isolated VM**, not your machine — that's the pitch: give your
+agent a real sandbox with sane defaults (destroy needs confirmation, runs carry a
+timeout + TTL).
+
+> The MCP server is **platform-only by design**: it never exposes Pequenin or any
+> agent internals. The MCP client already *is* the agent; PequeRoku provides the
+> hands, not the brain. See the boundary in [AI.md](./AI.md). Details:
+> [`source/mcp_service/README.md`](./source/mcp_service/README.md).
 
 
 ## Quick Start

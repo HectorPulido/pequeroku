@@ -2,6 +2,7 @@ import {
 	Expand,
 	GraphUp,
 	Group,
+	Key,
 	Play,
 	RefreshDouble,
 	Sparks,
@@ -13,6 +14,7 @@ import {
 } from "iconoir-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Button from "@/components/Button";
 import Header from "@/components/Header";
 import Modal from "@/components/Modal";
@@ -49,6 +51,7 @@ const PLATFORM_WARNING = [
 type PendingAction = `${number}:${"start" | "stop" | "delete"}`;
 
 const Dashboard: React.FC = () => {
+	const navigate = useNavigate();
 	const appBase = useMemo(() => resolveAppBase(), []);
 	const buildUrl = useCallback((path: string) => buildAppUrl(path, appBase), [appBase]);
 
@@ -408,6 +411,15 @@ const Dashboard: React.FC = () => {
 						</div>
 					</details>
 				</div>
+
+				<Button
+					variant="secondary"
+					size="sm"
+					icon={<Key className="h-4 w-4" />}
+					onClick={() => navigate("/keys")}
+				>
+					API &amp; MCP
+				</Button>
 
 				<Button
 					variant="secondary"

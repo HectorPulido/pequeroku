@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import logging
 from collections.abc import Iterable
 from typing import cast
 from django.db.models import Q
@@ -10,6 +12,8 @@ from django.apps import apps
 from django.contrib.auth.models import User
 
 from namesgenerator import get_random_name
+
+logger = logging.getLogger(__name__)
 
 
 class Node(models.Model):
@@ -109,7 +113,7 @@ class ResourceQuota(models.Model):
         if not self.active:
             from django.core.management import call_command
 
-            queryset = Container.objects.filter(resource_quota=self)
+            queryset = Container.objects.filter(user=self.user)
             queryset.update(desired_state="stopped")
 
             ids = ",".join([str(pk) for pk in queryset.values_list("pk", flat=True)])
@@ -286,19 +290,11 @@ class Container(models.Model):
         STOPPED = "stopped", "stopped"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="containers")
-    resource_quota = models.ForeignKey(
-        "ResourceQuota",
-        on_delete=models.CASCADE,
-        related_name="containers",
-        null=True,
-        blank=True,
-    )
     node = models.ForeignKey(
         Node, on_delete=models.CASCADE, related_name="container_node"
     )
     name = models.CharField(max_length=128, default="")
     container_id = models.CharField(max_length=64, unique=True)
-    base_image = models.CharField(max_length=128, default="", blank=True)
     container_type = models.ForeignKey(
         "ContainerType",
         on_delete=models.SET_NULL,
@@ -320,6 +316,13 @@ class Container(models.Model):
     disk_gib = models.PositiveIntegerField(default=10, help_text="disk in gb")
 
     created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="When set, the TTL reaper destroys this container after this "
+        "time. Null means persistent. Used by ephemeral API runs.",
+    )
     status = models.CharField(
         max_length=32,
         default=Status.CREATED,
@@ -341,8 +344,6 @@ class Container(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        if self.user_id and hasattr(self.user, "quota"):
-            self.resource_quota = self.user.quota
         if not self.name:
             self.name = get_random_name()
 
@@ -361,18 +362,7 @@ class Container(models.Model):
 
     @staticmethod
     def visible_containers_for(user: User):
-        return (
-            Container.objects.filter(
-                Q(user=user)
-                | Q(
-                    user__team_memberships__team__memberships__user=user,
-                    user__team_memberships__active=True,
-                    user__team_memberships__team__memberships__active=True,
-                )
-            )
-            .select_related("user", "resource_quota")
-            .distinct()
-        )
+        return Container.objects.filter(user=user).select_related("user")
 
     @staticmethod
     def can_view_container(
@@ -386,7 +376,7 @@ class Container(models.Model):
         if pk:
             return Container.visible_containers_for(user).filter(pk=pk).exists()
 
-        print("No container o PK provided...")
+        logger.warning("can_view_container called without a container or pk")
         return False
 
     def get_machine_logs(self):
@@ -431,66 +421,3 @@ class Container(models.Model):
             )
 
         return response
-
-
-class Team(models.Model):
-    name = models.CharField(max_length=120, unique=True)
-    slug = models.SlugField(max_length=140, unique=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    owner = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name="owned_teams"
-    )
-    active = models.BooleanField(default=True)
-
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.name)[:120]
-
-        super().save(*args, **kwargs)
-
-        TeamMembership.objects.update_or_create(
-            user=self.owner,
-            team=self,
-            defaults={
-                "role": TeamMembership.Role.ADMIN,
-                "active": True,
-            },
-        )
-
-        # If team is deactivate shut down all the memberships
-        if self.active is False:
-            TeamMembership.objects.filter(team=self).exclude(active=False).update(
-                active=False
-            )
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
-
-
-class TeamMembership(models.Model):
-    class Role(models.TextChoices):
-        MEMBER = "member", "Member"
-        ADMIN = "admin", "Admin"
-
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="team_memberships",
-    )
-    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="memberships")
-    role = models.CharField(max_length=12, choices=Role.choices, default=Role.MEMBER)
-    joined_at = models.DateTimeField(auto_now_add=True)
-    active = models.BooleanField(default=True)
-
-    class Meta:
-        unique_together = ("user", "team")
-        indexes = [
-            models.Index(fields=["user", "team"]),
-            models.Index(fields=["team", "active"]),
-        ]
-
-    def __str__(self):
-        return f"{self.user} in {self.team} ({self.role})"

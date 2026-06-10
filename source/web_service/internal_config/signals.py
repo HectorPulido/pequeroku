@@ -1,6 +1,10 @@
+import logging
+
 from django.db.models.signals import post_migrate
 from django.dispatch import receiver
 from .models import Config
+
+logger = logging.getLogger(__name__)
 
 
 @receiver(post_migrate)
@@ -11,7 +15,7 @@ def create_default_configs(sender, **kwargs):
     if getattr(sender, "name", None) != "internal_config":
         return
 
-    print("Generating base configs...")
+    logger.info("Generating base configs")
 
     defaults = [
         {"name": "token_output_price", "value": "7.5e-7", "description": ""},

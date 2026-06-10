@@ -28,6 +28,10 @@ services:
     command: ./entrypoint.sh
     volumes:
       - ./web_service:/app
+    environment:
+      # Allow internal service-to-service calls by the compose hostname (the MCP
+      # server hits http://web:8000/api/v1). "localhost" is always allowed too.
+      ALLOWED_HOSTS: web
     networks:
       - pequeroku-net
     depends_on:
@@ -45,6 +49,20 @@ services:
       - pequeroku-net
     restart: unless-stopped
 
+  mcp_service:
+    build: ./mcp_service/.
+    command: ./entrypoint.sh
+    volumes:
+      - ./mcp_service:/app
+    environment:
+      # web_service exposes /api/v1; the MCP server forwards the caller's API key.
+      PEQUEROKU_API_URL: http://web:8000
+    networks:
+      - pequeroku-net
+    depends_on:
+      - web
+    restart: unless-stopped
+
   nginx:
     image: nginx:latest
     container_name: nginx_static
@@ -53,6 +71,7 @@ services:
     depends_on:
       - web
       - front-react
+      - mcp_service
     volumes:
       - ./web_service/staticfiles:/usr/share/nginx/static:ro # static -> django static files
       - ./front/page:/usr/share/nginx/html:ro # html -> front

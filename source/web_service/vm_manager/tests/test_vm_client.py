@@ -111,7 +111,7 @@ def test_create_vm_posts_filtered_payload_and_handles_json():
     )
 
     client = VMServiceClient(node=node, session=session)
-    payload = VMCreate(vcpus=2, mem_mib=512, disk_gib=10, base_image=None)
+    payload = VMCreate(vcpus=2, mem_mib=512, disk_gib=10)
     res = client.create_vm(payload)
 
     assert res == {"id": "vm-1"}
@@ -377,7 +377,7 @@ def test_list_vms_and_ensure_vm():
     assert client.list_vms() == [{"id": "a"}]
     assert session.last_url.endswith("/vms")
 
-    client.ensure_vm("a", VMEnsure(vcpus=1, mem_mib=128, disk_gib=2, base_image=None))
+    client.ensure_vm("a", VMEnsure(vcpus=1, mem_mib=128, disk_gib=2))
     assert session.last_url.endswith("/vms/a/ensure")
     assert session.last_json == {"vcpus": 1, "mem_mib": 128, "disk_gib": 2}
 

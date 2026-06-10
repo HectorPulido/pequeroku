@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -48,6 +49,8 @@ from urllib.parse import urlparse
 import requests
 
 from .tools.base import Tool, truncate
+
+logger = logging.getLogger(__name__)
 
 MCP_CONFIG_PATH = "/app/.pequenin/mcp.json"
 DEFAULT_TIMEOUT_MS = 30_000
@@ -122,7 +125,7 @@ def _load_mcp_config(config) -> dict:
     try:
         data = json.loads(resp.get("content") or "{}")
     except Exception:
-        print("[mcp] /app/.pequenin/mcp.json is not valid JSON; ignoring")
+        logger.warning("%s is not valid JSON; ignoring", MCP_CONFIG_PATH)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -170,16 +173,17 @@ def parse_servers(cfg: dict) -> list[McpServer]:
         url = spec.get("url")
         stype = str(spec.get("type", "") or "").strip().lower()
         if stype in ("local", "stdio") or (spec.get("command") and not url):
-            print(
-                f"[mcp] {name}: local/stdio servers are not supported (remote only); skipped"
+            logger.warning(
+                "%s: local/stdio servers are not supported (remote only); skipped",
+                name,
             )
             continue
         if not isinstance(url, str) or not url:
-            print(f"[mcp] {name}: missing url; skipped")
+            logger.warning("%s: missing url; skipped", name)
             continue
         ok, reason = _url_allowed(url)
         if not ok:
-            print(f"[mcp] {name}: url blocked ({reason}); skipped")
+            logger.warning("%s: url blocked (%s); skipped", name, reason)
             continue
         headers = spec.get("headers")
         headers = headers if isinstance(headers, dict) else {}
@@ -415,7 +419,7 @@ def discover_mcp_tools(config) -> list[McpTool]:
             client.initialize()
             raw = client.list_tools()
         except Exception as e:
-            print(f"[mcp] {s.name}: connect/list failed: {e}")
+            logger.warning("%s: connect/list failed: %s", s.name, e)
             client.close()
             continue
         for t in raw:
@@ -434,6 +438,6 @@ def discover_mcp_tools(config) -> list[McpTool]:
                 )
             )
             if len(tools) >= _MAX_TOTAL_TOOLS:
-                print(f"[mcp] tool cap {_MAX_TOTAL_TOOLS} reached; remaining dropped")
+                logger.warning("tool cap %s reached; remaining dropped", _MAX_TOTAL_TOOLS)
                 return tools
     return tools

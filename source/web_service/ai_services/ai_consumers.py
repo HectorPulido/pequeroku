@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import logging
 from typing import Any, cast
 from django.db import DatabaseError
 from asgiref.sync import sync_to_async
@@ -19,6 +20,8 @@ from .minicode.frontends.pipeline import (
 )
 from .minicode.prompts import INIT_PROMPT
 from . import conversations as convo
+
+logger = logging.getLogger(__name__)
 
 # Messages in OpenAI format (role/content/tool_calls/tool), exactly as the minicode
 # engine produces and consumes them; persisted verbatim in the VM's files.
@@ -193,6 +196,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             model_used=agent.model,
             prompt_tokens=token_usage.prompt_tokens,
             completion_tokens=token_usage.completion_tokens,
+            total_tokens=token_usage.total_tokens,
         )
 
     # -- conversation helpers (delegate to convo; resolved at call time so tests
@@ -403,7 +407,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             await self.send_json({"event": "finish_text"})
 
         async def on_tool_call(tool: str, **kwargs: dict[str, Any]):
-            print(f"[on_tool_call] using: {tool} with {kwargs}")
+            logger.debug("on_tool_call using %s with %s", tool, kwargs)
             await send_text(f"Using {tool}...")
 
         async def on_start_chunk():
@@ -416,7 +420,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             # Set Quota
             if not self.container_obj or not self.user:
                 return
-            print(f"[on_finish] {response}")
+            logger.debug("on_finish: %s", response)
             await self.send_json({"event": "finish_text"})
 
         async def on_event(payload: dict[str, Any]):
@@ -445,7 +449,7 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             return
 
         if not agent or not self.container_obj or not self.user:
-            print("[AGENT]: Not agent found")
+            logger.warning("No agent found for the request")
             return
 
         quota, ai_uses_left_today = await self._get_quota(self.user_pk)

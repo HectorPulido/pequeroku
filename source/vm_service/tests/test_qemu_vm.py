@@ -345,3 +345,84 @@ def test_start_vm_ensures_paths_when_uid_gid_set(monkeypatch, tmp_path):
     assert overlay_path in seen["ensure"]["files"]
     assert seed_iso_path in seen["ensure"]["files"]
     assert console_log_path in seen["ensure"]["files"]
+
+
+def _base_settings(monkeypatch):
+    monkeypatch.setattr(qvm.settings, "VM_BASE_IMAGE", "/img/base.qcow2", raising=False)
+    monkeypatch.setattr(qvm.settings, "VM_SSH_USER", "root", raising=False)
+    monkeypatch.setattr(qvm.settings, "VM_SSH_PRIVKEY", "/keys/id_vm", raising=False)
+    monkeypatch.setattr(qvm.settings, "VM_TIMEOUT_BOOT_S", 5, raising=False)
+    monkeypatch.setattr(qvm.settings, "VM_RUN_AS_UID", None, raising=False)
+    monkeypatch.setattr(qvm.settings, "VM_RUN_AS_GID", None, raising=False)
+
+
+def test_start_vm_adopts_running_vm(monkeypatch, tmp_path):
+    """A live QEMU already owning the pidfile is adopted, not duplicated."""
+    workdir = str(tmp_path / "wd")
+    os.makedirs(workdir, exist_ok=True)
+    _base_settings(monkeypatch)
+
+    pidfile = os.path.join(workdir, "qemu.pid")
+    with open(pidfile, "w", encoding="utf-8") as f:
+        f.write("4242")
+
+    monkeypatch.setattr(qvm, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(qvm, "_port_from_cmdline", lambda pid: 34567)
+    monkeypatch.setattr(qvm, "wait_ssh", lambda **kwargs: True)
+
+    # Launching a duplicate QEMU (it would die on the pidfile lock) is a bug.
+    def boom_popen(*a, **k):
+        raise AssertionError("must not launch a duplicate QEMU")
+
+    monkeypatch.setattr(qvm.subprocess, "Popen", boom_popen)
+    overlay_recreated = {"v": False}
+    monkeypatch.setattr(
+        qvm, "make_overlay", lambda *a, **k: overlay_recreated.__setitem__("v", True)
+    )
+
+    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8, vm_id="vm-1")
+
+    assert isinstance(proc, models.VMProc)
+    assert proc.proc is None  # adopted, not freshly spawned
+    assert proc.port_ssh == 34567
+    assert proc.pidfile == pidfile
+    assert overlay_recreated["v"] is False  # no overlay work on adoption
+
+
+def test_start_vm_relaunches_when_running_vm_unusable(monkeypatch, tmp_path):
+    """A live QEMU we can't adopt is killed, then a clean VM is launched."""
+    workdir = str(tmp_path / "wd")
+    os.makedirs(workdir, exist_ok=True)
+    _base_settings(monkeypatch)
+    monkeypatch.setattr(qvm.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(qvm, "pick_free_port", lambda: 2200)
+    monkeypatch.setattr(qvm, "vm_qemu_x86_args", lambda **kw: ["QEMU-X86", "-dummy"])
+    monkeypatch.setattr(qvm, "make_overlay", lambda *a, **k: None)
+    monkeypatch.setattr(qvm, "make_seed_iso", lambda *a, **k: None)
+
+    pidfile = os.path.join(workdir, "qemu.pid")
+    with open(pidfile, "w", encoding="utf-8") as f:
+        f.write("4242")
+
+    monkeypatch.setattr(qvm, "_pid_alive", lambda pid: True)
+    # Port can't be recovered -> unusable -> must kill and relaunch.
+    monkeypatch.setattr(qvm, "_port_from_cmdline", lambda pid: None)
+    killed = {"v": False}
+    monkeypatch.setattr(qvm, "_kill_pgrp", lambda pid: killed.__setitem__("v", True))
+    monkeypatch.setattr(qvm, "_clear_stale_pidfile", lambda p: None)
+    monkeypatch.setattr(qvm, "wait_ssh", lambda **kwargs: True)
+
+    launched = {"v": False}
+
+    def fake_popen(args, stdout=None, stderr=None, preexec_fn=None):
+        launched["v"] = True
+        return FakePopen(args, stdout, stderr, preexec_fn)
+
+    monkeypatch.setattr(qvm.subprocess, "Popen", fake_popen)
+
+    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8, vm_id="vm-1")
+
+    assert killed["v"] is True
+    assert launched["v"] is True
+    assert proc.proc is not None
+    assert proc.port_ssh == 2200

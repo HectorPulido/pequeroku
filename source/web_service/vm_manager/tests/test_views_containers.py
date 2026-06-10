@@ -126,6 +126,7 @@ def patch_services(monkeypatch):
         "vm_manager.vm_client.VMServiceClient",
         "vm_manager.views.VMServiceClient",
         "vm_manager.mixin.VMServiceClient",
+        "vm_manager.orchestration.VMServiceClient",
         "vm_manager.templates.VMServiceClient",
         "vm_manager.editor_consumers.VMServiceClient",
         "vm_manager.management.commands.reconcile_containers.VMServiceClient",

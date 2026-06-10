@@ -109,6 +109,9 @@ class FakeChannel:
     def send(self, data):
         return None
 
+    def recv_exit_status(self) -> int:
+        return 0
+
     def close(self):
         self.closed = True
 
