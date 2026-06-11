@@ -43,6 +43,13 @@ class FakeVMClient:
         FakeVMClient.deleted.append(vm_id)
         return {"status": "deleted"}
 
+    def refresh_health(self):
+        # Stand in for a reachable node: keep it healthy so it stays a
+        # scheduling candidate (the real client would ping /health over HTTP).
+        self.node.healthy = True
+        self.node.save(update_fields=["healthy"])
+        return True
+
 
 @pytest.fixture
 def fake_vm(monkeypatch):
@@ -53,6 +60,7 @@ def fake_vm(monkeypatch):
         "vm_manager.mixin.VMServiceClient",
         "vm_manager.orchestration.VMServiceClient",
         "vm_manager.templates.VMServiceClient",
+        "vm_manager.management.commands.prewarm_pool.VMServiceClient",
     ):
         monkeypatch.setattr(target, FakeVMClient, raising=False)
     monkeypatch.setattr("vm_manager.views.audit_log_http", lambda *a, **k: None)
