@@ -1,5 +1,6 @@
 import json
 import os
+import platform
 from pathlib import Path
 from pwd import getpwnam
 from dotenv import load_dotenv
@@ -14,7 +15,21 @@ VM_SSH_PRIVKEY = os.environ.get(
     "VM_SSH_PRIVKEY", os.path.expanduser("~/.ssh/id_vm_pequeroku")
 )
 
-VM_QEMU_BIN = os.environ.get("VM_QEMU_BIN", "/usr/bin/qemu-system-x86_64")
+# QEMU binary. An explicit VM_QEMU_BIN wins, but ONLY if it actually exists —
+# otherwise fall back to the binary for this host's arch. This self-heals a config
+# that pins the wrong arch (e.g. a template's arm64 path baked onto an x86 host).
+_qemu_default = (
+    "/usr/bin/qemu-system-aarch64"
+    if platform.machine() in ("aarch64", "arm64")
+    else "/usr/bin/qemu-system-x86_64"
+)
+_qemu_env = os.environ.get("VM_QEMU_BIN", "").strip()
+VM_QEMU_BIN = _qemu_env if (_qemu_env and os.path.exists(_qemu_env)) else _qemu_default
+if _qemu_env and _qemu_env != VM_QEMU_BIN:
+    print(
+        f"[vm_service] VM_QEMU_BIN={_qemu_env} not found; using {VM_QEMU_BIN} "
+        f"for arch {platform.machine()}"
+    )
 VM_BASE_IMAGE = os.environ.get(
     "VM_BASE_IMAGE", os.path.join(VM_BASE_DIR, "base", "debian12-golden.qcow2")
 )
