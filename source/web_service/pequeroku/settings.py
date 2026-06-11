@@ -13,8 +13,18 @@ DEBUG = os.environ.get("DEBUG", "true").lower() != "false"
 ALLOWED_HOSTS = ["localhost"] + [
     h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()
 ]
-CSRF_TRUSTED_ORIGINS = [f"http://{h}" for h in ALLOWED_HOSTS] + [
-    f"https://{h}" for h in ALLOWED_HOSTS
+
+# External port the app is reached on (the nginx host mapping). Browsers omit the
+# port for 80/443, so CSRF origins must match with AND without an explicit port.
+HTTP_PORT = os.environ.get("HTTP_PORT", "80").strip()
+_csrf_ports = [""]
+if HTTP_PORT and HTTP_PORT not in ("80", "443"):
+    _csrf_ports.append(f":{HTTP_PORT}")
+CSRF_TRUSTED_ORIGINS = [
+    f"{scheme}://{h}{port}"
+    for h in ALLOWED_HOSTS
+    for port in _csrf_ports
+    for scheme in ("http", "https")
 ]
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/1")

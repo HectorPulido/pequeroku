@@ -141,8 +141,15 @@ YAML
     c_ok "docker-compose.override.yaml (KVM passthrough enabled)"
     CREATED+=("docker-compose.override.yaml")
   fi
+elif [ "$(uname -s)" = "Linux" ]; then
+  c_warn "Linux host but /dev/kvm is missing — VMs would run under SLOW emulation."
+  c_warn "  Check:  ls -l /dev/kvm  |  lsmod | grep kvm  |  egrep -c '(vmx|svm)' /proc/cpuinfo"
+  c_warn "  Fixes:  enable virtualization (VT-x/AMD-V) in BIOS; load the module"
+  c_warn "          (sudo modprobe kvm_intel  OR  kvm_amd); then re-run ./setup.sh."
+  c_warn "  Note: Docker DESKTOP on Linux runs containers in its own VM, so /dev/kvm"
+  c_warn "        passthrough needs the native Docker Engine (docker-ce), not Desktop."
 else
-  c_skip "no /dev/kvm (macOS or no KVM) — VMs run under emulation, no override written"
+  c_skip "macOS host — no /dev/kvm; the dockerized VM service runs under emulation."
 fi
 
 # --------------------------------------------------------------------------- #
