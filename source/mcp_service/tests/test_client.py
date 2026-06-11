@@ -36,6 +36,21 @@ def test_run_code_posts_to_runs():
     assert seen["body"]["files"] == [{"path": "a", "content": "b"}]
 
 
+def test_list_types_returns_flavors():
+    def handler(request):
+        assert str(request.url).endswith("/api/v1/types/")
+        return httpx.Response(
+            200,
+            json=[
+                {"id": 1, "name": "small", "vcpus": 1, "credits_cost": 1},
+                {"id": 3, "name": "large", "vcpus": 4, "credits_cost": 3},
+            ],
+        )
+
+    types = make_client(handler).list_types()
+    assert [t["name"] for t in types] == ["small", "large"]
+
+
 def test_list_containers_unwraps_pagination():
     def handler(request):
         return httpx.Response(

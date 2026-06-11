@@ -9,10 +9,16 @@ create VMs, run code, move files, inspect ports. It is a facade over the public
 > already *is* the agent; PequeRoku is the sandbox. The blast radius of anything
 > it runs is one isolated VM, not your laptop.
 
-## Tools (9)
+On connect the server hands the client a block of **instructions**
+(`prompts.py`): what a PequeRoku VM is (Debian, working dir `/app`), one-shot vs
+persistent workflow, how credits/types work, and the preview/ports flow — so the
+agent starts with context instead of guessing.
+
+## Tools (10)
 
 | Tool | Does |
 |---|---|
+| `list_types` | VM flavors your key may use, with specs + credit cost |
 | `run_code` | code/files + command → output; creates and destroys a throwaway VM |
 | `list_containers` | your persistent containers with status + flavor |
 | `get_or_create_container` | return the named container or create it (`name`, `type?`) |
@@ -22,6 +28,18 @@ create VMs, run code, move files, inspect ports. It is a facade over the public
 | `read_path` | file → contents; dir → listing |
 | `get_preview` | listening ports + preview paths |
 | `destroy_container` | destroy a container (requires `confirm=true`) |
+
+## Prompts (3)
+
+Reusable, task-shaped starters the client can offer (its "Prompts" list). Each
+expands into a user message that bakes in the right tool workflow; wording lives
+in `prompts.py`.
+
+| Prompt | Argument | Does |
+|---|---|---|
+| `run_in_sandbox` | `task` | run code/a command in a throwaway VM and report the result |
+| `deploy_web_app` | `app` | build + serve a web app in a persistent container, with a preview |
+| `setup_workspace` | `name` | get/create a named persistent workspace and report its state |
 
 ## Run
 

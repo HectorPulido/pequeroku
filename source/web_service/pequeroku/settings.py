@@ -10,8 +10,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("SECRET_KEY", "thisisnotasecretkey")
 DEBUG = os.environ.get("DEBUG", "true").lower() != "false"
 
-ALLOWED_HOSTS = ["localhost"] + [
-    h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()
+# Internal docker-compose hostname(s) other services use to reach web over the
+# compose network (e.g. the MCP server and vm_service call http://web:8000/api/v1).
+# Always trusted so service-to-service traffic never hits DisallowedHost, regardless
+# of the public ALLOWED_HOSTS configured for prod (which usually only lists the
+# external domain). Override INTERNAL_HOSTS if the web service is renamed.
+INTERNAL_HOSTS = [
+    h.strip()
+    for h in os.environ.get("INTERNAL_HOSTS", "web,localhost,127.0.0.1").split(",")
+    if h.strip()
+]
+
+ALLOWED_HOSTS = INTERNAL_HOSTS + [
+    h.strip()
+    for h in os.environ.get("ALLOWED_HOSTS", "").split(",")
+    if h.strip() and h.strip() not in INTERNAL_HOSTS
 ]
 
 # External port the app is reached on (the nginx host mapping). Browsers omit the

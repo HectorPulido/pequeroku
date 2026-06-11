@@ -76,6 +76,15 @@ class PlatformClient:
             payload["type"] = type
         return self._request("POST", "/runs/", json=payload)
 
+    # --- types -----------------------------------------------------------
+
+    def list_types(self) -> list[dict]:
+        """Flavors the key owner may use: id, name, specs and credit cost."""
+        data = self._request("GET", "/types/")
+        if isinstance(data, dict) and "results" in data:
+            return data["results"]
+        return data or []
+
     # --- containers ------------------------------------------------------
 
     def list_containers(self) -> list[dict]:

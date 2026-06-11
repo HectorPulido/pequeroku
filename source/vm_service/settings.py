@@ -56,10 +56,11 @@ def _resolve_use_cloud_init(base_image: str) -> "tuple[bool, str]":
       2. <base_image>.meta.json -> its "golden" flag (true -> off, false -> on).
          Everything we create writes this sidecar: build-golden.sh -> golden:true,
          ensure-base-image.sh (auto-download) -> golden:false.
-      3. No metadata, but the base image file exists -> off. A bare image with no
-         sidecar is assumed to be a pre-baked golden (the historical convention;
-         the only meta-less images are goldens built before metadata existed).
-      4. No image yet -> on (safe default; a clean machine will cloud-init).
+      3. No usable signal -> ON (safe default). cloud-init ON on a real golden is
+         harmless (the golden disabled cloud-init internally, so the seed ISO is
+         ignored and SSH stays fast); but cloud-init OFF on a PLAIN image bakes no
+         key and the VM is unreachable. So we never assume golden without a signal:
+         tag a golden with `build-golden.sh --write-meta-only` or set the env var.
     """
     raw = os.environ.get("VM_USE_CLOUD_INIT")
     if raw is not None:
@@ -79,8 +80,6 @@ def _resolve_use_cloud_init(base_image: str) -> "tuple[bool, str]":
     except (ValueError, OSError) as e:
         print(f"[vm_service] Ignoring unreadable {meta_path}: {e}")
 
-    if os.path.exists(base_image):
-        return False, "existing image, no metadata (assumed golden)"
     return True, "default"
 
 
