@@ -4,6 +4,7 @@ import os
 import signal
 import threading
 import time
+import traceback
 
 import settings
 
@@ -43,6 +44,10 @@ class Runner:
                 # (see wait_ssh / finalize_and_cache); no second probe needed.
                 self.store.set_status(vm, VMState.running)
             except Exception as e:  # pylint: disable=broad-except
+                # Surface the reason: this used to be swallowed into error_reason
+                # with no log, so a failed VM showed "error" with nothing in the logs.
+                print(f"[vm_service] start_vm FAILED for vm={vm.id}: {e!r}")
+                traceback.print_exc()
                 self.store.set_status(vm, VMState.error, error_reason=str(e))
             finally:
                 self.store.put(vm)
@@ -128,6 +133,8 @@ class Runner:
 
                 self.store.set_status(vm, VMState.stopped)
             except Exception as e:  # pylint: disable=broad-except
+                print(f"[vm_service] stop FAILED for vm={vm.id}: {e!r}")
+                traceback.print_exc()
                 self.store.set_status(vm, VMState.error, error_reason=str(e))
             finally:
                 self.store.put(vm)

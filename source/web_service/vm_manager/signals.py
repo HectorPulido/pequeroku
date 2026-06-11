@@ -1,4 +1,5 @@
 import logging
+import os
 
 from django.conf import settings
 from django.db import transaction
@@ -39,25 +40,65 @@ def create_user_quota(sender, instance, created, **kwargs):
     )
 
 
+def _host_mem_mb() -> int | None:
+    """Total RAM in MB seen by this container (cgroup limit or host), or None."""
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) // 1024
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _default_node_capacity() -> tuple[int, int]:
+    """Capacity for the auto-created node: explicit env wins, else detect this
+    host, else a sane fallback. Memory keeps ~2GB headroom for the rest of the
+    stack. For a single-node local setup vm_service shares this Docker host, so
+    these numbers fit; for remote nodes set NODE_CAPACITY_* or edit in admin.
+    """
+    env_vcpus = os.environ.get("NODE_CAPACITY_VCPUS", "").strip()
+    vcpus = int(env_vcpus) if env_vcpus else (os.cpu_count() or 4)
+
+    env_mem = os.environ.get("NODE_CAPACITY_MEM_MB", "").strip()
+    if env_mem:
+        mem_mb = int(env_mem)
+    else:
+        total = _host_mem_mb()
+        mem_mb = max(total - 2048, 1024) if total else 4096
+    return max(vcpus, 1), max(mem_mb, 1024)
+
+
 @receiver(post_migrate)
 def create_default_node(sender, **kwargs):
     """
-    Create a default node
+    Create a default node sized to the host (1 vCPU / 1 GB default is unusable).
     """
     if getattr(sender, "name", None) != "vm_manager":
         return
 
-    _, created = Node.objects.get_or_create(
+    vcpus, mem_mb = _default_node_capacity()
+    node, created = Node.objects.get_or_create(
         name="base",
         defaults={
             "node_host": "http://vm_services:8080/",
             "active": True,
             "auth_token": "N/A",
+            "capacity_vcpus": vcpus,
+            "capacity_mem_mb": mem_mb,
         },
     )
 
     if created:
-        logger.info("Base node created")
+        logger.info("Base node created (%s vCPU / %s MB)", vcpus, mem_mb)
+    elif node.capacity_vcpus == 1 and node.capacity_mem_mb == 1024:
+        # Heal a node still at the untouched model default (1 vCPU / 1 GB) — too
+        # small to schedule anything. Any other capacity is left untouched.
+        node.capacity_vcpus = vcpus
+        node.capacity_mem_mb = mem_mb
+        node.save(update_fields=["capacity_vcpus", "capacity_mem_mb"])
+        logger.info("Base node capacity healed to %s vCPU / %s MB", vcpus, mem_mb)
 
 
 @receiver(post_migrate)
