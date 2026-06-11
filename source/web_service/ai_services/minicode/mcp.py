@@ -438,6 +438,8 @@ def discover_mcp_tools(config) -> list[McpTool]:
                 )
             )
             if len(tools) >= _MAX_TOTAL_TOOLS:
-                logger.warning("tool cap %s reached; remaining dropped", _MAX_TOTAL_TOOLS)
+                logger.warning(
+                    "tool cap %s reached; remaining dropped", _MAX_TOTAL_TOOLS
+                )
                 return tools
     return tools
