@@ -16,7 +16,6 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Header from "@/components/Header";
-import AiAssistantPanel from "@/components/ide/AiAssistantPanel";
 import Editor from "@/components/ide/Editor";
 import FileTabs from "@/components/ide/FileTabs";
 import FileTree from "@/components/ide/FileTree";
@@ -188,8 +187,8 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 	const [isUploadModalOpen, setUploadModalOpen] = useState(false);
 	const [isTemplatesModalOpen, setTemplatesModalOpen] = useState(false);
 	const [isGithubModalOpen, setGithubModalOpen] = useState(false);
-	const [isAiPanelOpen, setAiPanelOpen] = useState(false);
 	const [theme, setTheme] = useState<Theme>(() => themeManager.get());
+	const [cursor, setCursor] = useState<{ line: number; column: number }>({ line: 1, column: 1 });
 	const [searchPattern, setSearchPattern] = useState("");
 	const [searchInclude, setSearchInclude] = useState("");
 	const [searchExclude, setSearchExclude] = useState(".git,.venv");
@@ -1180,7 +1179,27 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 							theme={theme}
 							language={editorLanguage}
 							isMobile={isMobile}
+							onCursorChange={setCursor}
 						/>
+						{activeTabData ? (
+							<div className="flex flex-none items-center justify-between gap-3 border-t border-slate-200 bg-slate-100 px-3 py-1 text-[11px] text-slate-500 dark:border-gray-800 dark:bg-[#111827] dark:text-gray-400">
+								<div className="flex min-w-0 items-center gap-3">
+									<span className="truncate font-mono">{activeTabData.path}</span>
+									{activeTabData.isDirty ? (
+										<span className="flex shrink-0 items-center gap-1 text-amber-500 dark:text-amber-400">
+											<span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
+											Unsaved
+										</span>
+									) : null}
+								</div>
+								<div className="flex shrink-0 items-center gap-3">
+									<span>
+										Ln {cursor.line}, Col {cursor.column}
+									</span>
+									<span className="uppercase">{editorLanguage || "plaintext"}</span>
+								</div>
+							</div>
+						) : null}
 					</div>
 					<TerminalPanel
 						terminalTabs={terminalTabs}
@@ -1195,7 +1214,7 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 						onThemeClick={() => themeManager.toggle()}
 						onTemplatesClick={() => setTemplatesModalOpen(true)}
 						onGithubClick={() => setGithubModalOpen(true)}
-						onAiClick={() => setAiPanelOpen(true)}
+						onAiClick={openAiStudio}
 						onRunCommand={handleRun}
 						onSaveActive={handleSaveActiveFile}
 						onOpenFile={openFileFromSlash}
@@ -1227,12 +1246,6 @@ const IDELayout: React.FC<{ containerId: string; showHeader: boolean }> = ({
 				isOpen={isGithubModalOpen}
 				onClose={() => setGithubModalOpen(false)}
 				onClone={handleGithubClone}
-			/>
-			<AiAssistantPanel
-				isOpen={isAiPanelOpen}
-				onClose={() => setAiPanelOpen(false)}
-				containerId={containerId}
-				onOpenStudio={openAiStudio}
 			/>
 		</div>
 	);

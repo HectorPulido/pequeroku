@@ -1,6 +1,6 @@
 import { Code, Globe, MultiBubble, NavArrowLeft, NavArrowRight } from "iconoir-react";
 import type React from "react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ChatComposer from "@/components/ai/ChatComposer";
 import ChatThread from "@/components/ai/ChatThread";
@@ -9,6 +9,7 @@ import PreviewBrowser from "@/components/ai/PreviewBrowser";
 import Header from "@/components/Header";
 import ResizablePanel from "@/components/ide/ResizablePanel";
 import { useAiChatSession } from "@/hooks/useAiChatSession";
+import { fetchListeningPorts } from "@/services/ide/actions";
 
 const MissingContainer: React.FC<{ showHeader: boolean }> = ({ showHeader }) => (
 	<div className="min-h-screen bg-[#0B1220] text-gray-200">
@@ -39,9 +40,10 @@ interface RailProps {
 	label: string;
 	icon: React.ReactNode;
 	onExpand: () => void;
+	pulse?: boolean;
 }
 
-const CollapsedRail: React.FC<RailProps> = ({ side, label, icon, onExpand }) => (
+const CollapsedRail: React.FC<RailProps> = ({ side, label, icon, onExpand, pulse = false }) => (
 	<div
 		className={`flex h-full w-11 shrink-0 flex-col items-center gap-3 bg-[#0B1220] py-3 ${
 			side === "left" ? "border-r border-gray-800" : "border-l border-gray-800"
@@ -50,15 +52,20 @@ const CollapsedRail: React.FC<RailProps> = ({ side, label, icon, onExpand }) => 
 		<button
 			type="button"
 			onClick={onExpand}
-			title={`Expand ${label}`}
+			title={pulse ? `${label} — app detected, click to preview` : `Expand ${label}`}
 			aria-label={`Expand ${label}`}
-			className="rounded border border-gray-800 p-1 text-gray-400 transition hover:border-indigo-500 hover:text-white"
+			className={`relative rounded border p-1 transition hover:border-indigo-500 hover:text-white ${
+				pulse ? "border-emerald-500/60 text-emerald-300" : "border-gray-800 text-gray-400"
+			}`}
 		>
 			{side === "left" ? (
 				<NavArrowRight className="h-4 w-4" />
 			) : (
 				<NavArrowLeft className="h-4 w-4" />
 			)}
+			{pulse ? (
+				<span className="absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+			) : null}
 		</button>
 		<div className="flex flex-col items-center gap-2 text-gray-500">
 			{icon}
@@ -77,6 +84,7 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 		messages,
 		connectionState,
 		usesLeft,
+		conversationTitles,
 		isSending,
 		conversations,
 		currentConversation,
@@ -98,6 +106,14 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 	// Browser starts hidden by default; the user expands it via the right rail.
 	const [rightOpen, setRightOpen] = useState(() =>
 		readPanelState(`ai:${containerId}:right`, false),
+	);
+	// Auto-open the browser the first time an app starts listening — but only for
+	// users who have not expressed a panel preference yet (no saved state), and
+	// never after they toggle it manually this session.
+	const [hasDetectedPorts, setHasDetectedPorts] = useState(false);
+	const allowAutoOpenRef = useRef(
+		typeof window === "undefined" ||
+			window.localStorage.getItem(`ai:${containerId}:right`) === null,
 	);
 	const navigate = useNavigate();
 
@@ -122,11 +138,42 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 	);
 	const toggleRight = useCallback(
 		(open: boolean) => {
+			// A manual toggle is an explicit preference: stop auto-opening from now on.
+			allowAutoOpenRef.current = false;
 			setRightOpen(open);
 			persistPanel(`ai:${containerId}:right`, open);
 		},
 		[containerId, persistPanel],
 	);
+
+	// Poll for listening ports only while the browser is collapsed; once it is open
+	// PreviewBrowser owns detection. Gated on a live chat connection as a cheap
+	// "container reachable" signal.
+	useEffect(() => {
+		if (rightOpen || connectionState !== "connected") return;
+		let cancelled = false;
+		const scan = async () => {
+			try {
+				const ports = await fetchListeningPorts(containerId);
+				if (!cancelled && ports.length > 0) setHasDetectedPorts(true);
+			} catch {
+				/* ignore: container may not be ready yet */
+			}
+		};
+		void scan();
+		const timer = window.setInterval(scan, 10_000);
+		return () => {
+			cancelled = true;
+			window.clearInterval(timer);
+		};
+	}, [rightOpen, connectionState, containerId]);
+
+	useEffect(() => {
+		if (hasDetectedPorts && !rightOpen && allowAutoOpenRef.current) {
+			allowAutoOpenRef.current = false;
+			toggleRight(true);
+		}
+	}, [hasDetectedPorts, rightOpen, toggleRight]);
 
 	return (
 		<div className="flex h-screen flex-col bg-[#0B1220] text-gray-200">
@@ -152,6 +199,7 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 							currentConversation={currentConversation}
 							connectionState={connectionState}
 							usesLeft={usesLeft}
+							titles={conversationTitles}
 						/>
 					</ResizablePanel>
 				) : (
@@ -216,6 +264,7 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 						label="Browser"
 						icon={<Globe className="h-4 w-4" />}
 						onExpand={() => toggleRight(true)}
+						pulse={hasDetectedPorts}
 					/>
 				)}
 			</div>

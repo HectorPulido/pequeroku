@@ -16,6 +16,15 @@ const ALL_SCOPES: { value: ApiScope; hint: string }[] = [
 	{ value: "admin", hint: "create / destroy" },
 ];
 
+type SnippetKind = "claude" | "curl" | "python" | "cursor";
+
+const SNIPPET_TABS: { key: SnippetKind; label: string }[] = [
+	{ key: "claude", label: "Claude Code" },
+	{ key: "curl", label: "curl" },
+	{ key: "python", label: "Python SDK" },
+	{ key: "cursor", label: "Cursor" },
+];
+
 const formatWhen = (value: string | null): string => {
 	if (!value) return "never";
 	const date = new Date(value);
@@ -55,12 +64,10 @@ const ApiKeys: React.FC = () => {
 	const [loading, setLoading] = useState(true);
 	const [creating, setCreating] = useState(false);
 	const [name, setName] = useState("");
-	const [scopes, setScopes] = useState<Record<ApiScope, boolean>>({
-		read: true,
-		exec: true,
-		admin: false,
-	});
+	const [level, setLevel] = useState<ApiScope>("exec");
 	const [newKey, setNewKey] = useState<ApiKey | null>(null);
+	const [showRevoked, setShowRevoked] = useState(false);
+	const [snippetTab, setSnippetTab] = useState<SnippetKind>("claude");
 
 	const refresh = useCallback(async () => {
 		try {
@@ -87,13 +94,13 @@ const ApiKeys: React.FC = () => {
 		void bootstrap();
 	}, [refresh]);
 
-	const toggleScope = (scope: ApiScope) =>
-		setScopes((current) => ({ ...current, [scope]: !current[scope] }));
-
-	const selectedScopes = useMemo(
-		() => ALL_SCOPES.map((s) => s.value).filter((s) => scopes[s]),
-		[scopes],
-	);
+	// The backend collapses scopes to their highest level (see APIKey.has_scope),
+	// so a single level maps cleanly to a hierarchical, inclusive scope list.
+	const selectedScopes = useMemo(() => {
+		const order = ALL_SCOPES.map((s) => s.value);
+		const idx = order.indexOf(level);
+		return order.slice(0, idx + 1);
+	}, [level]);
 
 	const handleCreate = async () => {
 		if (selectedScopes.length === 0) {
@@ -135,6 +142,35 @@ const ApiKeys: React.FC = () => {
 		const token = newKey?.token ?? "pk_...";
 		return `claude mcp add --transport http pequeroku ${url} --header "Authorization: Bearer ${token}"`;
 	}, [mcp, newKey]);
+
+	const revokedCount = useMemo(() => keys.filter((key) => key.revoked).length, [keys]);
+	const visibleKeys = useMemo(
+		() => (showRevoked ? keys : keys.filter((key) => !key.revoked)),
+		[keys, showRevoked],
+	);
+
+	// Ready-to-paste snippets with the freshly minted key injected, one per client.
+	const snippets = useMemo<Record<SnippetKind, { language: string; code: string }>>(() => {
+		const token = newKey?.token ?? "pk_...";
+		const apiBase = mcp?.api_base ?? "https://your-host/api/v1";
+		const mcpUrl = mcp?.mcp_url ?? "<mcp-url>";
+		const host = apiBase.replace(/\/api\/v1\/?$/, "") || "https://your-host";
+		return {
+			claude: { language: "bash", code: mcpAddCommand },
+			curl: {
+				language: "bash",
+				code: `curl -s ${apiBase}/containers/ \\\n  -H "Authorization: Bearer ${token}"`,
+			},
+			python: {
+				language: "python",
+				code: `# pip install pequeroku\nfrom pequeroku import PequeRoku\n\npq = PequeRoku(api_key="${token}", base_url="${host}")\nprint(pq.run("echo hello from PequeRoku").stdout)`,
+			},
+			cursor: {
+				language: "json",
+				code: `// ~/.cursor/mcp.json\n{\n  "mcpServers": {\n    "pequeroku": {\n      "url": "${mcpUrl}",\n      "headers": { "Authorization": "Bearer ${token}" }\n    }\n  }\n}`,
+			},
+		};
+	}, [mcp, newKey, mcpAddCommand]);
 
 	return (
 		<div className="min-h-screen bg-[#0B1220] text-gray-200">
@@ -198,22 +234,29 @@ const ApiKeys: React.FC = () => {
 						placeholder="e.g. my-laptop-agent"
 						className="mb-3 w-full rounded-md border border-gray-700 bg-[#0B1220] px-3 py-2 text-sm text-gray-100 outline-none focus:border-indigo-500"
 					/>
-					<div className="mb-4 flex flex-wrap gap-4">
-						{ALL_SCOPES.map((scope) => (
-							<label
-								key={scope.value}
-								className="flex cursor-pointer items-center gap-2 text-sm text-gray-200"
-							>
-								<input
-									type="checkbox"
-									checked={scopes[scope.value]}
-									onChange={() => toggleScope(scope.value)}
-									className="h-4 w-4 accent-indigo-500"
-								/>
-								<span className="font-medium">{scope.value}</span>
-								<span className="text-xs text-gray-500">— {scope.hint}</span>
-							</label>
-						))}
+					<span className="mb-2 block text-xs text-gray-400">Access level</span>
+					<div className="mb-4 grid w-full max-w-md grid-cols-3 gap-1 rounded-lg border border-gray-700 bg-[#0B1220] p-1">
+						{ALL_SCOPES.map((scope) => {
+							const active = scope.value === level;
+							return (
+								<button
+									key={scope.value}
+									type="button"
+									onClick={() => setLevel(scope.value)}
+									aria-pressed={active}
+									className={`flex flex-col items-center rounded-md px-3 py-2 text-center transition ${
+										active
+											? "bg-indigo-600 text-white"
+											: "text-gray-300 hover:bg-[#111827] hover:text-white"
+									}`}
+								>
+									<span className="text-sm font-medium capitalize">{scope.value}</span>
+									<span className={`text-[11px] ${active ? "text-indigo-100" : "text-gray-500"}`}>
+										{scope.hint}
+									</span>
+								</button>
+							);
+						})}
 					</div>
 					<Button
 						variant="primary"
@@ -225,17 +268,28 @@ const ApiKeys: React.FC = () => {
 						{creating ? "Creating…" : "Create key"}
 					</Button>
 					<p className="mt-3 text-xs text-gray-500">
-						Scopes are hierarchical: <code className="text-gray-300">read</code> &lt;{" "}
-						<code className="text-gray-300">exec</code> &lt;{" "}
-						<code className="text-gray-300">admin</code>.
+						Each level includes the ones below it: <code className="text-gray-300">exec</code> also
+						grants <code className="text-gray-300">read</code>, and{" "}
+						<code className="text-gray-300">admin</code> grants everything.
 					</p>
 				</section>
 
 				{/* Existing keys */}
 				<section className="rounded-xl border border-gray-800 bg-[#111827] p-5">
-					<div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-gray-500">
-						<Key className="h-4 w-4 text-indigo-400" />
-						Your keys
+					<div className="mb-3 flex items-center justify-between gap-2">
+						<div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-gray-500">
+							<Key className="h-4 w-4 text-indigo-400" />
+							Your keys
+						</div>
+						{revokedCount > 0 ? (
+							<button
+								type="button"
+								onClick={() => setShowRevoked((value) => !value)}
+								className="text-xs text-gray-400 transition hover:text-white"
+							>
+								{showRevoked ? "Hide" : "Show"} revoked ({revokedCount})
+							</button>
+						) : null}
 					</div>
 					{loading ? (
 						<div className="flex items-center gap-3 py-6 text-sm text-gray-400">
@@ -244,6 +298,10 @@ const ApiKeys: React.FC = () => {
 						</div>
 					) : keys.length === 0 ? (
 						<p className="py-4 text-sm text-gray-500">No keys yet. Create one above.</p>
+					) : visibleKeys.length === 0 ? (
+						<p className="py-4 text-sm text-gray-500">
+							No active keys. Use “Show revoked” to see past keys.
+						</p>
 					) : (
 						<div className="overflow-x-auto">
 							<table className="w-full text-left text-sm">
@@ -258,7 +316,7 @@ const ApiKeys: React.FC = () => {
 									</tr>
 								</thead>
 								<tbody>
-									{keys.map((key) => (
+									{visibleKeys.map((key) => (
 										<tr key={key.id} className="border-t border-gray-800">
 											<td className="py-2.5 pr-4 font-mono text-xs text-gray-300">
 												pk_{key.prefix}_…
@@ -324,14 +382,28 @@ const ApiKeys: React.FC = () => {
 					</div>
 
 					<div>
-						<div className="mb-1 flex items-center justify-between">
-							<span className="text-xs uppercase tracking-wide text-gray-500">
-								Connect an agent (Claude Code)
-							</span>
-							<CopyButton text={mcpAddCommand} label="Copy command" />
+						<div className="mb-2 flex items-center justify-between gap-2">
+							<span className="text-xs uppercase tracking-wide text-gray-500">Connect</span>
+							<CopyButton text={snippets[snippetTab].code} label="Copy snippet" />
+						</div>
+						<div className="mb-2 flex flex-wrap gap-1">
+							{SNIPPET_TABS.map((tab) => (
+								<button
+									key={tab.key}
+									type="button"
+									onClick={() => setSnippetTab(tab.key)}
+									className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+										snippetTab === tab.key
+											? "bg-indigo-600 text-white"
+											: "border border-gray-800 text-gray-300 hover:text-white"
+									}`}
+								>
+									{tab.label}
+								</button>
+							))}
 						</div>
 						<pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-gray-800 bg-[#0B1220] p-3 font-mono text-xs text-gray-100">
-							{mcpAddCommand}
+							{snippets[snippetTab].code}
 						</pre>
 					</div>
 				</div>

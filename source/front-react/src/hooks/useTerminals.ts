@@ -6,6 +6,13 @@ export function generateTerminalId(currentCount: number): string {
 	return `s${currentCount + 1}`;
 }
 
+// The session id (`s1`, `s2`, …) is the backend key; the tab label is the
+// human-friendly form. Anything that isn't an `sN` id falls back to itself.
+export function terminalTitleFromId(id: string): string {
+	const match = /^s(\d+)$/.exec(id);
+	return match ? `Terminal ${match[1]}` : id;
+}
+
 const buildNextId = (existing: TerminalTab[], desired?: string) => {
 	if (desired && !existing.some((tab) => tab.id === desired)) {
 		return desired;
@@ -56,7 +63,7 @@ export const useTerminals = (containerId: string) => {
 	const createTab = useCallback(
 		(id: string): TerminalTab => ({
 			id,
-			title: id,
+			title: terminalTitleFromId(id),
 			terminal: null,
 			fitAddon: null,
 			service: new TerminalWebService(containerId, id),

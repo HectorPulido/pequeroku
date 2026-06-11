@@ -4,7 +4,6 @@ import {
 	Group,
 	Key,
 	Play,
-	RefreshDouble,
 	Sparks,
 	Square,
 	StatsUpSquare,
@@ -64,7 +63,6 @@ const Dashboard: React.FC = () => {
 	const [consoleContainer, setConsoleContainer] = useState<Container | null>(null);
 	const [aiContainer, setAiContainer] = useState<Container | null>(null);
 	const [metricsContainer, setMetricsContainer] = useState<Container | null>(null);
-	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [hasLoadedContainers, setHasLoadedContainers] = useState(false);
 
 	const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -109,7 +107,6 @@ const Dashboard: React.FC = () => {
 		}
 		const controller = new AbortController();
 		abortRef.current = controller;
-		if (!lazy) setIsRefreshing(true);
 
 		try {
 			const data = await listContainers({
@@ -135,8 +132,6 @@ const Dashboard: React.FC = () => {
 			if (lazy) return;
 			const message = error instanceof Error ? error.message : "Unable to fetch containers";
 			alertStore.push({ message, variant: "error" });
-		} finally {
-			if (!lazy) setIsRefreshing(false);
 		}
 	}, []);
 
@@ -357,6 +352,7 @@ const Dashboard: React.FC = () => {
 					<Button
 						size="sm"
 						variant="danger"
+						className="ml-auto"
 						disabled={Boolean(actionKey("delete"))}
 						onClick={() => handleDelete(container)}
 						icon={<Trash className="h-4 w-4" />}
@@ -380,23 +376,33 @@ const Dashboard: React.FC = () => {
 
 	const creditsLeft = user?.quota?.credits_left ?? 0;
 	const canCreateContainer = Boolean(user?.has_quota && creditsLeft > 0);
-	const newContainerLabel = user?.has_quota ? `New (${creditsLeft})` : "No quota";
+	const newContainerLabel = user?.has_quota ? "New container" : "No quota";
+	const displayName = user?.username
+		? `${user.username.charAt(0).toUpperCase()}${user.username.slice(1)}`
+		: "User";
+	const displayInitial = displayName.charAt(0).toUpperCase();
 
 	return (
 		<div className="min-h-screen bg-[#0B1220] text-gray-200">
 			<Header>
-				<div className="flex items-center gap-2 rounded-md border border-gray-700 bg-[#0B1220] px-3 py-2">
-					<User className="h-4 w-4 text-gray-400" />
-					<div className="text-xs leading-tight text-gray-300">
-						<div className="font-semibold text-white">
-							Hello{" "}
-							{user?.username
-								? `${user.username.charAt(0).toUpperCase()}${user.username.slice(1)}`
-								: "User"}
-							!
-						</div>
+				<div className="flex items-center gap-2">
+					<div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/20 text-sm font-semibold text-indigo-200">
+						{displayInitial}
+					</div>
+					<div className="text-sm leading-tight text-gray-300">
+						Hello, <span className="font-semibold text-white">{displayName}</span>
 					</div>
 				</div>
+
+				{user?.has_quota ? (
+					<div className="flex items-center gap-1.5 rounded-md border border-gray-700 bg-[#0B1220] px-3 py-2 text-xs font-medium text-gray-300">
+						<span className="text-amber-400" aria-hidden="true">
+							⚡
+						</span>
+						<span className="font-semibold text-white">{creditsLeft}</span>
+						credits
+					</div>
+				) : null}
 
 				<div className="relative">
 					<details className="group">
@@ -419,21 +425,6 @@ const Dashboard: React.FC = () => {
 					onClick={() => navigate("/keys")}
 				>
 					API &amp; MCP
-				</Button>
-
-				<Button
-					variant="secondary"
-					size="sm"
-					icon={
-						isRefreshing ? (
-							<span className="h-4 w-4 animate-spin rounded-full border border-indigo-400 border-t-transparent" />
-						) : (
-							<RefreshDouble className="h-4 w-4" />
-						)
-					}
-					onClick={() => refreshContainers({ lazy: false })}
-				>
-					Refresh
 				</Button>
 
 				<Button
@@ -462,9 +453,58 @@ const Dashboard: React.FC = () => {
 							Loading your containers...
 						</div>
 					) : mine.length === 0 ? (
-						<div className="rounded-lg border border-dashed border-gray-700 bg-[#111827] px-6 py-10 text-center text-sm text-gray-400">
-							You do not own any containers yet. Use the{" "}
-							<strong className="text-indigo-300">New</strong> button to create one.
+						<div className="grid gap-4 sm:grid-cols-3">
+							<div className="flex flex-col rounded-xl border border-gray-800 bg-[#111827] p-5">
+								<div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300">
+									<Wrench className="h-5 w-5" />
+								</div>
+								<div className="mb-1 text-sm font-semibold text-white">
+									Create your first machine
+								</div>
+								<p className="mb-4 flex-1 text-xs text-gray-400">
+									Spin up a ready-to-use Linux VM with Python, Node and git preinstalled.
+								</p>
+								<Button
+									size="sm"
+									icon={<Wrench className="h-4 w-4" />}
+									disabled={!canCreateContainer}
+									onClick={() => {
+										setCreateModalOpen(true);
+										void ensureContainerTypes();
+									}}
+								>
+									{canCreateContainer ? "New container" : "No quota"}
+								</Button>
+							</div>
+
+							<div className="flex flex-col rounded-xl border border-gray-800 bg-[#111827] p-5">
+								<div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300">
+									<Sparks className="h-5 w-5" />
+								</div>
+								<div className="mb-1 text-sm font-semibold text-white">Vibecode with AI</div>
+								<p className="flex-1 text-xs text-gray-400">
+									Open any machine and chat with the built-in AI to build apps, fix bugs and run
+									code — right inside the container.
+								</p>
+							</div>
+
+							<div className="flex flex-col rounded-xl border border-gray-800 bg-[#111827] p-5">
+								<div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300">
+									<Key className="h-5 w-5" />
+								</div>
+								<div className="mb-1 text-sm font-semibold text-white">Automate via API / MCP</div>
+								<p className="mb-4 flex-1 text-xs text-gray-400">
+									Drive PequeRoku from scripts, the SDK or an MCP-capable agent with an API key.
+								</p>
+								<Button
+									size="sm"
+									variant="secondary"
+									icon={<Key className="h-4 w-4" />}
+									onClick={() => navigate("/keys")}
+								>
+									API &amp; MCP
+								</Button>
+							</div>
 						</div>
 					) : (
 						<div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">

@@ -8,7 +8,6 @@ import {
 	Menu,
 	MultiplePagesPlus,
 	NavArrowDown,
-	SparksSolid,
 	TerminalTag,
 	Xmark,
 } from "iconoir-react";
@@ -580,8 +579,10 @@ const TerminalPanel: React.FC<{
 				))}
 			</div>
 
+			{/* Whole command bar is a mobile-only affordance (no on-screen way to type
+			    into xterm there). On desktop the real terminal is used directly. */}
 			<div
-				className={`border-t border-slate-200 bg-slate-100 px-2 py-1 flex items-center gap-3 text-xs text-slate-600 dark:border-gray-800 dark:bg-[#111827] dark:text-gray-300 ${isCollapsed ? "hidden" : ""}`}
+				className={`border-t border-slate-200 bg-slate-100 px-2 py-1 flex items-center gap-3 text-xs text-slate-600 md:hidden dark:border-gray-800 dark:bg-[#111827] dark:text-gray-300 ${isCollapsed ? "hidden" : ""}`}
 			>
 				<input
 					value={command}
@@ -674,14 +675,6 @@ const TerminalPanel: React.FC<{
 					>
 						<GithubCircle className="w-4 h-4" />
 						<span className="hidden md:inline">Github</span>
-					</button>
-					<button
-						onClick={onAiClick}
-						aria-label="Open AI panel"
-						className="flex items-center gap-0 md:gap-1 hover:text-slate-900 dark:hover:text-white"
-					>
-						<SparksSolid className="w-4 h-4" />
-						<span className="hidden md:inline">AI</span>
 					</button>
 					<button
 						onClick={onToggleCollapse}

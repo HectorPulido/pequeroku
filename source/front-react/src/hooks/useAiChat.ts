@@ -66,9 +66,9 @@ const isDisposableText = (content: string): boolean => {
 };
 
 /**
- * Chat transport for the AI studio. Speaks the same `/ws/ai/<pk>/` protocol as
- * {@link AiAssistantPanel} but models each assistant turn as an ordered list of
- * parts (text + tool activity) so the UI can render an OpenWebUI-style timeline.
+ * Chat transport for the AI studio. Speaks the `/ws/ai/<pk>/` protocol and models
+ * each assistant turn as an ordered list of parts (text + tool activity) so the UI
+ * can render an OpenWebUI-style timeline.
  */
 export const useAiChat = (containerId: string) => {
 	const [messages, setMessages] = useState<ChatMessage[]>([]);

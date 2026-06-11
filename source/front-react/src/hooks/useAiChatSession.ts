@@ -3,6 +3,18 @@ import { useAiChat } from "./useAiChat";
 
 export type { ConnectionState } from "./useAiChat";
 
+const TITLES_KEY = (containerId: string) => `ai:${containerId}:titles`;
+
+const readTitles = (containerId: string): Record<number, string> => {
+	if (typeof window === "undefined") return {};
+	try {
+		const raw = window.localStorage.getItem(TITLES_KEY(containerId));
+		return raw ? (JSON.parse(raw) as Record<number, string>) : {};
+	} catch {
+		return {};
+	}
+};
+
 /**
  * UI glue shared by the full AI studio page and the IDE's slide-over assistant.
  * Wraps {@link useAiChat} with the composer input, autoscroll, send/pick and
@@ -11,9 +23,43 @@ export type { ConnectionState } from "./useAiChat";
  */
 export const useAiChatSession = (containerId: string) => {
 	const chat = useAiChat(containerId);
-	const { messages, connectionState, isSending, sendMessage, forkConversation } = chat;
+	const {
+		messages,
+		connectionState,
+		currentConversation,
+		isSending,
+		sendMessage,
+		forkConversation,
+	} = chat;
 
 	const [input, setInput] = useState("");
+	// Conversations come from the backend as bare ids; auto-title each one from its
+	// first user message and persist locally so the sidebar stays readable.
+	const [conversationTitles, setConversationTitles] = useState<Record<number, string>>(() =>
+		readTitles(containerId),
+	);
+
+	useEffect(() => {
+		setConversationTitles(readTitles(containerId));
+	}, [containerId]);
+
+	useEffect(() => {
+		if (typeof currentConversation !== "number") return;
+		if (conversationTitles[currentConversation]) return;
+		const firstUser = messages.find((m) => m.role === "user" && m.content.trim().length > 0);
+		if (firstUser?.role !== "user") return;
+		const title = firstUser.content.trim().replace(/\s+/g, " ").slice(0, 48);
+		setConversationTitles((prev) => {
+			if (prev[currentConversation]) return prev;
+			const next = { ...prev, [currentConversation]: title };
+			try {
+				window.localStorage.setItem(TITLES_KEY(containerId), JSON.stringify(next));
+			} catch {
+				/* ignore */
+			}
+			return next;
+		});
+	}, [messages, currentConversation, conversationTitles, containerId]);
 	// Bumped after a fork pre-fills the composer, to refocus + caret-to-end.
 	const [composerFocus, setComposerFocus] = useState(0);
 	const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -71,6 +117,7 @@ export const useAiChatSession = (containerId: string) => {
 
 	return {
 		...chat,
+		conversationTitles,
 		input,
 		setInput,
 		composerFocus,

@@ -10,6 +10,7 @@ interface EditorProps {
 	theme: Theme;
 	language: string;
 	isMobile?: boolean;
+	onCursorChange?: (position: { line: number; column: number }) => void;
 }
 
 const DARK_THEME_ID = "pequeroku-monokai";
@@ -76,6 +77,7 @@ const MonacoEditor: React.FC<EditorProps> = ({
 	theme,
 	language,
 	isMobile = false,
+	onCursorChange,
 }) => {
 	const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
@@ -111,6 +113,14 @@ const MonacoEditor: React.FC<EditorProps> = ({
 	const handleMount = (instance: editor.IStandaloneCodeEditor) => {
 		editorRef.current = instance;
 		instance.updateOptions(computedOptions);
+		const emitPosition = () => {
+			const position = instance.getPosition();
+			if (position) {
+				onCursorChange?.({ line: position.lineNumber, column: position.column });
+			}
+		};
+		emitPosition();
+		instance.onDidChangeCursorPosition(emitPosition);
 	};
 
 	return (

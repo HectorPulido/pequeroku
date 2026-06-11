@@ -262,6 +262,7 @@ const Metrics: React.FC = () => {
 					},
 				},
 				y: {
+					min: 0,
 					grid: {
 						color: gridColor,
 						drawBorder: false,
@@ -276,6 +277,41 @@ const Metrics: React.FC = () => {
 			},
 		};
 	}, [palette]);
+
+	// CPU is a percentage, so floor the axis at 0 and keep 100 visible even when
+	// usage is flat near zero; memory/threads stay dynamic but never dip below 0.
+	const cpuChartOptions = useMemo(
+		() => ({
+			...chartOptions,
+			scales: {
+				...chartOptions.scales,
+				y: { ...chartOptions.scales.y, min: 0, suggestedMax: 100 },
+			},
+		}),
+		[chartOptions],
+	);
+
+	const memoryChartOptions = useMemo(
+		() => ({
+			...chartOptions,
+			scales: {
+				...chartOptions.scales,
+				y: { ...chartOptions.scales.y, min: 0 },
+			},
+		}),
+		[chartOptions],
+	);
+
+	const threadsChartOptions = useMemo(
+		() => ({
+			...chartOptions,
+			scales: {
+				...chartOptions.scales,
+				y: { ...chartOptions.scales.y, min: 0 },
+			},
+		}),
+		[chartOptions],
+	);
 
 	const panelStyle = useMemo(
 		() => ({
@@ -428,7 +464,7 @@ const Metrics: React.FC = () => {
 					<div className="rounded-lg p-6" style={panelStyle}>
 						<h3 className="text-gray-400 text-sm mb-4">CPU %</h3>
 						<div className="h-64">
-							<Line options={chartOptions} data={cpuData} />
+							<Line options={cpuChartOptions} data={cpuData} />
 						</div>
 					</div>
 
@@ -436,7 +472,7 @@ const Metrics: React.FC = () => {
 					<div className="rounded-lg p-6" style={panelStyle}>
 						<h3 className="text-gray-400 text-sm mb-4">RSS (MiB)</h3>
 						<div className="h-64">
-							<Line options={chartOptions} data={memoryData} />
+							<Line options={memoryChartOptions} data={memoryData} />
 						</div>
 					</div>
 
@@ -444,7 +480,7 @@ const Metrics: React.FC = () => {
 					<div className="rounded-lg p-6" style={panelStyle}>
 						<h3 className="text-gray-400 text-sm mb-4">Threads</h3>
 						<div className="h-64">
-							<Line options={chartOptions} data={threadsData} />
+							<Line options={threadsChartOptions} data={threadsData} />
 						</div>
 					</div>
 				</div>

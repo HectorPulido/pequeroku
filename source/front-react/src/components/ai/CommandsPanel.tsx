@@ -12,6 +12,7 @@ interface CommandsPanelProps {
 	currentConversation: number | null;
 	connectionState: ConnectionState;
 	usesLeft: number | null;
+	titles: Record<number, string>;
 }
 
 const STATUS_LABEL: Record<ConnectionState, string> = {
@@ -20,6 +21,14 @@ const STATUS_LABEL: Record<ConnectionState, string> = {
 	error: "Disconnected",
 	idle: "Idle",
 };
+
+// Compact, human-readable count (1234 -> "1.2k"); the backend only reports the
+// remaining uses, not the daily cap, so there is no ratio to show.
+const formatUses = (value: number): string =>
+	value >= 1000 ? `${(value / 1000).toFixed(1)}k` : `${value}`;
+
+const LOW_USES = 50;
+const CRITICAL_USES = 10;
 
 const CommandsPanel: React.FC<CommandsPanelProps> = ({
 	onNewChat,
@@ -31,6 +40,7 @@ const CommandsPanel: React.FC<CommandsPanelProps> = ({
 	currentConversation,
 	connectionState,
 	usesLeft,
+	titles,
 }) => (
 	<div className="flex h-full flex-col bg-[#0B1220]">
 		<div className="flex items-center justify-between border-b border-gray-800 px-3 py-2.5">
@@ -85,7 +95,7 @@ const CommandsPanel: React.FC<CommandsPanelProps> = ({
 											<MultiBubble
 												className={`h-4 w-4 shrink-0 ${active ? "text-indigo-300" : "text-gray-500"}`}
 											/>
-											<span className="truncate">Chat {id}</span>
+											<span className="truncate">{titles[id] ?? `Chat ${id}`}</span>
 										</button>
 										<button
 											type="button"
@@ -119,7 +129,20 @@ const CommandsPanel: React.FC<CommandsPanelProps> = ({
 				<span>{STATUS_LABEL[connectionState]}</span>
 			</div>
 			{typeof usesLeft === "number" ? (
-				<div className="mt-1 text-gray-500">Uses left today: {usesLeft}</div>
+				<div
+					className={`mt-1 flex items-center gap-1.5 ${
+						usesLeft <= CRITICAL_USES
+							? "text-rose-400"
+							: usesLeft <= LOW_USES
+								? "text-amber-400"
+								: "text-gray-500"
+					}`}
+				>
+					<span>{formatUses(usesLeft)} AI uses left today</span>
+					{usesLeft <= LOW_USES ? (
+						<span className="text-[10px] uppercase tracking-wide">· running low</span>
+					) : null}
+				</div>
 			) : null}
 			{connectionState === "error" ? (
 				<button
