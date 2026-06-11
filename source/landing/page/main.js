@@ -1,33 +1,46 @@
 // ============ Theme Toggle (Light/Dark) ============
 const themeToggle = document.getElementById("themeToggle");
 const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+const prefersReducedMotion = window.matchMedia(
+	"(prefers-reduced-motion: reduce)",
+);
+// ?motion=off disables typing/reveal animations (previews, screenshots, tests)
+const motionOff =
+	prefersReducedMotion.matches ||
+	new URLSearchParams(location.search).get("motion") === "off";
+if (motionOff) document.documentElement.classList.add("no-anim");
 
 function setTheme(mode) {
-	if (mode === "dark") {
-		document.documentElement.setAttribute("data-theme", "dark");
-	} else {
-		document.documentElement.setAttribute("data-theme", "light");
-	}
+	document.documentElement.setAttribute(
+		"data-theme",
+		mode === "dark" ? "dark" : "light",
+	);
 	localStorage.setItem("theme", mode);
 }
 
-// Initialize
 (() => {
+	// ?theme=dark|light overrides (handy for previews); else saved, else system.
+	const urlTheme = new URLSearchParams(location.search).get("theme");
 	const saved = localStorage.getItem("theme");
-	if (saved) {
+	if (urlTheme === "dark" || urlTheme === "light") {
+		document.documentElement.setAttribute("data-theme", urlTheme);
+	} else if (saved) {
 		setTheme(saved);
 	} else {
 		setTheme(prefersDark.matches ? "dark" : "light");
 	}
-	document.getElementById("year").textContent = new Date().getFullYear();
+	const year = document.getElementById("year");
+	if (year) year.textContent = new Date().getFullYear();
 })();
 
-themeToggle.addEventListener("click", () => {
-	const current = document.documentElement.getAttribute("data-theme");
-	setTheme(current === "dark" ? "light" : "dark");
-});
+if (themeToggle) {
+	themeToggle.addEventListener("click", () => {
+		const current = document.documentElement.getAttribute("data-theme");
+		setTheme(current === "dark" ? "light" : "dark");
+	});
+}
 
-// ============ Tabs (Docs component) ============
+// ============ Tabs ============
 document.querySelectorAll("[data-tabs]").forEach((tabs) => {
 	const tabButtons = tabs.querySelectorAll('[role="tab"]');
 	const panels = tabs.querySelectorAll(".tabpanel");
@@ -44,13 +57,21 @@ document.querySelectorAll("[data-tabs]").forEach((tabs) => {
 	});
 });
 
-// ============ Copy-to-clipboard for code blocks ============
-document.querySelectorAll("[data-copy]").forEach((btn) => {
+// ============ Copy-to-clipboard ============
+// Priority: data-copy attribute → data-copy-target selector → parent text.
+document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
 	btn.addEventListener("click", () => {
-		const code = btn.parentElement.innerText.replace(/^\s*Copy\s*/, "");
-		navigator.clipboard.writeText(code).then(() => {
+		let text = btn.getAttribute("data-copy");
+		if (!text) {
+			const sel = btn.getAttribute("data-copy-target");
+			const el = sel ? document.querySelector(sel) : null;
+			text = el
+				? el.innerText
+				: btn.parentElement.innerText.replace(/^\s*Copy\s*/i, "");
+		}
+		navigator.clipboard.writeText(text).then(() => {
 			const original = btn.textContent;
-			btn.textContent = "Copied!";
+			btn.textContent = "copied ✓";
 			setTimeout(() => {
 				btn.textContent = original;
 			}, 1200);
@@ -58,7 +79,7 @@ document.querySelectorAll("[data-copy]").forEach((btn) => {
 	});
 });
 
-// ============ Smooth Scroll for in-page anchors ============
+// ============ Smooth scroll for in-page anchors ============
 document.querySelectorAll('a[href^="#"]').forEach((a) => {
 	a.addEventListener("click", (e) => {
 		const id = a.getAttribute("href").slice(1);
@@ -70,13 +91,13 @@ document.querySelectorAll('a[href^="#"]').forEach((a) => {
 	});
 });
 
-// ============ MENU ============
+// ============ Responsive menu ============
 (() => {
-	var btn = document.getElementById("navMenuToggle");
-	var nav = document.getElementById("primaryNav");
+	const btn = document.getElementById("navMenuToggle");
+	const nav = document.getElementById("primaryNav");
 	if (!btn || !nav) return;
 	function toggle(open) {
-		var isOpen =
+		const isOpen =
 			open !== undefined ? open : btn.getAttribute("aria-expanded") !== "true";
 		btn.setAttribute("aria-expanded", isOpen ? "true" : "false");
 		document.body.classList.toggle("nav-open", isOpen);
@@ -84,17 +105,68 @@ document.querySelectorAll('a[href^="#"]').forEach((a) => {
 	btn.addEventListener("click", () => {
 		toggle();
 	});
-	// Close on link click
 	nav.addEventListener("click", (e) => {
 		if (e.target.tagName === "A") toggle(false);
 	});
-	// Close on Escape
 	document.addEventListener("keydown", (e) => {
 		if (e.key === "Escape") toggle(false);
 	});
-	// Close when resizing above breakpoint
-	var mql = window.matchMedia("(min-width: 701px)");
+	const mql = window.matchMedia("(min-width: 701px)");
 	mql.addEventListener("change", (ev) => {
 		if (ev.matches) toggle(false);
 	});
+})();
+
+// ============ Hero terminal typing ============
+// Full text lives in the HTML (works without JS / with reduced motion);
+// with motion allowed, we retype it character by character.
+(() => {
+	const term = document.getElementById("heroTerm");
+	if (!term || motionOff) return;
+
+	const lines = Array.from(term.querySelectorAll(".t-line"));
+	const caret = term.querySelector(".t-caret");
+	const contents = lines.map((line, i) => {
+		const textEl = line.querySelector(".t-text");
+		const text = textEl ? textEl.textContent : "";
+		if (textEl) textEl.textContent = "";
+		if (i > 0) line.style.visibility = "hidden";
+		return { textEl, text };
+	});
+
+	function typeLine(i) {
+		if (i >= contents.length) return;
+		const { textEl, text } = contents[i];
+		lines[i].style.visibility = "visible";
+		if (!textEl) {
+			typeLine(i + 1);
+			return;
+		}
+		if (caret) lines[i].appendChild(caret);
+		let pos = 0;
+		const tick = () => {
+			textEl.textContent = text.slice(0, ++pos);
+			if (pos < text.length) {
+				setTimeout(tick, 14);
+			} else {
+				setTimeout(() => typeLine(i + 1), 320);
+			}
+		};
+		setTimeout(tick, i === 0 ? 500 : 0);
+	}
+	typeLine(0);
+})();
+
+// ============ GitHub stars ============
+(() => {
+	const el = document.getElementById("ghStars");
+	if (!el) return;
+	fetch("https://api.github.com/repos/HectorPulido/pequeroku")
+		.then((r) => (r.ok ? r.json() : null))
+		.then((data) => {
+			if (!data || data.stargazers_count == null) return;
+			const n = data.stargazers_count;
+			el.textContent = `${n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n} stars`;
+		})
+		.catch(() => {});
 })();

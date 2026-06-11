@@ -37,12 +37,11 @@ The landing’s “Get Started” button points to /dashboard/ (served by source
 
 ## Directory structure (landing)
 
-- page/index.html — Home (hero, features, demo video)
-- page/docs.html — Docs/Recipes demo (component kit)
+- page/index.html — Home (hero with typing terminal, demo video, why/agents/self-host/compare/help sections)
 - page/privacy.html — Privacy policy
 - page/terms.html — Terms of service
-- page/styles.css — Base styles and components
-- page/main.js — Interactions (theme toggle, tabs, copy-to-clipboard, responsive menu)
+- page/styles.css — "Phosphor terminal" design system (dark-first; light = paper terminal); also styles terms/privacy
+- page/main.js — Interactions (theme toggle, tabs, copy-to-clipboard, responsive menu, hero typing, GitHub stars)
 - page/favicon.svg — Site icon
 - page/utils/ — Auxiliary assets (e.g., demo.mp4)
 - package.json — Biome scripts (lint/format/check/fix)
@@ -80,9 +79,10 @@ Note: Biome covers JS/JSON; HTML/CSS may not be formatted automatically.
 
 ## Routes and navigation
 
-- “Get Started” → /dashboard/
-- Docs/GitHub links → public repo/docs
+- Header CTA → GitHub repo (with live star count); “Dashboard” nav link → /dashboard/
+- Hero/self-host CTAs → GitHub repo and wiki; “Get assistance” → hectorpulido.net
 - “Pretty” paths without .html (e.g., /terms, /privacy) are mapped in default.conf using exact location rules.
+- URL params for previews/tests: `?theme=dark|light` forces a theme; `?motion=off` disables typing/reveal animations.
 
 ## Customization
 

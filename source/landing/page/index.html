@@ -3,11 +3,15 @@
    <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>PequeRoku — Full Dev Environments in your browser</title>
-      <meta name="description" content="PequeRoku lets you launch, share, and run virtualized machines in the browser — with the power of a real computer, open-source, and hackable." />
-      <!-- Iconoir (for arrow icon) -->
-      <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@latest/css/iconoir.css">
-      <link rel="stylesheet" href="/styles.css">
+      <title>PequeRoku — Self-hosted cloud lab: real VMs for you and your AI agents</title>
+      <meta name="description" content="PequeRoku is an open-source, self-hosted Replit alternative: real QEMU/KVM virtual machines in your browser, an AI agent that operates them, and an MCP server that gives any agent the same hands. Three commands, your hardware." />
+      <meta property="og:title" content="PequeRoku — your own cloud lab" />
+      <meta property="og:description" content="Real root-access VMs in the browser, an AI agent inside, and an MCP server for your agents. Self-hosted, MIT, three commands to boot." />
+      <meta property="og:type" content="website" />
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=VT323&display=swap">
+      <link rel="stylesheet" href="/styles.css?v=3">
       <link rel="icon" href="favicon.svg" type="image/x-icon">
    </head>
    <body>
@@ -19,200 +23,293 @@
             <span class="name"><span>Peque</span><strong>Roku</strong></span>
             </a>
             <nav id="primaryNav" class="main-nav" aria-label="Primary">
-               <a href="#features">Features</a>
+               <a href="#features">Why</a>
+               <a href="#agents">Agents</a>
+               <a href="#selfhost">Self-host</a>
+               <a href="#help">Help</a>
                <a href="https://github.com/HectorPulido/pequeroku/wiki" target="_blank" rel="noopener">Docs</a>
-               <a href="https://github.com/HectorPulido/pequeroku" target="_blank" rel="noopener"> <i class="iconoir-github" aria-hidden="true"></i> GitHub</a>
+               <a href="/dashboard/">Dashboard</a>
             </nav>
             <div class="row header-actions" style="gap:10px;">
-               <button class="menu-toggle" id="navMenuToggle" aria-label="Open Menu" aria-controls="primaryNav" aria-expanded="false" title="Menu">
-               <i class="iconoir-menu" aria-hidden="true"></i>
-               </button>
-               <button class="theme-toggle" id="themeToggle" aria-label="Change Theme" title="Change Theme">🌗</button>
-               <a class="btn primary" href="/dashboard/">Get Started</a>
+               <button class="menu-toggle" id="navMenuToggle" aria-label="Open Menu" aria-controls="primaryNav" aria-expanded="false" title="Menu">≡</button>
+               <button class="theme-toggle" id="themeToggle" aria-label="Change Theme" title="Change Theme">◐</button>
+               <a class="btn primary" href="https://github.com/HectorPulido/pequeroku" target="_blank" rel="noopener">★ <span id="ghStars">GitHub</span></a>
             </div>
          </div>
       </header>
+
       <!-- =================== HERO =================== -->
       <section class="hero">
-         <div class="container">
-            <span class="eyebrow">Self hosted • QEMU • Browser IDE</span>
-            <h1>The AI-Native Cloud Lab — Disposable, Root-Access VMs in Your Browser.</h1>
-            <p>Real Linux machines. True isolation. Instant snapshots. Built-in AI that actually interacts with your system — not just a chatbot. Everython open-source, and hackable.</p>
-            <div class="hero-actions">
-               <a class="btn accent" href="https://github.com/HectorPulido/pequeroku" target="_blank" rel="noopener">
-               <i class="iconoir-github" aria-hidden="true"></i>
-               GitHub
-               <i class="iconoir-arrow-right" aria-hidden="true"></i>
-               </a>
+         <div class="container hero-grid">
+            <div class="hero-copy">
+               <span class="eyebrow"><span class="bear">ʕ•ᴥ•ʔ</span> self-hosted · qemu/kvm · mit</span>
+               <h1>Your own<br>cloud lab.</h1>
+               <p class="hero-tag">Real Linux VMs with full root — <em>for you and your AI&nbsp;agents.</em></p>
+               <p class="hero-sub">
+                  An open-source, self-hosted alternative to Replit and Codespaces that runs on your
+                  hardware — and, through its MCP server, an agent sandbox like E2B. A browser IDE
+                  and a built-in agent for you; ten task-shaped tools for the agents you already use.
+               </p>
+               <div class="hero-actions">
+                  <a class="btn accent" href="#selfhost">▸ self-host it</a>
+                  <a class="btn ghost" href="#demo">watch the demo ↓</a>
+               </div>
+               <p class="hero-fine">Three commands. Your hardware. No per-seat billing.</p>
             </div>
-            <div class="video-wrap" id="demo">
-               <div>
-                  <div class="row" style="justify-content:center;gap:8px; color:var(--color-text-2);">
-                     <video width="100%" autoplay muted loop>
-                        <source src="utils/demo.mp4" type="video/mp4">
-                        Your browser does not support the video tag.
-                     </video>
+            <div class="hero-term">
+               <div class="term">
+                  <div class="term-bar">
+                     <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                     <span class="term-title">you@homelab:~</span>
+                     <button class="copy-btn" data-copy="git clone https://github.com/HectorPulido/pequeroku.git && cd pequeroku/source && ./start.sh">copy</button>
+                  </div>
+                  <pre class="term-body" id="heroTerm"><span class="t-line"><span class="t-prompt">$</span> <span class="t-text">git clone https://github.com/HectorPulido/pequeroku.git</span></span>
+<span class="t-line"><span class="t-prompt">$</span> <span class="t-text">cd pequeroku/source &amp;&amp; ./start.sh</span></span>
+<span class="t-line t-ok"><span class="t-text">✔ lab online → http://localhost/dashboard/</span></span><span class="t-caret" aria-hidden="true"></span></pre>
+               </div>
+            </div>
+         </div>
+      </section>
+
+      <!-- =================== DEMO =================== -->
+      <section class="container demo-sec" id="demo">
+         <div class="term video-term">
+            <div class="term-bar">
+               <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+               <span class="term-title">pequeroku — demo.mp4</span>
+            </div>
+            <video width="100%" autoplay muted loop playsinline preload="metadata">
+               <source src="utils/demo.mp4" type="video/mp4">
+               Your browser does not support the video tag.
+            </video>
+         </div>
+         <p class="caption">A real Debian VM, opened from the browser. Phone, tablet or laptop — no setup, no waiting.</p>
+      </section>
+
+      <!-- =================== WHY =================== -->
+      <section class="container section" id="features">
+         <div class="sec-head">
+            <span class="sec-tag">// 01 — why</span>
+            <h2>A machine, not a sandbox<span class="accent">_</span></h2>
+         </div>
+         <div class="grid-3">
+            <article class="card">
+               <span class="card-glyph">#root</span>
+               <h3>Real root, real VM</h3>
+               <p class="muted">Install Docker, run systemd, build a kernel. It's a Linux machine (QEMU/KVM), not a container with guardrails.</p>
+            </article>
+            <article class="card">
+               <span class="card-glyph">24/7</span>
+               <h3>Always on</h3>
+               <p class="muted">No cold starts: your workspace is ready when you are, and resets to a clean slate when you want one.</p>
+            </article>
+            <article class="card">
+               <span class="card-glyph">ʕ•ᴥ•ʔ</span>
+               <h3>An agent inside</h3>
+               <p class="muted">Pequenin edits files, runs your tests, starts servers and verifies they respond — live, inside the VM. Bring your own OpenAI-compatible provider.</p>
+            </article>
+            <article class="card">
+               <span class="card-glyph">/mcp</span>
+               <h3>Hands for your agent</h3>
+               <p class="muted">Claude Code, Cursor, or your own bot get disposable root VMs over MCP. The blast radius is one VM — not your laptop.</p>
+            </article>
+            <article class="card">
+               <span class="card-glyph">:443</span>
+               <h3>From any device</h3>
+               <p class="muted">The IDE is responsive — laptop, tablet, phone — with a live preview of whatever your VM serves.</p>
+            </article>
+            <article class="card">
+               <span class="card-glyph">MIT</span>
+               <h3>Yours</h3>
+               <p class="muted">Open source, hackable at every layer, cheap to run on a homelab — with quotas and roles for when you share it with a team.</p>
+            </article>
+         </div>
+      </section>
+
+      <!-- =================== AGENTS =================== -->
+      <section class="container section" id="agents">
+         <div class="sec-head">
+            <span class="sec-tag">// 02 — agents</span>
+            <h2>Give your agent a real computer<span class="accent">_</span></h2>
+         </div>
+         <div class="split">
+            <div class="split-copy">
+               <p>
+                  Everything the dashboard does is a versioned public API — and the MCP server is just
+                  a client of it. Point any MCP-capable agent at <code class="inline">/mcp</code> and it
+                  can create VMs, run code, move files and inspect ports on its own.
+               </p>
+               <p class="muted">
+                  API keys carry scopes (<code class="inline">read</code> &lt; <code class="inline">exec</code> &lt;
+                  <code class="inline">admin</code>), destroying needs confirmation, and runs carry a
+                  timeout and TTL. Sane defaults, one isolated VM of blast radius.
+               </p>
+               <div class="chip-grid" aria-label="MCP tools">
+                  <span class="chip">run_code</span>
+                  <span class="chip">list_types</span>
+                  <span class="chip">list_containers</span>
+                  <span class="chip">get_or_create_container</span>
+                  <span class="chip">container_exec</span>
+                  <span class="chip">process_status</span>
+                  <span class="chip">write_files</span>
+                  <span class="chip">read_path</span>
+                  <span class="chip">get_preview</span>
+                  <span class="chip">destroy_container</span>
+               </div>
+               <p class="muted small">10 task-shaped tools, plus ready-made prompts and on-connect instructions.</p>
+            </div>
+            <div class="split-code">
+               <div class="tabs" data-tabs>
+                  <div class="tablist" role="tablist">
+                     <button role="tab" aria-selected="true" aria-controls="tab-mcp">MCP</button>
+                     <button role="tab" aria-selected="false" aria-controls="tab-api">API</button>
+                     <button role="tab" aria-selected="false" aria-controls="tab-sdk">SDK</button>
+                  </div>
+                  <div class="tabpanel active" id="tab-mcp">
+                     <pre class="code"><code id="code-mcp">claude mcp add --transport http \
+  pequeroku http://localhost/mcp \
+  --header "Authorization: Bearer pk_xxx"</code><button class="copy-btn" data-copy-target="#code-mcp">copy</button></pre>
+                     <p class="muted small">Works with Claude Code, Claude Desktop, Cursor, opencode — anything that speaks MCP.</p>
+                  </div>
+                  <div class="tabpanel" id="tab-api">
+                     <pre class="code"><code id="code-api">curl -X POST http://localhost/api/v1/runs \
+  -H "Authorization: Bearer pk_xxx" \
+  -d '{"command":"python main.py",
+       "files":[{"path":"main.py",
+                 "content":"print(\"hi\")"}]}'
+# → {"status":"succeeded","stdout":"hi\n"}</code><button class="copy-btn" data-copy-target="#code-api">copy</button></pre>
+                     <p class="muted small">One-shot: boots a throwaway VM, runs, returns output, destroys it. OpenAPI spec at <code class="inline">/api/v1/schema/</code>.</p>
+                  </div>
+                  <div class="tabpanel" id="tab-sdk">
+                     <pre class="code"><code id="code-sdk">from pequeroku import PequeRoku
+
+pq = PequeRoku(api_key="pk_xxx",
+               base_url="http://localhost")
+print(pq.run("echo hello").stdout)</code><button class="copy-btn" data-copy-target="#code-sdk">copy</button></pre>
+                     <p class="muted small">A thin Python SDK over the same API — no privileged side paths.</p>
                   </div>
                </div>
             </div>
          </div>
       </section>
-      <div class="container">
-         <hr class="sep"/>
-      </div>
-      <!-- =================== PAIN SECTION =================== -->
-      <section class="container" id="features">
-         <div class="stack text-align-center">
-            <h2 class="big-text-no-margin">Setting up and switching environments slows teams down.</h2>
-            <p class="muted mid-center-text"">
-               Every project switch costs 25–50 minutes. New hires lose days or weeks to onboarding. Cloud IDEs promised a fix — but they’re limited, slow, and vendor‑locked.
-            </p>
-            <p class="muted mid-center-text"">
-               And of course every developer knows the pain: cloning repos, installing dependencies, matching OS versions, debugging "it works on my machine" issues.
-            </p>
-            <p class="muted mid-center-text"">
-               <b>Developers shouldn't have to choose between power and convenience.</b>
-            </p>
-         </div>
-         <div class="spacer" style="--h:22px"></div>
-         <div class="grid-4">
-            <article class="card">
-               <div class="card-symbol"><i class="iconoir-timer" aria-hidden="true"></i></div>
-               <h3>Time Wasted</h3>
-               <p class="muted">Hours spent on environment setup</p>
-            </article>
-            <article class="card">
-               <div class="card-symbol"><i class="iconoir-package-lock" aria-hidden="true"></i></div>
-               <h3>Dependency Hell</h3>
-               <p class="muted">Version conflicts and missing packages</p>
-            </article>
-            <article class="card">
-               <div class="card-symbol"><i class="iconoir-u-turn-arrow-right" aria-hidden="true"></i></div>
-               <h3>Context Switching</h3>
-               <p class="muted">Slow transitions between projects</p>
-            </article>
-            <article class="card">
-               <div class="card-symbol"><i class="iconoir-warning-triangle" aria-hidden="true"></i></div>
-               <h3>Works on My Machine</h3>
-               <p class="muted">Environment inconsistencies</p>
-            </article>
-         </div>
-      </section>
-      <div class="container">
-         <hr class="sep"/>
-      </div>
-      <!-- =================== PRODUCT SECTION =================== -->
-      <section class="container" id="product">
-         <div class="stack text-align-center">
-            <h2 class="big-text-no-margin">Meet PequeRoku — Full-Control Cloud Development.</h2>
-            <p class="muted mid-center-text">
-               PequeRoku gives each developer multiple isolated VM with real root, a complete browser IDE (it's also responsive!), and an agentic AI that operates inside the environment. Environments are always on, so you can host MVPs and previews without DevOps.
-            </p>
-         </div>
-         <div class="spacer" style="--h:22px"></div>
-         <div class="grid-2x2">
-            <article class="card">
-               <div class="card-symbol"><i class="iconoir-rocket" aria-hidden="true"></i></div>
-               <div>
-                  <h3>Speed</h3>
-                  <p class="muted">Launch Linux VMs in seconds.</p>
-                  <p class="muted">2‑minute onboarding from a template.</p>
-                  <p class="muted">AI scaffolds files, runs tests, fixes builds, opens PRs.</p>
-                  <p class="muted">Snapshots & instant rollback — break things fearlessly.</p>
-               </div>
-            </article>
-            <article class="card">
-               <div class="card-symbol"><i class="iconoir-shield" aria-hidden="true"></i></div>
-               <div>
-                  <h3>Isolation & Security</h3>
-                  <p class="muted">Real VMs (QEMU) per developer.</p>
-                  <p class="muted">No access to local networks or other VMs.</p>
-                  <p class="muted">Default‑deny ports; user‑managed Tunnels.</p>
-                  <p class="muted">100% open-source, extensible, and runs on your own infrastructure.</p>
-                  <p class="muted">Abuse detection with AI: throttle → quarantine → suspension.</p>
-               </div>
-            </article>
-            <article class="card">
-               <div class="card-symbol"><i class="iconoir-code" aria-hidden="true"></i></div>
-               <div>
-                  <h3>Convenience</h3>
-                  <p class="muted">Editor, terminal, filesystem — all in the browser.</p>
-                  <p class="muted">Always‑on workspaces; no cold starts.</p>
-                  <p class="muted">Self‑host for free or use Managed Cloud.</p>
-                  <p class="muted">install Docker, run systemd, build linux kernels, do whatever you want.</p>
-               </div>
-            </article>
-            <article class="card">
-               <div class="card-symbol"><i class="iconoir-brain" aria-hidden="true"></i></div>
-               <div>
-                  <h3>AI powered</h3>
-                  <p class="muted">AI that can read/write your repo, run commands, and deploy.</p>
-                  <p class="muted">Not a just a ChatGPT wrapper.</p>
-                  <p class="muted">OpenAI compatible agents.</p>
-                  <p class="muted">Use the speed of Groq, the inteligence of ChatGPT or the flexibility of Huggingface.</p>
-               </div>
-            </article>
-         </div>
-      </section>
-      <div class="container">
-         <hr class="sep"/>
-      </div>
-      <!-- =================== PRICING SECTION =================== -->
-      <section class="container" id="Pricing">
-         <div class="stack text-align-center">
-            <h2 class="big-text-no-margin">Pricing</h2>
-            <p class="muted mid-center-text">
-               Start free. Keep your freedom. Upgrade when you need scale and guardrails.
-            </p>
-         </div>
-         <div class="spacer" style="--h:22px"></div>
-         <div class="grid-2x2">
-            <article class="card">
-               <div class="card-symbol"><i class="iconoir-wolf" aria-hidden="true"></i></div>
-               <div>
-                  <h3>Community - Self host</h3>
-                  <p class="muted">Free & open source. Quick start. Bring your own hardware.</p>
-                  <p class="muted">* Unlimited workspaces</p>
-                  <p class="muted">* Agentic AI (BYO provider)</p>
-                  <p class="muted">* Snapshots & rollback</p>
-                  <p class="muted">* Support by community and docs</p>
-               </div>
-               <div class="hero-actions">
-                  <a class="btn" href="https://github.com/HectorPulido/pequeroku" target="_blank" rel="noopener">
-                  <i class="iconoir-github" aria-hidden="true"></i>
-                  Get started
-                  <i class="iconoir-arrow-right" aria-hidden="true"></i>
-                  </a>
-               </div>
-            </article>
-            <article class="card">
-               <div class="card-symbol"><i class="iconoir-cloud" aria-hidden="true"></i></div>
-               <div>
-                  <h3>Team Cloud - Premium</h3>
-                  <p class="muted">Hosted by us. SSO, budgets, headless integration, premium support.</p>
-                  <p class="muted">* Unlimited seats.</p>
-                  <p class="muted">* Access to features and enterprise plugins.</p>
-                  <p class="muted">* Premium support directly by us.</p>
-               </div>
-               <div class="hero-actions">
-                  <a class="btn btn-disabled" target="_blank" rel="noopener">
-                  Coming soon...
-                  </a>
-               </div>
-            </article>
-         </div>
-         <p class="closing">“What if your dev environment was as ephemeral and shareable as a Figma file — but ran a full OS?”</p>
 
+      <!-- =================== SELF-HOST =================== -->
+      <section class="container section" id="selfhost">
+         <div class="sec-head">
+            <span class="sec-tag">// 03 — self-host</span>
+            <h2>Up in three commands<span class="accent">_</span></h2>
+         </div>
+         <div class="steps">
+            <article class="step">
+               <span class="step-num">01</span>
+               <h3>Clone</h3>
+               <pre class="code slim"><code>git clone https://github.com/\
+HectorPulido/pequeroku.git</code></pre>
+            </article>
+            <article class="step">
+               <span class="step-num">02</span>
+               <h3>Start</h3>
+               <pre class="code slim"><code>cd pequeroku/source
+./start.sh</code></pre>
+               <p class="muted small">Idempotent — generates secrets, enables KVM if available, runs Docker Compose.</p>
+            </article>
+            <article class="step">
+               <span class="step-num">03</span>
+               <h3>Code</h3>
+               <pre class="code slim"><code>open http://localhost/dashboard/</code></pre>
+               <p class="muted small">Log in, create your first VM, or let the agent scaffold the project.</p>
+            </article>
+         </div>
+         <p class="reqs muted">Needs Docker Compose. A Linux box with <code class="inline">/dev/kvm</code> gives fast VMs — a homelab is plenty.</p>
+         <div class="hero-actions center">
+            <a class="btn accent" href="https://github.com/HectorPulido/pequeroku" target="_blank" rel="noopener">★ Star on GitHub</a>
+            <a class="btn ghost" href="https://github.com/HectorPulido/pequeroku/wiki/Getting-Started" target="_blank" rel="noopener">Getting-Started guide</a>
+         </div>
       </section>
+
+      <!-- =================== COMPARE =================== -->
+      <section class="container section" id="compare">
+         <div class="sec-head">
+            <span class="sec-tag">// 04 — trade-offs</span>
+            <h2>Pick your trade-offs<span class="accent">_</span></h2>
+         </div>
+         <div class="cmp-wrap">
+            <table class="cmp">
+               <thead>
+                  <tr>
+                     <th></th>
+                     <th class="hl">PequeRoku</th>
+                     <th>Cloud IDEs</th>
+                     <th>Agent sandboxes</th>
+                  </tr>
+               </thead>
+               <tbody>
+                  <tr><td>built for</td><td class="hl">humans + agents</td><td>humans</td><td>agents</td></tr>
+                  <tr><td>hosting</td><td class="hl">your hardware</td><td>their cloud</td><td>their cloud</td></tr>
+                  <tr><td>compute</td><td class="hl">real VMs (KVM)</td><td>containers</td><td>microVMs</td></tr>
+                  <tr><td>root</td><td class="hl">full</td><td>limited</td><td>ephemeral</td></tr>
+                  <tr><td>lifespan</td><td class="hl">always-on</td><td>boot &amp; wait</td><td>minutes</td></tr>
+                  <tr><td>cost</td><td class="hl">your electricity</td><td>per seat</td><td>per second</td></tr>
+               </tbody>
+            </table>
+            <p class="caption">Cloud IDEs: Replit, Codespaces, Gitpod · Agent sandboxes: E2B, Daytona</p>
+         </div>
+      </section>
+
+      <!-- =================== HELP =================== -->
+      <section class="container section" id="help">
+         <div class="sec-head">
+            <span class="sec-tag">// 05 — help</span>
+            <h2>Run it yourself. You're not alone<span class="accent">_</span></h2>
+         </div>
+         <div class="help-grid">
+            <article class="card help-card">
+               <span class="card-glyph">$0</span>
+               <h3>Community</h3>
+               <p class="muted">Free forever. GitHub issues, the wiki, and a maintainer who replies to everything.</p>
+               <div class="hero-actions">
+                  <a class="btn ghost" href="https://github.com/HectorPulido/pequeroku/issues" target="_blank" rel="noopener">Open an issue</a>
+                  <a class="btn ghost" href="https://github.com/HectorPulido/pequeroku/wiki" target="_blank" rel="noopener">Read the wiki</a>
+               </div>
+            </article>
+            <article class="card help-card featured">
+               <span class="card-glyph">ʕ•ᴥ•ʔ</span>
+               <h3>Hands-on help, from the author</h3>
+               <p class="muted">Want PequeRoku deployed on your infra, tuned for your team, or extended with custom features? I do that.</p>
+               <div class="hero-actions">
+                  <a class="btn accent" href="https://hectorpulido.net" target="_blank" rel="noopener">Get assistance → hectorpulido.net</a>
+               </div>
+            </article>
+         </div>
+         <blockquote class="quote">
+            “I built PequeRoku because I couldn't find a dev platform that was open, root-access,
+            always-on and affordable to run myself. If you want it running in your rack — I'll help
+            you get there.”
+            <cite>— Héctor Pulido, author</cite>
+         </blockquote>
+      </section>
+
+      <!-- =================== FINAL CTA =================== -->
+      <section class="container cta-final">
+         <p class="cta-cmd">$ ./start.sh<span class="t-caret" aria-hidden="true"></span></p>
+         <h2>Take back your dev environment.</h2>
+         <div class="hero-actions center">
+            <a class="btn accent" href="https://github.com/HectorPulido/pequeroku" target="_blank" rel="noopener">★ Star on GitHub</a>
+            <a class="btn ghost" href="https://hectorpulido.net" target="_blank" rel="noopener">Need a hand? Talk to me</a>
+         </div>
+      </section>
+
       <footer>
-         <div class="container row" style="justify-content:space-between;">
-            <span class="muted">© <span id="year"></span> PequeRoku</span>
-            <div class="row" style="gap:12px;">
+         <div class="container row footer-row">
+            <span class="muted">© <span id="year"></span> PequeRoku · MIT</span>
+            <div class="row" style="gap:14px;">
                <a class="muted" href="/privacy.html">Privacy</a>
-               <a class="muted" href="/terms.html">Terms of service</a>
+               <a class="muted" href="/terms.html">Terms</a>
+               <a class="muted" href="https://github.com/HectorPulido/pequeroku" target="_blank" rel="noopener">GitHub</a>
+               <a class="muted" href="https://hectorpulido.net" target="_blank" rel="noopener">Built by Héctor Pulido ↗</a>
             </div>
          </div>
       </footer>
-      <script src="main.js"></script>
+      <script src="/main.js?v=3"></script>
    </body>
 </html>

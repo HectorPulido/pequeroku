@@ -68,6 +68,12 @@ claude mcp add --transport http pequeroku https://YOUR_HOST/mcp/ \
 | Var | Default | Meaning |
 |---|---|---|
 | `PEQUEROKU_API_URL` | `http://web:8000` | Base URL of web_service (`/api/v1` is appended) |
-| `PEQUEROKU_API_KEY` | — | Fallback key when the client sends none |
+| `PEQUEROKU_API_KEY` | — | Shared fallback key for single-tenant; per-request Bearer takes precedence |
 | `PEQUEROKU_MCP_HOST` / `PEQUEROKU_MCP_PORT` | `0.0.0.0` / `8002` | Bind address |
 | `PEQUEROKU_MCP_OUTPUT_LIMIT` | `65536` | Byte cap on tool output |
+
+> **Auth:** in the default (multi-tenant) posture each caller must send
+> `Authorization: Bearer pk_...`; nginx rejects credential-less requests to
+> `/mcp` with `401` before they reach the server, and with no `PEQUEROKU_API_KEY`
+> set the server itself stays unauthorized — closed by default, never an open
+> relay. Set `PEQUEROKU_API_KEY` only for single-tenant/private deployments.

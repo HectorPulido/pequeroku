@@ -8,7 +8,9 @@ import os
 API_URL = os.getenv("PEQUEROKU_API_URL", "http://web:8000")
 
 # Fallback API key for single-tenant deployments. Per-request keys from the MCP
-# client's Authorization header take precedence (see server._resolve_client).
+# client's Authorization header take precedence (see server._resolve_api_key).
+# Unset by default: with no key and no Bearer token the server stays unauthorized
+# (401), so it never becomes an open relay just by being deployed.
 API_KEY = os.getenv("PEQUEROKU_API_KEY", "")
 
 # Truncate tool outputs to keep the agent's context bounded (same spirit as the

@@ -33,13 +33,20 @@ mcp = FastMCP(
 
 
 def _resolve_api_key(ctx: Context | None) -> str:
-    """Prefer the caller's bearer token; fall back to the configured key."""
+    """Prefer the caller's bearer token; fall back to the configured shared key.
+
+    With no token and no ``config.API_KEY`` this returns "", which makes
+    ``_client`` raise ``unauthorized`` (a 401 at the edge) — so a bare deployment
+    is closed by default, never an open relay.
+    """
     if ctx is not None:
         try:
             request = ctx.request_context.request  # Starlette request on HTTP
             auth = request.headers.get("authorization", "")
             if auth.lower().startswith("bearer "):
-                return auth.split(" ", 1)[1].strip()
+                token = auth.split(" ", 1)[1].strip()
+                if token:
+                    return token
         except Exception:
             pass
     return config.API_KEY
