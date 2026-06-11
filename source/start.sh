@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+#
+# start.sh — one command to bring PequeRoku up from a fresh checkout.
+#
+# Idempotent: runs the local bootstrap (setup.sh) and then `docker compose up`.
+# Re-running is always safe — setup.sh never overwrites existing files and
+# compose only recreates containers whose config changed.
+#
+# Usage:
+#   ./start.sh                 # setup + build + up -d
+#   ./start.sh --no-build      # skip image rebuild (faster when nothing changed)
+#   ./start.sh <svc> [svc...]  # extra args are forwarded to `docker compose up`
+#
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+err() { printf '\033[1;31m[start] %s\033[0m\n' "$*" >&2; }
+log() { printf '\033[1;34m[start]\033[0m %s\n' "$*"; }
+
+# --------------------------------------------------------------------------- #
+# Resolve the compose command (plugin `docker compose` or legacy binary)
+# --------------------------------------------------------------------------- #
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  COMPOSE=(docker compose)
+elif command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE=(docker-compose)
+else
+  err "Docker Compose not found. Install Docker Desktop or the compose plugin."
+  exit 1
+fi
+
+if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then
+  err "Docker daemon is not reachable. Start Docker and re-run ./start.sh"
+  exit 1
+fi
+
+# --------------------------------------------------------------------------- #
+# Parse our own flags; everything else is forwarded to `compose up`
+# --------------------------------------------------------------------------- #
+BUILD=1
+PASSTHRU=()
+for arg in "$@"; do
+  case "$arg" in
+    --no-build) BUILD=0 ;;
+    *)          PASSTHRU+=("$arg") ;;
+  esac
+done
+
+# --------------------------------------------------------------------------- #
+# 1) Idempotent bootstrap (env files + KVM override)
+# --------------------------------------------------------------------------- #
+log "Bootstrapping local config..."
+bash ./setup.sh
+
+# --------------------------------------------------------------------------- #
+# 2) Bring the stack up
+# --------------------------------------------------------------------------- #
+UP=(up -d)
+[ "$BUILD" -eq 1 ] && UP+=(--build)
+[ "${#PASSTHRU[@]}" -gt 0 ] && UP+=("${PASSTHRU[@]}")
+
+echo
+log "Running: ${COMPOSE[*]} ${UP[*]}"
+"${COMPOSE[@]}" "${UP[@]}"
+
+echo
+log "Stack is up. Useful commands:"
+echo "  ${COMPOSE[*]} ps           # service status"
+echo "  ${COMPOSE[*]} logs -f      # follow logs"
+echo "  Dashboard: http://localhost/dashboard/"

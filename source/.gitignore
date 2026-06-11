@@ -111,6 +111,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Machine-local compose override written by setup.sh (KVM passthrough on Linux)
+docker-compose.override.yaml
+
 # mkdocs documentation
 /site
 
@@ -144,6 +147,7 @@ GitHub.sublime-settings
 
 vm_data/base/*.qcow2
 vm_data/vms/*
+vm_data/keys/*
 
 ignore-*
 out.txt

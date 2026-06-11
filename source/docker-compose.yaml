@@ -4,17 +4,20 @@ services:
     command: ./entrypoint.sh
     volumes:
       - ./vm_data:/app/vm_data
-      - /Users/hectorpulido/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro
-      - /Users/hectorpulido/.ssh/id_ed25519.pub:/root/.ssh/id_vm_pequeroku.pub:ro
-    # devices:
-    #     - /dev/kvm:/dev/kvm
-    # security_opt:
-    #     - seccomp=unconfined
+      # Bring your own VM SSH key (optional): set VM_SSH_KEY to an ABSOLUTE path in
+      # source/.env, then uncomment. Otherwise vm_service generates one in vm_data.
+      # - ${VM_SSH_KEY}:/root/.ssh/id_vm_pequeroku:ro
+      # - ${VM_SSH_KEY}.pub:/root/.ssh/id_vm_pequeroku.pub:ro
+    # KVM passthrough is written to docker-compose.override.yaml by setup.sh on Linux
+    # hosts that have /dev/kvm; on macOS nothing is written. No manual edit needed.
     environment:
       VM_SSH_PRIVKEY: /root/.ssh/id_vm_pequeroku
       VM_BASE_IMAGE: /app/vm_data/base/debian12-golden.qcow2
-      # Pre-baked golden image (scripts/build-golden.sh): skip cloud-init so SSH is ready in ~10s.
-      VM_USE_CLOUD_INIT: "false"
+      # cloud-init mode is auto-resolved (off for a golden via its *.meta.json, on
+      # for a plain cloud image). Uncomment to force it. See vm_service/settings.py.
+      # VM_USE_CLOUD_INIT: "false"
+      # Auto-download a Debian cloud image when VM_BASE_IMAGE is missing (default on).
+      # VM_AUTODOWNLOAD_IMAGE: "true"
     cap_add:
       - NET_ADMIN
     networks:
@@ -32,6 +35,14 @@ services:
       # Allow internal service-to-service calls by the compose hostname (the MCP
       # server hits http://web:8000/api/v1). "localhost" is always allowed too.
       ALLOWED_HOSTS: web
+      # DB credentials from source/.env, shared with the `db` service so both
+      # agree on one value. web_service/.env still overrides these for web when
+      # present (entrypoint.sh sources it); these are the fallback otherwise.
+      DB_NAME: ${DB_NAME:-mydb}
+      DB_USER: ${DB_USER:-myuser}
+      DB_PASSWORD: ${DB_PASSWORD:-mypassword}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
     networks:
       - pequeroku-net
     depends_on:
@@ -84,9 +95,11 @@ services:
   db:
     image: "postgres:16"
     environment:
-      POSTGRES_DB: mydb
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
+      # Interpolated from source/.env (created by setup.sh). Absent .env -> the
+      # defaults below, identical to the previous hardcoded values.
+      POSTGRES_DB: ${DB_NAME:-mydb}
+      POSTGRES_USER: ${DB_USER:-myuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mypassword}
     volumes:
       - .db_data:/var/lib/postgresql/data
     networks:

@@ -43,4 +43,29 @@ if [ -e /dev/kvm ]; then
   chmod g+rw /dev/kvm
 fi
 
+# Make sure a bootable base image exists (auto-download a Debian cloud image on a
+# clean machine unless VM_AUTODOWNLOAD_IMAGE=false). Never overwrites an existing one.
+bash "$(dirname "$0")/scripts/ensure-base-image.sh"
+
+# Resolve the VM SSH key. A provided key (mounted or baked at VM_SSH_PRIVKEY)
+# always wins and may be of any type load_pkey supports. Only when no key is
+# present do we generate an ed25519 one into the persistent vm_data volume so a
+# clean machine works with zero key setup.
+VM_SSH_PRIVKEY="${VM_SSH_PRIVKEY:-/root/.ssh/id_vm_pequeroku}"
+if [ -f "$VM_SSH_PRIVKEY" ]; then
+  echo "[vm_service] Using provided VM SSH key: $VM_SSH_PRIVKEY"
+else
+  GEN_KEY="/app/vm_data/keys/id_vm_pequeroku"
+  if [ ! -f "$GEN_KEY" ]; then
+    echo "[vm_service] No key at $VM_SSH_PRIVKEY; generating one at $GEN_KEY"
+    mkdir -p "$(dirname "$GEN_KEY")"
+    ssh-keygen -t ed25519 -N "" -C "pequeroku-vm" -f "$GEN_KEY"
+    chmod 600 "$GEN_KEY"
+  else
+    echo "[vm_service] Reusing generated VM SSH key: $GEN_KEY"
+  fi
+  export VM_SSH_PRIVKEY="$GEN_KEY"
+fi
+export VM_SSH_PRIVKEY
+
 python main.py

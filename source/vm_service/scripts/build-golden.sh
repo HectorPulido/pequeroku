@@ -38,6 +38,7 @@
 #   --cache     <dir>                   Where to cache downloaded base images (default: vm_data/base/.cache)
 #   --force                             Rebuild even if --out already exists
 #   --clobber-base                      Allow overwriting a base that live VM overlays back onto (CORRUPTS them)
+#   --write-meta-only                   Only (re)write <out>.meta.json for an existing image, then exit
 #   -h | --help                         Show this help
 #
 set -euo pipefail
@@ -47,7 +48,9 @@ set -euo pipefail
 # --------------------------------------------------------------------------- #
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VM_SERVICE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-DEFAULT_BASE_DIR="${VM_SERVICE_DIR}/vm_data/base"
+# Output next to the compose mount (source/vm_data -> /app/vm_data in the container),
+# so a default `build-golden.sh` lands exactly where vm_service reads VM_BASE_IMAGE.
+DEFAULT_BASE_DIR="$(dirname "${VM_SERVICE_DIR}")/vm_data/base"
 
 DISTRO="debian12"
 ARCH="auto"
@@ -69,13 +72,34 @@ METHOD="auto"
 CACHE_DIR=""
 FORCE="0"
 CLOBBER_BASE="0"         # allow overwriting a base that live VM overlays depend on
+WRITE_META_ONLY="0"      # only (re)write the <out>.meta.json sidecar, then exit
 BOOT_TIMEOUT="900"       # max seconds to wait for the boot-method bake VM
 
 log()  { printf '\033[1;34m[build-golden]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[build-golden] WARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[build-golden] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '2,41p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() { sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; }
+
+# Write a sidecar <image>.meta.json describing the golden so vm_service can
+# auto-detect that cloud-init must be skipped for it (see settings.py resolution).
+# Does not change behavior on its own: an explicit VM_USE_CLOUD_INIT still wins.
+write_meta() {
+  local img="$1"
+  local meta="${img}.meta.json"
+  local built_at; built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  cat > "$meta" <<EOF
+{
+  "golden": true,
+  "distro": "${DISTRO}",
+  "arch": "${ARCH}",
+  "ssh_user": "${SSH_USER}",
+  "built_at": "${built_at}",
+  "builder": "build-golden.sh"
+}
+EOF
+  log "Wrote golden metadata: ${meta}"
+}
 
 # --------------------------------------------------------------------------- #
 # Parse args
@@ -97,6 +121,7 @@ while [[ $# -gt 0 ]]; do
     --cache)    CACHE_DIR="$2"; shift 2 ;;
     --force)    FORCE="1"; shift ;;
     --clobber-base) CLOBBER_BASE="1"; shift ;;
+    --write-meta-only) WRITE_META_ONLY="1"; shift ;;
     -h|--help)  usage ;;
     *) die "Unknown option: $1 (try --help)" ;;
   esac
@@ -124,6 +149,13 @@ case "$ARCH" in amd64|arm64) ;; *) die "Invalid --arch: $ARCH (amd64|arm64)";; e
 [[ -n "$CACHE_DIR" ]] || CACHE_DIR="${DEFAULT_BASE_DIR}/.cache"
 [[ -n "$OUT" ]]       || OUT="${DEFAULT_BASE_DIR}/${DISTRO}-golden.qcow2"
 [[ -n "$PRIVKEY" ]]   || PRIVKEY="${PUBKEY%.pub}"
+
+# --write-meta-only: backfill the sidecar for an already-built golden, then stop.
+if [[ "$WRITE_META_ONLY" == "1" ]]; then
+  [[ -f "$OUT" ]] || die "Image not found: ${OUT} (nothing to write metadata for; pass --out)"
+  write_meta "$OUT"
+  exit 0
+fi
 
 # Effective package list = baked-in baseline (unless --no-base-packages) + extras.
 # apt tolerates a name appearing twice, so a plain CSV concat is fine.
@@ -590,8 +622,12 @@ fi
 log "Compacting image..."
 qemu-img convert -O qcow2 "$OUT" "${OUT}.tmp" && mv "${OUT}.tmp" "$OUT"
 
+# Self-describing sidecar so vm_service auto-detects "skip cloud-init" for this base.
+write_meta "$OUT"
+
 log "Done. Golden image ready: ${OUT}"
 log "Next steps:"
 log "  1) Point VM_BASE_IMAGE at ${OUT}"
-log "  2) Set VM_USE_CLOUD_INIT=false in the vm_service environment"
+log "  2) cloud-init is auto-disabled via ${OUT}.meta.json — no VM_USE_CLOUD_INIT"
+log "     needed (an explicit VM_USE_CLOUD_INIT env var still overrides if set)"
 log "  3) Boot a VM — SSH should be ready in ~10s instead of ~50s"

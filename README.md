@@ -26,7 +26,7 @@ PequeRoku is an open-source, self-hosted alternative to Replit, Codespaces, and 
 It is always on, with no cold starts, no sandbox, and no per-seat billing. The only limits are the ones your own hardware sets.
 
 ```
-git clone  →  docker compose up  →  http://localhost:8000  →  start coding
+git clone  →  ./start.sh  →  http://localhost/dashboard/  →  start coding
 ```
 
 
@@ -219,12 +219,52 @@ timeout + TTL).
 ```bash
 git clone https://github.com/HectorPulido/pequeroku.git
 cd pequeroku/source
-docker compose up   # Docker Compose supported out of the box
+./start.sh
 ```
 
-1. Open `http://localhost:8000`.
+`start.sh` is idempotent — re-run it anytime. It bootstraps your local config
+(creates the `.env` files with random secrets, and on Linux hosts with `/dev/kvm`
+turns on KVM for fast VMs) and then runs `docker compose up`. Prefer two steps?
+`./setup.sh && docker compose up` does the same thing; `setup.sh` only ever
+creates missing files, it never overwrites — so it's always safe to re-run.
+
+1. Open `http://localhost/dashboard/`.
 2. Log in and create your first VM.
 3. Start coding, or ask Pequenin to scaffold the project for you.
+
+**Faster VM boots (optional).** On first run, if no base image exists,
+`vm_service` auto-downloads a Debian cloud image and boots VMs through cloud-init
+(~50s to SSH). Build a pre-baked "golden" image to cut that to ~10s — it writes a
+self-describing `*.meta.json` sidecar that `vm_service` detects, so no env edits
+are needed:
+
+```bash
+./vm_service/scripts/build-golden.sh --force   # --force replaces the auto-downloaded base
+docker compose restart vm_services
+```
+
+`vm_service` generates its own SSH keypair in the persistent `vm_data` volume, so
+VMs work with zero key setup. To bring your own key instead, set `VM_SSH_KEY` to an
+absolute path in `source/.env` and uncomment the key mounts in `docker-compose.yaml`.
+
+> [!IMPORTANT]
+> **Upgrading a checkout that predates `start.sh`?** The compose file no longer
+> hard-mounts a host SSH key. Your existing base image keeps working untouched —
+> an image with no `*.meta.json` is auto-detected as a golden (cloud-init stays
+> off), so there's nothing to backfill. But that golden baked a specific public
+> key, so keep using the matching private key, or vm_service generates a new one
+> and existing VMs/goldens become unreachable. Drop your key into the persistent
+> volume (no compose edits needed):
+>
+> ```bash
+> mkdir -p source/vm_data/keys
+> cp ~/.ssh/id_ed25519     source/vm_data/keys/id_vm_pequeroku
+> cp ~/.ssh/id_ed25519.pub source/vm_data/keys/id_vm_pequeroku.pub
+> chmod 600 source/vm_data/keys/id_vm_pequeroku
+> ```
+>
+> Or set `VM_SSH_KEY` to the key's absolute path in `source/.env` and uncomment the
+> key mounts in `docker-compose.yaml`.
 
 > Detailed walkthrough: [Wiki, Getting Started](https://github.com/HectorPulido/pequeroku/wiki/Getting-Started).
 
