@@ -189,6 +189,26 @@ class VMServiceClient:
         )
         return resp
 
+    def refresh_health(self) -> bool:
+        """Ping /health and persist node.healthy + heartbeat_at; return the result.
+
+        A fresh node starts healthy=False with no heartbeat, and set_healthy only
+        fires on blocking clients — so without this a node never becomes a
+        scheduling candidate (and the warm pool never bootstraps). Loops call this
+        each pass to keep the heartbeat fresh independently of any user VM.
+        """
+        ok = False
+        try:
+            resp = self.get_health()
+            ok = bool(resp.ok) and str(cast(dict, resp.json()).get("ok")) == "True"
+        except Exception:
+            ok = False
+        self.node.healthy = ok
+        if ok:
+            self.node.heartbeat_at = timezone.now()
+        self.node.save(update_fields=["healthy", "heartbeat_at"])
+        return ok
+
     def list_vms(self) -> list[dict[str, object]]:
         """GET /vms — Lista todas las VMs."""
         resp = self.session.get(

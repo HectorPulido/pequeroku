@@ -58,19 +58,20 @@ set_env_var() {
 }
 
 # --------------------------------------------------------------------------- #
-# Resolve shared secrets once. Adopt whatever already exists on disk; only
-# generate when nothing has it. setup.sh fills missing files, never rotates
-# existing secrets. Template placeholders never leak: a newly created file is
-# always rewritten with these resolved values right after the copy.
+# Resolve shared secrets once. Adopt whatever already exists on disk; only fill
+# missing values. setup.sh never rotates existing secrets.
+#
+# DB_PASSWORD is deliberately NOT randomized: Postgres only applies a password on
+# the FIRST init of its data volume, so a random one silently breaks every time
+# the volume (.db_data / named volume) outlives .env — a fresh clone, a reset, a
+# re-run — with "password authentication failed". A stable default keeps the DB
+# reachable across all of those. The DB isn't published outside the compose
+# network; set a custom DB_PASSWORD explicitly if you need one (then you own the
+# volume lifecycle). SECRET_KEY stays random — changing it is harmless.
 # --------------------------------------------------------------------------- #
-GENERATED_NEW_PASSWORD=0
-
 DB_PASSWORD="$(read_env_var .env DB_PASSWORD)"
 [ -n "$DB_PASSWORD" ] || DB_PASSWORD="$(read_env_var web_service/.env DB_PASSWORD)"
-if [ -z "$DB_PASSWORD" ]; then
-  DB_PASSWORD="$(gen_hex 16)"
-  GENERATED_NEW_PASSWORD=1
-fi
+[ -n "$DB_PASSWORD" ] || DB_PASSWORD="mypassword"
 
 SECRET_KEY="$(read_env_var web_service/.env SECRET_KEY)"
 [ -n "$SECRET_KEY" ] || SECRET_KEY="$(read_env_var .env SECRET_KEY)"
@@ -155,11 +156,12 @@ fi
 # --------------------------------------------------------------------------- #
 # Warnings
 # --------------------------------------------------------------------------- #
-if [ "$GENERATED_NEW_PASSWORD" = "1" ] && [ -d .db_data ]; then
+if [ -d .db_data ]; then
   echo "Warnings:"
-  c_warn ".db_data/ already exists: Postgres only applies POSTGRES_PASSWORD on first"
-  c_warn "  init, so the new DB_PASSWORD will NOT take effect on the existing volume."
-  c_warn "  Either keep the old password in .env, or reset the DB with: rm -rf .db_data"
+  c_warn "Existing Postgres data found (.db_data). It keeps the password from its"
+  c_warn "  first init, ignoring .env. If login/migrate fails with 'password"
+  c_warn "  authentication failed', reset the DB:"
+  c_warn "    docker compose down -v && sudo rm -rf .db_data .redis_data && ./start.sh"
 fi
 
 # --------------------------------------------------------------------------- #

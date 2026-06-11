@@ -5,8 +5,9 @@ import time
 from django.core.management.base import BaseCommand
 from django.db import close_old_connections
 
-from vm_manager.models import Container
+from vm_manager.models import Container, Node
 from vm_manager.mixin import VMSyncMixin
+from vm_manager.vm_client import VMServiceClient
 from vm_manager import pool
 
 
@@ -24,6 +25,15 @@ class PoolManager(VMSyncMixin):
 
     def run_once(self) -> tuple[int, int, int]:
         """Returns (synced, trimmed, provisioned)."""
+        # Refresh node health first. A fresh node is healthy=False with no
+        # heartbeat, and set_healthy only fires on blocking clients — so without
+        # this the node never becomes a candidate and the pool never bootstraps.
+        for node in Node.objects.filter(active=True):
+            try:
+                VMServiceClient(node).refresh_health()
+            except Exception:
+                pass
+
         nodes = self._candidate_nodes(heartbeat_ttl_s=3600)
         if not nodes:
             return 0, 0, 0
