@@ -358,6 +358,28 @@ def _is_sse_request(request) -> bool:
     return "text/event-stream" in request.headers.get("Accept", "").lower()
 
 
+def _public_origin(request) -> str:
+    """Best-effort public ``scheme://host`` the *browser* actually used.
+
+    Behind Cloudflare → nginx the local hops can be plain http, so trusting
+    ``request.scheme`` (or an ``X-Forwarded-Proto`` that nginx clobbered with its
+    own ``$scheme``) yields ``http://`` — and the previewed app's rewritten asset
+    URLs then get blocked as **mixed content** on the https page. Prefer explicit
+    upstream signals, most-trustworthy first: Cloudflare's ``CF-Visitor`` JSON
+    (which nginx leaves untouched), then ``X-Forwarded-Proto``, then the local
+    scheme as a last resort.
+    """
+    proto = ""
+    cf_visitor = request.META.get("HTTP_CF_VISITOR", "").replace(" ", "")
+    if '"scheme":"https"' in cf_visitor:
+        proto = "https"
+    elif '"scheme":"http"' in cf_visitor:
+        proto = "http"
+    if not proto:
+        proto = (request.META.get("HTTP_X_FORWARDED_PROTO") or "").split(",")[0].strip()
+    return f"{proto or request.scheme}://{request.get_host()}"
+
+
 def _streaming_preview_response(request, container, port, path, service):
     """Relay an SSE/streamed response from the VM app to the browser, live.
 
@@ -429,12 +451,9 @@ def build_preview_response(request, container, port, path, service) -> HttpRespo
     prefix = f"/api/containers/{container.pk}/preview/{port}/"
 
     if "text/html" in content_type.lower():
-        # Public absolute base for re-rooting the app's self-origin. Trust
-        # X-Forwarded-Proto (set by Cloudflare/nginx) over request.scheme so we
-        # emit https on an https page (no SECURE_PROXY_SSL_HEADER configured) and
-        # never trigger mixed-content; fall back to the scheme Django saw.
-        fwd_proto = (request.META.get("HTTP_X_FORWARDED_PROTO") or "").split(",")[0]
-        origin = f"{fwd_proto.strip() or request.scheme}://{request.get_host()}"
+        # Absolute base for re-rooting the app's self-origin — MUST be https on an
+        # https page or the rewritten asset URLs get blocked as mixed content.
+        origin = _public_origin(request)
         body_bytes = _rewrite_html(
             body_bytes.decode("utf-8", errors="replace"), prefix, port, origin
         ).encode("utf-8")

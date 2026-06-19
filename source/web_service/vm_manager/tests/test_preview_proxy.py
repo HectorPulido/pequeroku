@@ -268,6 +268,26 @@ def test_build_preview_response_reroots_self_origin_with_forwarded_proto():
     assert '"root":"https://testserver/api/containers/15/preview/7860"' in content
 
 
+def test_build_preview_response_cf_visitor_overrides_clobbered_proto():
+    # Prod reality: nginx clobbers X-Forwarded-Proto to http (Cloudflare→origin is
+    # http), but Cloudflare's CF-Visitor still says https. We must emit https so
+    # the rewritten asset URLs aren't blocked as mixed content on the https page.
+    req = RequestFactory().get(
+        "/api/containers/15/preview/7860/",
+        HTTP_X_FORWARDED_PROTO="http",
+        HTTP_CF_VISITOR='{"scheme":"https"}',
+    )
+    env = _env(
+        b'<html><head></head><body>'
+        b'<script>window.gradio_config={"root":"http://127.0.0.1:7860"};</script>'
+        b"</body></html>",
+    )
+    resp = build_preview_response(req, _container(), "7860", "", _service(env))
+    content = resp.content.decode()
+    assert '"root":"https://testserver/api/containers/15/preview/7860"' in content
+    assert "http://testserver" not in content  # no mixed-content http origin
+
+
 def test_build_preview_response_binary_passthrough():
     """openapi.json must come back as JSON bytes, not a base64→PNG misfire."""
     req = RequestFactory().get("/api/containers/15/preview/8000/openapi.json")
