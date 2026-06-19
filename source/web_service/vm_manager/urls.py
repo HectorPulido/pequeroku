@@ -1,6 +1,6 @@
 from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
-from .preview_proxy import CSRFExemptSessionAuthentication
+from .preview_proxy import CSRFExemptSessionAuthentication, PreviewPassthroughRenderer
 from .views import (
     ContainersViewSet,
     UserViewSet,
@@ -29,6 +29,9 @@ _preview_view = ContainersViewSet.as_view(
         "options": "preview",
     },
     authentication_classes=[CSRFExemptSessionAuthentication],
+    # Wildcard renderer: a previewed app may demand any media type (e.g. Gradio's
+    # SSE `Accept: text/event-stream`), which DRF's default renderers would 406.
+    renderer_classes=[PreviewPassthroughRenderer],
 )
 
 urlpatterns = [

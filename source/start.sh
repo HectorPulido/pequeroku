@@ -55,6 +55,40 @@ log "Bootstrapping local config..."
 bash ./setup.sh
 
 # --------------------------------------------------------------------------- #
+# 1.5) Keep each Poetry lockfile in sync with its pyproject (auto-relock)
+#
+# `poetry install` in the image build ABORTS when pyproject.toml has drifted from
+# poetry.lock ("changed significantly since poetry.lock was last generated"), so
+# a forgotten `poetry lock` after editing dependencies breaks the build. Refresh
+# stale lockfiles here (host-side, where Poetry lives). `--no-update` only rewrites
+# the hash / adds already-resolvable deps; it NEVER bumps pinned versions, so the
+# build stays reproducible. Only services that already track a poetry.lock are
+# touched (we never create one where there wasn't).
+# --------------------------------------------------------------------------- #
+sync_poetry_locks() {
+  if ! command -v poetry >/dev/null 2>&1; then
+    log "Poetry not on host; skipping lockfile sync (image build will fail loudly if a lock is stale)."
+    return 0
+  fi
+  local svc
+  for svc in web_service vm_service mcp_service; do
+    [ -f "$svc/pyproject.toml" ] && [ -f "$svc/poetry.lock" ] || continue
+    if ! (cd "$svc" && poetry check --lock >/dev/null 2>&1); then
+      log "  $svc: poetry.lock is stale -> relocking (no version bump)..."
+      if ! (cd "$svc" && poetry lock --no-update --no-interaction --no-ansi >/dev/null 2>&1); then
+        err "Failed to relock $svc. Fix pyproject.toml or run 'cd source/$svc && poetry lock'."
+        exit 1
+      fi
+    fi
+  done
+}
+
+if [ "$BUILD" -eq 1 ]; then
+  log "Syncing Poetry lockfiles..."
+  sync_poetry_locks
+fi
+
+# --------------------------------------------------------------------------- #
 # 2) Bring the stack up
 # --------------------------------------------------------------------------- #
 UP=(up -d)
@@ -63,7 +97,10 @@ UP=(up -d)
 
 echo
 log "Running: ${COMPOSE[*]} ${UP[*]}"
-"${COMPOSE[@]}" "${UP[@]}"
+if ! "${COMPOSE[@]}" "${UP[@]}"; then
+  err "compose up failed — see the build/run output above."
+  exit 1
+fi
 
 echo
 log "Stack is up. Useful commands:"

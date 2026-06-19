@@ -7,7 +7,7 @@ import shlex
 from zipfile import error
 
 from fastapi import HTTPException, Depends, APIRouter, Query
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 from implementations.read_from_vm import list_dirs
 import settings
@@ -53,6 +53,7 @@ from implementations import (
     stop_process,
     listening_ports,
     proxy_request,
+    proxy_request_stream,
 )
 
 from implementations.ssh_cache import exec_and_close, exec_and_close_status
@@ -345,6 +346,47 @@ def proxy_ep(vm_id: str, req: VMProxyRequest) -> VMProxyResponse:
         raise HTTPException(status_code=400, detail="Port not allowed")
 
     return proxy_request(vm, req)
+
+
+@vms_router.post("/{vm_id}/proxy-stream")
+def proxy_stream_ep(vm_id: str, req: VMProxyRequest):
+    """Stream one HTTP response from an app in the VM (SSE / long-lived bodies).
+
+    Same contract + SSRF guard as ``/proxy``, but returns a chunked
+    ``StreamingResponse`` so Server-Sent Events (AI chatbots, Gradio's queue)
+    reach the browser incrementally instead of being buffered until the stream
+    closes.
+    """
+    try:
+        vm: "VMRecord" = store.get(vm_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail="VM doesn't exist") from e
+    if vm.state != VMState.running or not vm.ssh_port or not vm.ssh_user:
+        raise HTTPException(status_code=400, detail="VM is not running")
+    if req.target_port == 22 or not (1 <= req.target_port <= 65535):
+        raise HTTPException(status_code=400, detail="Port not allowed")
+
+    result = proxy_request_stream(vm, req)
+    if not result.ok or result.body is None:
+        raise HTTPException(
+            status_code=result.status if result.status >= 400 else 502,
+            detail=result.reason or "Preview stream not available",
+        )
+    # Pull content-type out of the passthrough headers (StreamingResponse owns it
+    # via media_type); the rest are relayed verbatim.
+    media_type = "application/octet-stream"
+    passthrough: dict[str, str] = {}
+    for key, value in result.headers:
+        if key.lower() == "content-type":
+            media_type = value
+        else:
+            passthrough[key] = value
+    return StreamingResponse(
+        result.body,
+        status_code=result.status,
+        headers=passthrough,
+        media_type=media_type,
+    )
 
 
 @vms_router.post("/{vm_id}/start-process", response_model=StartProcessResponse)

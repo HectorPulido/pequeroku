@@ -1,10 +1,16 @@
 import base64
 import types
 
+from django.http import StreamingHttpResponse
 from django.test import RequestFactory
+from rest_framework.negotiation import DefaultContentNegotiation
+from rest_framework.request import Request
+from rest_framework.test import APIRequestFactory
 
+from vm_manager import preview_proxy
 from vm_manager.preview_proxy import (
     CSRFExemptSessionAuthentication,
+    PreviewPassthroughRenderer,
     _rewrite_html,
     build_preview_response,
 )
@@ -14,6 +20,17 @@ def test_csrf_exempt_session_auth_skips_enforcement():
     # enforce_csrf is a no-op (returns None) so previewed-app form POSTs aren't
     # blocked by pequeroku's CSRF check.
     assert CSRFExemptSessionAuthentication().enforce_csrf(None) is None
+
+
+def test_passthrough_renderer_satisfies_event_stream_accept():
+    # Gradio's SSE queue requests `Accept: text/event-stream` (no */* fallback).
+    # The wildcard renderer must satisfy DRF negotiation so it doesn't 406 before
+    # our proxy view runs.
+    req = Request(APIRequestFactory().get("/x", HTTP_ACCEPT="text/event-stream"))
+    renderer, media = DefaultContentNegotiation().select_renderer(
+        req, [PreviewPassthroughRenderer()]
+    )
+    assert isinstance(renderer, PreviewPassthroughRenderer)
 
 
 # --- _rewrite_html (pure) --------------------------------------------------- #
@@ -27,7 +44,7 @@ def test_rewrite_html_injects_base_and_reroots_absolute_paths():
         '<a href="rel/page">rel</a>'
         "</body></html>"
     )
-    out = _rewrite_html(html, prefix)
+    out = _rewrite_html(html, prefix, "8000")
 
     assert f'<base href="{prefix}">' in out
     assert f'href="{prefix}"' in out  # bare "/" re-rooted (the old bug)
@@ -40,25 +57,75 @@ def test_rewrite_html_injects_runtime_shim():
     out = _rewrite_html(
         "<html><head></head><body></body></html>",
         "/api/containers/15/preview/8000/",
+        "8000",
     )
     assert '<base href="/api/containers/15/preview/8000/">' in out
     # Shim runs as a script; PREFIX has NO trailing slash so PREFIX + "/posts" works.
     assert 'var PREFIX="/api/containers/15/preview/8000"' in out
+    assert 'PORT="8000"' in out  # self-origin (host:port) stripping is port-aware
     assert "window.fetch=" in out  # API edge patched
     assert "Element.prototype.setAttribute" in out  # img/href setters patched
 
 
 def test_rewrite_html_inserts_head_when_missing():
-    out = _rewrite_html("<body><a href='/x'>x</a></body>", "/p/")
+    out = _rewrite_html("<body><a href='/x'>x</a></body>", "/p/", "8000")
     # A <head> is synthesized, starting with our <base> (the shim follows it).
     assert '<head><base href="/p/"><script>' in out
     assert "</head><body>" in out
 
 
 def test_rewrite_html_srcset_absolute_entries():
-    out = _rewrite_html('<img srcset="/a.png 1x, /b.png 2x">', "/p/")
+    out = _rewrite_html('<img srcset="/a.png 1x, /b.png 2x">', "/p/", "8000")
     assert "/p/a.png 1x" in out
     assert "/p/b.png 2x" in out
+
+
+def test_rewrite_html_reroots_upstream_self_origin():
+    # Gradio (and friends) bake their OWN host:port into asset URLs and the inline
+    # JS config root. From the browser those hit the user's localhost
+    # (ERR_CONNECTION_REFUSED), so they must collapse onto the preview base. The
+    # target is ABSOLUTE (origin + prefix): Gradio does new URL(config.root),
+    # which throws "Invalid URL" on a bare path.
+    prefix = "/api/containers/251/preview/7860/"
+    origin = "https://pequeroku.example"
+    base = origin + prefix.rstrip("/")
+    html = (
+        "<html><head>"
+        '<script src="http://127.0.0.1:7860/static/js/iframeResizer.js"></script>'
+        "</head><body>"
+        '<script>window.gradio_config={"root":"http://127.0.0.1:7860","x":1};</script>'
+        '<link rel="stylesheet" href="https://localhost:7860/theme.css?v=abc">'
+        "</body></html>"
+    )
+    out = _rewrite_html(html, prefix, "7860", origin)
+
+    assert "127.0.0.1:7860" not in out  # no upstream self-origin survives
+    assert "//localhost:7860" not in out
+    assert f'src="{base}/static/js/iframeResizer.js"' in out
+    assert f'"root":"{base}"' in out  # absolute -> Gradio's new URL(root) works
+    assert f'href="{base}/theme.css?v=abc"' in out  # query preserved
+
+
+def test_rewrite_html_self_origin_other_port_untouched():
+    # A reference to a DIFFERENT port is not this app — leave it alone.
+    out = _rewrite_html(
+        '<a href="http://127.0.0.1:9999/x">x</a>',
+        "/api/containers/251/preview/7860/",
+        "7860",
+        "https://pequeroku.example",
+    )
+    assert "http://127.0.0.1:9999/x" in out
+
+
+def test_rewrite_html_manifest_forces_credentials():
+    # The manifest is fetched without cookies by default -> our auth 403s it.
+    out = _rewrite_html(
+        '<html><head><link rel="manifest" href="/manifest.json"></head></html>',
+        "/api/containers/251/preview/7860/",
+        "7860",
+    )
+    assert 'crossorigin="use-credentials"' in out
+    assert 'href="/api/containers/251/preview/7860/manifest.json"' in out
 
 
 # --- build_preview_response ------------------------------------------------- #
@@ -101,6 +168,104 @@ def test_build_preview_response_rewrites_html_and_strips_frame_busting():
     assert resp.get("Content-Security-Policy") is None
     assert resp["X-Robots-Tag"] == "noindex"
     assert "no-store" in resp["Cache-Control"]  # never cache the live preview
+
+
+# --- streaming / SSE relay --------------------------------------------------- #
+class _FakeUpstream:
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def aiter_raw(self):
+        for c in self._chunks:
+            yield c
+
+
+class _FakeAsyncClient:
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    def stream(self, method, url, **kwargs):
+        return _FakeUpstream(self._chunks)
+
+
+def _sse_service():
+    return types.SimpleNamespace(
+        stream_endpoint=lambda vm_id: (
+            f"http://node/vms/{vm_id}/proxy-stream",
+            {"Authorization": "Bearer t"},
+        )
+    )
+
+
+def _sse_request(path="/api/containers/15/preview/7860/gradio_api/queue/data"):
+    return RequestFactory().get(path, HTTP_ACCEPT="text/event-stream")
+
+
+def test_sse_request_returns_streaming_response():
+    # An `Accept: text/event-stream` request is routed to the streaming proxy and
+    # gets the headers SSE needs (no nginx buffering, no caching, embeddable).
+    resp = build_preview_response(
+        _sse_request(), _container(), "7860", "gradio_api/queue/data", _sse_service()
+    )
+    assert isinstance(resp, StreamingHttpResponse)
+    assert resp["Content-Type"] == "text/event-stream"
+    assert resp["X-Accel-Buffering"] == "no"
+    assert "no-cache" in resp["Cache-Control"]
+    assert getattr(resp, "xframe_options_exempt", False) is True
+
+
+def test_non_sse_request_uses_buffered_path():
+    # A normal (HTML) request must NOT be streamed — it needs the rewrite pass.
+    req = RequestFactory().get("/api/containers/15/preview/8000/", HTTP_ACCEPT="text/html")
+    env = _env(b"<html><head></head><body></body></html>")
+    resp = build_preview_response(req, _container(), "8000", "", _service(env))
+    assert not isinstance(resp, StreamingHttpResponse)
+
+
+async def test_sse_relay_streams_chunks(monkeypatch):
+    # The async relay pipes upstream SSE chunks through verbatim, in order.
+    chunks = [b"data: hello\n\n", b"data: world\n\n"]
+    monkeypatch.setattr(
+        preview_proxy.httpx,
+        "AsyncClient",
+        lambda *a, **k: _FakeAsyncClient(chunks),
+    )
+    resp = build_preview_response(
+        _sse_request(), _container(), "7860", "gradio_api/queue/data", _sse_service()
+    )
+    out = [chunk async for chunk in resp.streaming_content]
+    assert out == chunks
+
+
+def test_build_preview_response_reroots_self_origin_with_forwarded_proto():
+    # End-to-end: a Gradio-style body whose config bakes http://127.0.0.1:PORT must
+    # come back rewritten to an ABSOLUTE https URL when X-Forwarded-Proto says so
+    # (TLS terminated upstream -> request.scheme would be http -> mixed content).
+    req = RequestFactory().get(
+        "/api/containers/15/preview/7860/", HTTP_X_FORWARDED_PROTO="https"
+    )
+    env = _env(
+        b'<html><head></head><body>'
+        b'<script>window.gradio_config={"root":"http://127.0.0.1:7860"};</script>'
+        b"</body></html>",
+    )
+    resp = build_preview_response(req, _container(), "7860", "", _service(env))
+    content = resp.content.decode()
+    assert "127.0.0.1:7860" not in content
+    # origin = https (forwarded) + testserver (RequestFactory host)
+    assert '"root":"https://testserver/api/containers/15/preview/7860"' in content
 
 
 def test_build_preview_response_binary_passthrough():

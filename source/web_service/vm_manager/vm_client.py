@@ -140,6 +140,15 @@ class VMServiceClient:
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
 
+    def stream_endpoint(self, vm_id: str) -> tuple[str, dict[str, str]]:
+        """(url, headers) for the streaming proxy, used by the async SSE relay.
+
+        The relay drives httpx inside the ASGI event loop (not this sync
+        ``requests`` client), so it only needs the resolved node URL and the auth
+        headers — never the session object.
+        """
+        return self._url(f"/vms/{vm_id}/proxy-stream"), dict(self.headers)
+
     def _handle(self, resp: requests.Response) -> object:
         detail: object | str | None = None
         if not resp.ok:
