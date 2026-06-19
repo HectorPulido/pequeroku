@@ -19,6 +19,20 @@ cd "$SCRIPT_DIR"
 err() { printf '\033[1;31m[start] %s\033[0m\n' "$*" >&2; }
 log() { printf '\033[1;34m[start]\033[0m %s\n' "$*"; }
 
+# Useful post-launch commands. Printed BOTH up front (before the noisy build) and
+# again at the end so it survives the `compose up` output scrolling it away.
+# Uses ${COMPOSE[*]} so it reflects sudo / the resolved compose flavor verbatim.
+print_useful_commands() {
+  # If you launched this as root (e.g. `sudo ./start.sh` because Docker needs root
+  # here), the same commands need sudo from your normal shell — show them with it.
+  # Display only: it NEVER changes how we invoke compose.
+  local sudo=""
+  [ "$(id -u)" -eq 0 ] && sudo="sudo "
+  echo "  ${sudo}${COMPOSE[*]} ps           # service status"
+  echo "  ${sudo}${COMPOSE[*]} logs -f      # follow logs"
+  echo "  Dashboard: http://localhost/dashboard/"
+}
+
 # --------------------------------------------------------------------------- #
 # Resolve the compose command (plugin `docker compose` or legacy binary)
 # --------------------------------------------------------------------------- #
@@ -32,7 +46,7 @@ else
 fi
 
 if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then
-  err "Docker daemon is not reachable. Start Docker and re-run ./start.sh"
+  err "Docker daemon is not reachable. Start Docker (or run with sudo) and re-run ./start.sh"
   exit 1
 fi
 
@@ -47,6 +61,13 @@ for arg in "$@"; do
     *)          PASSTHRU+=("$arg") ;;
   esac
 done
+
+# Show the cheat-sheet up front (it'll be repeated at the end — the build output
+# in between tends to scroll the final copy off-screen).
+echo
+log "Useful commands (shown again when it's up):"
+print_useful_commands
+echo
 
 # --------------------------------------------------------------------------- #
 # 1) Idempotent bootstrap (env files + KVM override)
@@ -104,6 +125,4 @@ fi
 
 echo
 log "Stack is up. Useful commands:"
-echo "  ${COMPOSE[*]} ps           # service status"
-echo "  ${COMPOSE[*]} logs -f      # follow logs"
-echo "  Dashboard: http://localhost/dashboard/"
+print_useful_commands
