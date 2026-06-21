@@ -2,22 +2,41 @@
 #
 # build-golden.sh — Build a pre-baked "golden" VM image for pequeroku.
 #
-# Detects host architecture and OS, downloads the matching cloud base image,
-# and bakes everything cloud-init does at runtime directly into the image:
+# Downloads the matching Debian/Ubuntu cloud base image and bakes everything
+# cloud-init would otherwise do at runtime directly into the image:
 #   - the SSH user (+ root) with the service public key in authorized_keys
 #   - the sshd drop-in config (PermitRootLogin yes, no password auth, UseDNS no)
-#   - DHCP networking via systemd-networkd
-#   - automatic root filesystem growth (cloud-initramfs-growroot)
+#   - DHCP networking via systemd-networkd (with pinned public DNS resolvers)
+#   - automatic root filesystem growth (self-contained oneshot unit)
 #   - pre-generated SSH host keys
-#   - a baseline of dev tooling (git, pip, venv, build toolchain) so cloned repos
-#     configure on the first try, plus any optional --packages extras
+#   - a curated, headless dev baseline: git, curl, build toolchain, docker,
+#     cloudflared, fastfetch, ... (see BASE_PACKAGES) plus any --packages extras
 # ...then DISABLES cloud-init so runtime boots skip the ~40s pipeline and SSH is
-# ready in ~10s. Pair with VM_USE_CLOUD_INIT=false in the vm_service env.
+# ready in ~10s. Pair with a golden *.meta.json (auto-written) or VM_USE_CLOUD_INIT=false.
 #
-# Two baking methods:
-#   * virt-customize (libguestfs) — fast, used automatically when available (Linux).
-#   * boot           — boots the image once under QEMU with a one-shot cloud-init
-#                      that bakes + powers off. Portable (works on macOS/HVF too).
+# HEADLESS / ZERO-DEPENDENCY BY DEFAULT
+# ------------------------------------
+# You do NOT need qemu or libguestfs installed on the host. When the host lacks
+# `virt-customize`, the script spins up a throwaway Docker "builder" container
+# that already has libguestfs + qemu, mounts vm_data, and bakes the image there
+# with the fast `virt-customize` path (no full VM boot). This is the macOS path.
+# Only Docker is required. Override with --docker / --no-docker.
+#
+# SSH KEY — taken from vm_data, generated if missing
+# --------------------------------------------------
+# By default the public key is resolved from (first match wins):
+#   1. --pubkey <path>                       (explicit)
+#   2. $VM_SSH_PRIVKEY.pub                    (if it exists)
+#   3. <repo>/vm_data/keys/id_vm_pequeroku.pub  (canonical — same as entrypoint.sh)
+#   4. ~/.ssh/id_vm_pequeroku.pub
+# If NONE exist, an ed25519 keypair is generated into vm_data/keys/ (exactly like
+# vm_service/entrypoint.sh does) so a clean checkout works with zero key setup.
+#
+# Bake methods:
+#   * virt-customize (libguestfs) — fast, no full boot. Used on the host when
+#     available, otherwise inside the Docker builder container. (Default.)
+#   * boot — boots the image once under host QEMU with a one-shot cloud-init that
+#     bakes + powers off, then installs packages over SSH. Native fallback only.
 #
 # Usage:
 #   scripts/build-golden.sh [options]
@@ -27,13 +46,19 @@
 #   --arch      <auto|amd64|arm64>      Guest arch (default: auto = host arch)
 #   --out       <path>                  Output qcow2 (default: vm_data/base/<distro>-golden.qcow2)
 #   --user      <name>                  SSH user to bake (default: $VM_SSH_USER or root)
-#   --pubkey    <path>                  Public key to inject (default: $VM_SSH_PRIVKEY.pub or ~/.ssh/id_vm_pequeroku.pub)
+#   --pubkey    <path>                  Public key to inject (default: auto-resolve, see above)
 #   --size      <GiB>                   Resize image to this size (default: 10)
-#   --packages  <csv>                   Extra apt packages on top of the baseline (needs network at bake)
-#   --no-base-packages                  Skip the baked-in dev baseline (offline/minimal bake)
-#   --apt-upgrade                       Run apt update + full-upgrade on the baked image (needs network)
-#   --privkey   <path>                  Private key for the --apt-upgrade SSH pass (default: PUBKEY without .pub)
-#   --method    <auto|virt-customize|boot>  Bake method (default: auto)
+#   --packages  <csv>                   Extra apt packages on top of the baseline
+#   --no-base-packages                  Skip the curated dev baseline (minimal bake)
+#   --no-cloudflared                    Do not install cloudflared
+#   --no-fastfetch                      Do not install fastfetch (GitHub release .deb)
+#   --apt-upgrade                       Run apt update + full-upgrade on the baked image
+#   --privkey   <path>                  Private key for the boot-method SSH pass (default: PUBKEY without .pub)
+#   --docker                            Force the dockerized virt-customize bake
+#   --no-docker                         Never use Docker (bake natively; needs host qemu/libguestfs)
+#   --builder-image <name>              Builder image tag (default: pequeroku-golden-builder)
+#   --rebuild-builder                   Rebuild the Docker builder image even if cached
+#   --method    <auto|virt-customize|boot>  Native bake method when not using Docker (default: auto)
 #   --boot-timeout <secs>               Max wait for the boot/upgrade bake VM (default: 900)
 #   --cache     <dir>                   Where to cache downloaded base images (default: vm_data/base/.cache)
 #   --force                             Rebuild even if --out already exists
@@ -47,43 +72,72 @@ set -euo pipefail
 # Paths / defaults
 # --------------------------------------------------------------------------- #
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
 VM_SERVICE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# Output next to the compose mount (source/vm_data -> /app/vm_data in the container),
-# so a default `build-golden.sh` lands exactly where vm_service reads VM_BASE_IMAGE.
-DEFAULT_BASE_DIR="$(dirname "${VM_SERVICE_DIR}")/vm_data/base"
+# <source> dir holds both vm_service/ and vm_data/. Mounted whole into the builder
+# container at the SAME absolute path, so every default path resolves identically
+# inside and out — no host<->container path translation needed.
+SOURCE_DIR="$(cd "${VM_SERVICE_DIR}/.." && pwd)"
+VM_DATA_DIR="${SOURCE_DIR}/vm_data"
+DEFAULT_BASE_DIR="${VM_DATA_DIR}/base"
+DEFAULT_KEYS_DIR="${VM_DATA_DIR}/keys"
 
 DISTRO="debian12"
 ARCH="auto"
 OUT=""
 SSH_USER="${VM_SSH_USER:-root}"
-PUBKEY="${VM_SSH_PRIVKEY:-$HOME/.ssh/id_vm_pequeroku}.pub"
-PRIVKEY=""               # private key for the --apt-upgrade pass (default: PUBKEY without .pub)
+PUBKEY=""                # empty -> resolve_pubkey() picks/generates one
+PUBKEY_EXPLICIT="0"      # set by --pubkey: an explicit key must exist (no fallback)
+PRIVKEY=""               # private key for the boot-method SSH pass (default: PUBKEY without .pub)
 SIZE_GIB="10"
 PACKAGES=""              # extra apt packages, ON TOP of BASE_PACKAGES below
-# Baseline dev tooling baked into every golden so cloned repos configure on the
-# first try: git to clone, venv+pip to install deps, a compiler + headers for the
-# many wheels with C extensions. Installed unless --no-base-packages (needs network
-# at bake time, same as --packages). Past failures traced straight to these missing:
-# `git: command not found`, venv `ensurepip is not available`, no `pip`.
-BASE_PACKAGES="git,curl,ca-certificates,python3-venv,python3-pip,python3-dev,build-essential,docker.io,docker-compose"
-NO_BASE_PACKAGES="0"     # set by --no-base-packages to restore the old offline/minimal bake
-APT_UPGRADE="0"          # run apt update + full-upgrade on the baked image (needs network)
-METHOD="auto"
+
+# Curated, headless dev baseline baked into every golden. Goal: a cloned repo
+# configures + builds on the first try, and the box is comfortable to live in over
+# SSH — with NO desktop/GUI packages. Three things are installed separately by
+# emit_provision_script because they need more than a plain apt package: cloudflared
+# (its own apt repo), fastfetch (GitHub .deb — not in Debian 12), and the Docker
+# Compose v2 plugin (GitHub binary, so `docker compose` works alongside the v1
+# `docker-compose` that lives in this list). Installed unless --no-base-packages.
+BASE_PACKAGES="ca-certificates,curl,wget,gnupg,git,python3-venv,python3-pip,python3-dev,build-essential,openssh-client,vim,nano,less,htop,tmux,unzip,zip,jq,rsync,sudo,iproute2,dnsutils,docker.io,docker-compose"
+NO_BASE_PACKAGES="0"     # set by --no-base-packages to restore a minimal bake
+INSTALL_CLOUDFLARED="1"  # cleared by --no-cloudflared
+INSTALL_FASTFETCH="1"    # cleared by --no-fastfetch (installed from GitHub .deb)
+APT_UPGRADE="0"          # run apt update + full-upgrade on the baked image
+METHOD="auto"            # native bake method (when not dockerized)
 CACHE_DIR=""
 FORCE="0"
-CLOBBER_BASE="0"         # allow overwriting a base that live VM overlays depend on
-WRITE_META_ONLY="0"      # only (re)write the <out>.meta.json sidecar, then exit
-BOOT_TIMEOUT="900"       # max seconds to wait for the boot-method bake VM
+CLOBBER_BASE="0"
+WRITE_META_ONLY="0"
+BOOT_TIMEOUT="900"
+
+USE_DOCKER="auto"        # auto|0|1 — whether to bake inside the Docker builder
+IN_CONTAINER="0"         # internal: set by --__in-container after the docker re-exec
+BUILDER_IMAGE="pequeroku-golden-builder"
+REBUILD_BUILDER="0"
+
+ORIG_ARGS=("$@")         # captured verbatim to forward into the builder container
 
 log()  { printf '\033[1;34m[build-golden]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[build-golden] WARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[build-golden] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() {
+  sed -n '/^# Usage:/,/^#   -h /p' "${SCRIPT_PATH}" | sed 's/^# \{0,1\}//'
+  exit 0
+}
+
+# Expand a leading ~ to $HOME (cloud env files store VM_SSH_PRIVKEY=~/.ssh/...).
+expand_tilde() {
+  case "$1" in
+    "~") printf '%s' "$HOME" ;;
+    "~/"*) printf '%s' "${HOME}/${1#\~/}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
 
 # Write a sidecar <image>.meta.json describing the golden so vm_service can
 # auto-detect that cloud-init must be skipped for it (see settings.py resolution).
-# Does not change behavior on its own: an explicit VM_USE_CLOUD_INIT still wins.
 write_meta() {
   local img="$1"
   local meta="${img}.meta.json"
@@ -110,18 +164,25 @@ while [[ $# -gt 0 ]]; do
     --arch)     ARCH="$2"; shift 2 ;;
     --out)      OUT="$2"; shift 2 ;;
     --user)     SSH_USER="$2"; shift 2 ;;
-    --pubkey)   PUBKEY="$2"; shift 2 ;;
+    --pubkey)   PUBKEY="$2"; PUBKEY_EXPLICIT="1"; shift 2 ;;
     --size)     SIZE_GIB="$2"; shift 2 ;;
     --packages) PACKAGES="$2"; shift 2 ;;
     --no-base-packages) NO_BASE_PACKAGES="1"; shift ;;
+    --no-cloudflared)   INSTALL_CLOUDFLARED="0"; shift ;;
+    --no-fastfetch)     INSTALL_FASTFETCH="0"; shift ;;
     --apt-upgrade) APT_UPGRADE="1"; shift ;;
     --privkey)  PRIVKEY="$2"; shift 2 ;;
+    --docker)    USE_DOCKER="1"; shift ;;
+    --no-docker) USE_DOCKER="0"; shift ;;
+    --builder-image) BUILDER_IMAGE="$2"; shift 2 ;;
+    --rebuild-builder) REBUILD_BUILDER="1"; shift ;;
     --method)   METHOD="$2"; shift 2 ;;
     --boot-timeout) BOOT_TIMEOUT="$2"; shift 2 ;;
     --cache)    CACHE_DIR="$2"; shift 2 ;;
     --force)    FORCE="1"; shift ;;
     --clobber-base) CLOBBER_BASE="1"; shift ;;
     --write-meta-only) WRITE_META_ONLY="1"; shift ;;
+    --__in-container) IN_CONTAINER="1"; shift ;;
     -h|--help)  usage ;;
     *) die "Unknown option: $1 (try --help)" ;;
   esac
@@ -148,7 +209,6 @@ case "$ARCH" in amd64|arm64) ;; *) die "Invalid --arch: $ARCH (amd64|arm64)";; e
 
 [[ -n "$CACHE_DIR" ]] || CACHE_DIR="${DEFAULT_BASE_DIR}/.cache"
 [[ -n "$OUT" ]]       || OUT="${DEFAULT_BASE_DIR}/${DISTRO}-golden.qcow2"
-[[ -n "$PRIVKEY" ]]   || PRIVKEY="${PUBKEY%.pub}"
 
 # --write-meta-only: backfill the sidecar for an already-built golden, then stop.
 if [[ "$WRITE_META_ONLY" == "1" ]]; then
@@ -157,8 +217,50 @@ if [[ "$WRITE_META_ONLY" == "1" ]]; then
   exit 0
 fi
 
-# Effective package list = baked-in baseline (unless --no-base-packages) + extras.
-# apt tolerates a name appearing twice, so a plain CSV concat is fine.
+# --------------------------------------------------------------------------- #
+# Resolve the SSH public key (and generate one if nothing exists).
+# Precedence: explicit --pubkey > $VM_SSH_PRIVKEY.pub > vm_data/keys > ~/.ssh.
+# Mirrors vm_service/entrypoint.sh: the generated key lands in vm_data/keys so
+# vm_service reuses the exact same key when it boots VMs.
+# --------------------------------------------------------------------------- #
+resolve_pubkey() {
+  if [[ "$PUBKEY_EXPLICIT" == "1" ]]; then
+    [[ -f "$PUBKEY" ]] || die "Public key not found: ${PUBKEY} (passed via --pubkey)"
+    log "Using SSH public key (--pubkey): ${PUBKEY}"
+    return
+  fi
+
+  local cands=()
+  if [[ -n "${VM_SSH_PRIVKEY:-}" ]]; then
+    local p; p="$(expand_tilde "${VM_SSH_PRIVKEY%.pub}")"
+    cands+=("${p}.pub")
+  fi
+  cands+=("${DEFAULT_KEYS_DIR}/id_vm_pequeroku.pub")
+  cands+=("${HOME}/.ssh/id_vm_pequeroku.pub")
+
+  local c
+  for c in "${cands[@]}"; do
+    if [[ -f "$c" ]]; then
+      PUBKEY="$c"
+      log "Using existing SSH public key: ${PUBKEY}"
+      return
+    fi
+  done
+
+  # Nothing found — generate an ed25519 keypair into vm_data/keys (same as entrypoint.sh).
+  command -v ssh-keygen >/dev/null 2>&1 || die "No SSH key found and ssh-keygen is unavailable to create one"
+  local gen="${DEFAULT_KEYS_DIR}/id_vm_pequeroku"
+  mkdir -p "$DEFAULT_KEYS_DIR"
+  log "No SSH key found; generating ed25519 keypair at ${gen}"
+  ssh-keygen -t ed25519 -N "" -C "pequeroku-vm" -f "$gen" >/dev/null
+  chmod 600 "$gen"
+  PUBKEY="${gen}.pub"
+}
+
+resolve_pubkey
+[[ -n "$PRIVKEY" ]] || PRIVKEY="${PUBKEY%.pub}"
+
+# Effective package list = curated baseline (unless --no-base-packages) + extras.
 EFFECTIVE_PACKAGES="$PACKAGES"
 if [[ "$NO_BASE_PACKAGES" != "1" ]]; then
   if [[ -n "$EFFECTIVE_PACKAGES" ]]; then
@@ -172,21 +274,248 @@ log "Host:   ${HOST_OS} / ${HOST_MACHINE}"
 log "Target: distro=${DISTRO} arch=${ARCH} size=${SIZE_GIB}GiB"
 log "User:   ${SSH_USER}   Pubkey: ${PUBKEY}"
 log "Output: ${OUT}"
-log "Packages: ${EFFECTIVE_PACKAGES:-<none>}"
+EXTRAS_DESC=""
+[[ "$INSTALL_FASTFETCH"   == "1" ]] && EXTRAS_DESC="${EXTRAS_DESC} + fastfetch"
+[[ "$INSTALL_CLOUDFLARED" == "1" ]] && EXTRAS_DESC="${EXTRAS_DESC} + cloudflared"
+[[ "$EFFECTIVE_PACKAGES" == *docker.io* ]] && EXTRAS_DESC="${EXTRAS_DESC} + compose-v2"
+log "Packages: ${EFFECTIVE_PACKAGES:-<none>}${EXTRAS_DESC}"
 
 # --------------------------------------------------------------------------- #
-# Preflight
+# Guest provisioning script — emitted once, consumed by BOTH bake methods:
+#   - virt-customize runs it offline in the guest (--run)
+#   - the boot method pipes it over SSH into the booted VM
+# It installs the apt baseline, sets up cloudflared's apt repo, enables docker,
+# and cleans the apt cache. Kept distro-agnostic via /etc/os-release.
 # --------------------------------------------------------------------------- #
-[[ -f "$PUBKEY" ]] || die "Public key not found: ${PUBKEY} (set --pubkey or VM_SSH_PRIVKEY)"
-command -v qemu-img >/dev/null 2>&1 || die "qemu-img not found (install QEMU)"
+emit_provision_script() {
+  local out="$1"
+  local pkgs_space="${EFFECTIVE_PACKAGES//,/ }"
+  {
+    cat <<'HEAD'
+#!/bin/sh
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[provision] $*"; }
+
+# Fail loudly on a resolver failure instead of letting apt-get update no-op
+# (apt can exit 0 with only W: warnings when DNS is broken).
+repo_host=deb.debian.org
+grep -qi ubuntu /etc/os-release 2>/dev/null && repo_host=archive.ubuntu.com
+getent hosts "$repo_host" >/dev/null 2>&1 || { log "ERROR: cannot resolve $repo_host (DNS)"; exit 42; }
+
+log "apt-get update"
+apt-get update
+HEAD
+
+    if [[ -n "$pkgs_space" ]]; then
+      printf 'log "Installing baseline packages"\n'
+      printf 'apt-get install -y --no-install-recommends %s\n' "$pkgs_space"
+    fi
+
+    if [[ "$INSTALL_CLOUDFLARED" == "1" ]]; then
+      cat <<'CF'
+log "Installing cloudflared (Cloudflare apt repo)"
+. /etc/os-release
+CODENAME="${VERSION_CODENAME:-bookworm}"
+install -m 0755 -d /usr/share/keyrings
+if curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg; then
+  echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared ${CODENAME} main" \
+    > /etc/apt/sources.list.d/cloudflared.list
+  apt-get update && apt-get install -y --no-install-recommends cloudflared || log "WARN: cloudflared install failed"
+else
+  log "WARN: could not fetch cloudflare gpg key; skipping cloudflared"
+fi
+CF
+    fi
+
+    if [[ "$INSTALL_FASTFETCH" == "1" ]]; then
+      cat <<'FF'
+log "Installing fastfetch (GitHub release .deb — not in Debian 12)"
+FF_ARCH=""
+case "$(dpkg --print-architecture)" in
+  amd64) FF_ARCH=amd64 ;;
+  arm64) FF_ARCH=aarch64 ;;
+esac
+if [ -n "$FF_ARCH" ]; then
+  ff_deb="$(mktemp --suffix=.deb)"
+  if curl -fsSL "https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-${FF_ARCH}.deb" -o "$ff_deb"; then
+    apt-get install -y --no-install-recommends "$ff_deb" || { dpkg -i "$ff_deb" || true; apt-get -y -f install || true; }
+  else
+    log "WARN: could not download fastfetch; skipping"
+  fi
+  rm -f "$ff_deb"
+else
+  log "WARN: no fastfetch build for arch $(dpkg --print-architecture); skipping"
+fi
+FF
+    fi
+
+    cat <<'DK'
+# Enable docker on boot (offline-safe: only creates symlinks) and add the Compose
+# v2 plugin so BOTH `docker compose` (v2) and `docker-compose` (v1 from apt) work.
+if dpkg -s docker.io >/dev/null 2>&1; then
+  systemctl enable docker >/dev/null 2>&1 || true
+  C2_ARCH=""
+  case "$(dpkg --print-architecture)" in
+    amd64) C2_ARCH=x86_64 ;;
+    arm64) C2_ARCH=aarch64 ;;
+  esac
+  if [ -n "$C2_ARCH" ]; then
+    plug_dir=/usr/local/lib/docker/cli-plugins
+    install -m 0755 -d "$plug_dir"
+    if curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${C2_ARCH}" -o "$plug_dir/docker-compose"; then
+      chmod 0755 "$plug_dir/docker-compose"
+      log "docker compose v2 plugin installed"
+    else
+      log "WARN: could not download docker compose v2 plugin (docker-compose v1 still works)"
+    fi
+  fi
+fi
+DK
+
+    if [[ "$APT_UPGRADE" == "1" ]]; then
+      printf 'log "apt full-upgrade"\napt-get -y -o Dpkg::Options::=--force-confold full-upgrade\n'
+    fi
+
+    cat <<'CLEAN'
+log "Cleanup"
+apt-get -y autoremove --purge || true
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+log "provision done"
+CLEAN
+  } > "$out"
+  chmod +x "$out"
+}
+
+# --------------------------------------------------------------------------- #
+# Docker builder: bake inside a throwaway container that already has libguestfs +
+# qemu, so the host needs nothing but Docker. We re-exec THIS script inside it.
+# --------------------------------------------------------------------------- #
+docker_daemon_ready() {
+  command -v docker >/dev/null 2>&1 || return 1
+  docker info >/dev/null 2>&1 || return 1
+}
+
+# Resolve whether to bake inside Docker. Prefer a native virt-customize when the
+# host already has it; otherwise reach for Docker (the macOS path); fall back to a
+# native boot bake only if Docker is unavailable but host qemu is present.
+resolve_use_docker() {
+  case "$USE_DOCKER" in
+    0|1) return ;;
+  esac
+  if command -v virt-customize >/dev/null 2>&1; then
+    USE_DOCKER="0"            # host has the fast tooling already
+  elif docker_daemon_ready; then
+    USE_DOCKER="1"            # no host libguestfs -> bake in the container
+  else
+    USE_DOCKER="0"            # last resort: native boot method (needs host qemu)
+  fi
+}
+
+build_builder_image() {
+  local tag="${BUILDER_IMAGE}:${ARCH}"
+  if [[ "$REBUILD_BUILDER" != "1" ]] && docker image inspect "$tag" >/dev/null 2>&1; then
+    log "Using cached builder image: ${tag}"
+    return
+  fi
+  log "Building builder image ${tag} (one-time; installs libguestfs + qemu)..."
+  # No build context needed (nothing is COPY'd) -> feed the Dockerfile on stdin.
+  # linux-image-* gives libguestfs a kernel for its supermin appliance; the matching
+  # qemu-system is pulled in as a libguestfs-tools dependency. ipxe-qemu provides the
+  # virtio option ROMs (efi-virtio.rom) qemu needs once libguestfs attaches a NIC for
+  # the network-enabled bake — it's only a Recommends, so --no-install-recommends drops
+  # it and the appliance fails to launch ("failed to find romfile efi-virtio.rom").
+  docker build --platform "linux/${ARCH}" --build-arg "GUEST_ARCH=${ARCH}" -t "$tag" - <<'DOCKERFILE'
+FROM debian:12-slim
+ARG GUEST_ARCH=amd64
+ENV DEBIAN_FRONTEND=noninteractive LIBGUESTFS_BACKEND=direct
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libguestfs-tools "linux-image-${GUEST_ARCH}" ipxe-qemu \
+      qemu-utils cloud-image-utils genisoimage \
+      openssh-client curl ca-certificates bash \
+ && rm -rf /var/lib/apt/lists/*
+DOCKERFILE
+}
+
+# Append "-v path:path" to MOUNTS_REF only when `path` is NOT already under
+# SOURCE_DIR (which we mount whole), to avoid overlapping bind mounts.
+add_mount_if_outside() {
+  local path="$1"
+  [[ -n "$path" ]] || return 0
+  case "$path" in
+    "$SOURCE_DIR"|"$SOURCE_DIR"/*) return 0 ;;
+  esac
+  DOCKER_MOUNTS+=(-v "${path}:${path}")
+}
+
+run_in_docker() {
+  docker_daemon_ready || die "Docker is required but the daemon is not reachable. Start Docker (or run with sudo), or use --no-docker with host qemu installed."
+  build_builder_image
+
+  DOCKER_MOUNTS=(-v "${SOURCE_DIR}:${SOURCE_DIR}")
+  add_mount_if_outside "$(dirname "$OUT")"
+  add_mount_if_outside "$CACHE_DIR"
+  add_mount_if_outside "$(dirname "$PUBKEY")"
+
+  local devs=() tcg_env=()
+  if [[ -e /dev/kvm ]]; then
+    devs+=(--device /dev/kvm)   # KVM accel for libguestfs when the host exposes it
+  else
+    # No KVM (macOS/OrbStack/Docker Desktop): force software emulation. Without
+    # this, on aarch64 libguestfs builds `-machine virt,gic-version=host` and qemu
+    # aborts under the TCG fallback ("gic-version=host requires KVM").
+    tcg_env+=(-e LIBGUESTFS_BACKEND_SETTINGS=force_tcg)
+  fi
+
+  # Cache the supermin appliance across runs so we don't rebuild it every time.
+  local gcache="${CACHE_DIR}/.guestfs"
+  mkdir -p "$gcache"
+
+  log "Baking inside Docker (image ${BUILDER_IMAGE}:${ARCH}, accel=$([[ -e /dev/kvm ]] && echo kvm || echo tcg))..."
+  # NOTE: ${arr[@]+"${arr[@]}"} expands a possibly-empty array safely under
+  # `set -u` (macOS bash 3.2 errors on a plain "${arr[@]}" when empty).
+  docker run --rm \
+    ${devs[@]+"${devs[@]}"} \
+    ${tcg_env[@]+"${tcg_env[@]}"} \
+    ${DOCKER_MOUNTS[@]+"${DOCKER_MOUNTS[@]}"} \
+    -e LIBGUESTFS_BACKEND=direct \
+    -e LIBGUESTFS_CACHEDIR="${gcache}" \
+    -e VM_SSH_USER="${SSH_USER}" \
+    -w "${SOURCE_DIR}" \
+    "${BUILDER_IMAGE}:${ARCH}" \
+    bash "${SCRIPT_PATH}" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"} \
+      --__in-container --no-docker --method virt-customize \
+      --arch "${ARCH}" --pubkey "${PUBKEY}" --out "${OUT}" --cache "${CACHE_DIR}"
+}
+
+# Dockerize the whole bake when appropriate, then exit. Everything past this point
+# either runs on a host with qemu/libguestfs, or inside the builder container.
+if [[ "$IN_CONTAINER" != "1" ]]; then
+  resolve_use_docker
+  if [[ "$USE_DOCKER" == "1" ]]; then
+    # Fast-fail the cheap checks (no qemu needed) before spinning up the container.
+    if [[ -f "$OUT" && "$FORCE" != "1" ]]; then
+      die "Output already exists: ${OUT} (use --force to overwrite)"
+    fi
+    run_in_docker
+    log "Done (dockerized). Golden image ready: ${OUT}"
+    exit 0
+  fi
+fi
+
+# --------------------------------------------------------------------------- #
+# Native preflight (host with qemu/libguestfs, or inside the builder container)
+# --------------------------------------------------------------------------- #
+command -v qemu-img >/dev/null 2>&1 \
+  || die "qemu-img not found. Install QEMU, or rerun with --docker (recommended on macOS)."
 
 if [[ -f "$OUT" && "$FORCE" != "1" ]]; then
   die "Output already exists: ${OUT} (use --force to overwrite)"
 fi
 
 # Safety: VMs are qcow2 overlays that reference this base as their backing file.
-# Overwriting the base while overlays exist makes those overlays read inconsistent
-# data -> filesystem corruption -> the VMs break. Refuse unless --clobber-base.
+# Overwriting the base while overlays exist corrupts them. Refuse unless --clobber-base.
 if [[ -f "$OUT" && "$CLOBBER_BASE" != "1" ]]; then
   vms_dir="$(cd "$(dirname "$OUT")/.." 2>/dev/null && pwd || true)/vms"
   base_name="$(basename "$OUT")"
@@ -223,7 +552,6 @@ DL() {
 base_image_url() {
   case "$DISTRO" in
     debian12)
-      # Debian 12 (bookworm) generic cloud image
       echo "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-${ARCH}.qcow2"
       ;;
     ubuntu2204)
@@ -263,9 +591,8 @@ GSSAPIAuthentication no
 EOF
 
 # systemd-networkd DHCP config (cloud-init no longer configures the NIC).
-# QEMU's slirp DNS (10.0.2.3) is unreliable — it fails to resolve on macOS hosts
-# and stalls apt — so we pin public resolvers and ignore the DHCP-provided DNS.
-# DHCP still assigns the IP + routes; only name resolution uses DNS= below.
+# Pin public resolvers and ignore DHCP-provided DNS: QEMU slirp DNS (10.0.2.3) is
+# unreliable (fails to resolve on macOS hosts) and stalls apt at RUNTIME.
 read -r -d '' NETWORK_CONF <<EOF || true
 [Match]
 Name=en* eth*
@@ -280,8 +607,7 @@ UseDNS=no
 EOF
 
 # Self-contained root-FS growth: replaces cloud-init's cc_growpart (which we
-# disable). Needs no network/apt; growpart comes from cloud-guest-utils, which
-# Debian/Ubuntu cloud images already ship. The || true keeps boot safe if absent.
+# disable). Needs no network/apt; growpart ships in Debian/Ubuntu cloud images.
 read -r -d '' GROWROOT_UNIT <<EOF || true
 [Unit]
 Description=Grow root filesystem to fill the disk
@@ -300,7 +626,7 @@ WantedBy=multi-user.target
 EOF
 
 # --------------------------------------------------------------------------- #
-# Choose method
+# Choose native method
 # --------------------------------------------------------------------------- #
 if [[ "$METHOD" == "auto" ]]; then
   if command -v virt-customize >/dev/null 2>&1; then
@@ -322,8 +648,9 @@ bake_virt_customize() {
   printf '%s\n' "$SSHD_CONF"     > "${tmp}/pequeroku.conf"
   printf '%s\n' "$NETWORK_CONF"  > "${tmp}/10-dhcp.network"
   printf '%s\n' "$GROWROOT_UNIT" > "${tmp}/growroot.service"
+  emit_provision_script "${tmp}/provision.sh"
 
-  local args=(-a "$OUT")
+  local args=(-a "$OUT" --network)
 
   # Create non-root user with sudo + docker, passwordless.
   if [[ "$SSH_USER" != "root" ]]; then
@@ -341,8 +668,6 @@ bake_virt_customize() {
   args+=(--mkdir /etc/systemd/network)
   args+=(--copy-in "${tmp}/10-dhcp.network:/etc/systemd/network")
   args+=(--run-command "systemctl enable systemd-networkd >/dev/null 2>&1 || true")
-  # Point resolv.conf at the uplink file (real DHCP DNS), not the 127.0.0.53 stub:
-  # the stub listener proved unreliable under QEMU user-net and broke DNS/apt.
   args+=(--run-command "ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf || true")
   args+=(--run-command "systemctl enable systemd-resolved >/dev/null 2>&1 || true")
 
@@ -350,10 +675,9 @@ bake_virt_customize() {
   args+=(--copy-in "${tmp}/growroot.service:/etc/systemd/system")
   args+=(--run-command "systemctl enable growroot.service >/dev/null 2>&1 || true")
 
-  # Baseline + extra packages (needs network at bake time; empty only with
-  # --no-base-packages and no --packages, which keeps the bake offline).
-  if [[ -n "$EFFECTIVE_PACKAGES" ]]; then
-    args+=(--install "${EFFECTIVE_PACKAGES}")
+  # Install the package set (baseline + cloudflared + extras) inside the guest.
+  if [[ -n "$EFFECTIVE_PACKAGES" || "$INSTALL_CLOUDFLARED" == "1" || "$INSTALL_FASTFETCH" == "1" || "$APT_UPGRADE" == "1" ]]; then
+    args+=(--run "${tmp}/provision.sh")
   fi
 
   # SSH host keys, enable ssh, disable cloud-init + the network-online wait.
@@ -364,12 +688,12 @@ bake_virt_customize() {
   args+=(--run-command "systemctl mask systemd-networkd-wait-online.service >/dev/null 2>&1 || true")
   args+=(--run-command "systemctl disable apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true")
 
-  log "Running virt-customize (this can take a minute)..."
+  log "Running virt-customize (installing packages can take a few minutes)..."
   virt-customize "${args[@]}"
 }
 
 # --------------------------------------------------------------------------- #
-# Resolve QEMU binary + acceleration + machine for the host/arch.
+# Resolve QEMU binary + acceleration + machine for the host/arch (boot method).
 # Sets globals: QBIN, ACCEL, MACHINE, QEXTRA (array).
 # --------------------------------------------------------------------------- #
 QBIN=""; ACCEL=""; MACHINE=""; QEXTRA=()
@@ -410,7 +734,6 @@ bake_boot() {
   local tmp; tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
 
-  # Indent helpers for embedding multi-line content in YAML.
   local sshd_indented network_indented growroot_indented
   sshd_indented="$(printf '%s\n' "$SSHD_CONF" | sed 's/^/      /')"
   network_indented="$(printf '%s\n' "$NETWORK_CONF" | sed 's/^/      /')"
@@ -429,14 +752,9 @@ EOF
 )
   fi
 
-  # NOTE: packages are deliberately NOT installed here via cloud-init. During the
-  # cloud-init bake the guest still uses QEMU slirp DNS (10.0.2.3), which is
-  # unreliable (it fails to resolve on macOS hosts: apt hangs ~30s per mirror then
-  # `Ign`s every InRelease, so nothing installs). They are installed AFTER the bake
-  # over SSH (provision_pass), once the baked-in DNS=8.8.8.8 config is active and
-  # resolution actually works. So this block stays empty.
-  local pkgs_block=""
-
+  # Packages are installed AFTER the bake over SSH (provision_pass), once the
+  # baked-in DNS=8.8.8.8 config is active — during the cloud-init bake the guest is
+  # still on QEMU slirp DNS (broken on macOS, hangs apt). So this stays empty.
   cat > "${tmp}/user-data" <<EOF
 #cloud-config
 disable_root: false
@@ -465,7 +783,6 @@ ${network_indented}
     content: |
 ${growroot_indented}
 
-${pkgs_block}
 runcmd:
   - systemctl enable systemd-networkd || true
   - systemctl enable growroot.service || true
@@ -475,7 +792,6 @@ runcmd:
   - systemctl enable ssh || systemctl enable sshd || true
   - systemctl mask systemd-networkd-wait-online.service || true
   - systemctl disable apt-daily.timer apt-daily-upgrade.timer || true
-  # Disable cloud-init for all future (runtime) boots, then power off.
   - touch /etc/cloud/cloud-init.disabled
   - systemctl mask cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service || true
   - cloud-init clean --logs || true
@@ -508,7 +824,6 @@ EOF
     -no-reboot &
   local qpid=$!
 
-  # Wait for the VM to bake and power off (configurable via --boot-timeout).
   local waited=0
   while kill -0 "$qpid" 2>/dev/null; do
     sleep 2; waited=$((waited+2))
@@ -522,22 +837,16 @@ EOF
 }
 
 # --------------------------------------------------------------------------- #
-# Post-bake SSH provisioning pass: apt update, install the package set, and
-# optionally full-upgrade — all over SSH against the already-baked golden.
-# This runs with cloud-init OFF and the baked-in DHCP+DNS (DNS=8.8.8.8) ACTIVE,
-# so name resolution actually works here — unlike during the cloud-init bake,
-# where the guest is still on QEMU slirp DNS (broken on macOS, hangs apt). That
-# is why the boot method installs packages HERE instead of via cloud-init.
-#   $1 = "1" to install $EFFECTIVE_PACKAGES (the boot method; virt-customize
-#        already installed them inline on Linux hosts).
+# Post-bake SSH provisioning pass (boot method only): run the provision script on
+# the booted golden over SSH, with cloud-init OFF and the baked-in DNS active.
 # --------------------------------------------------------------------------- #
 provision_pass() {
-  local do_install="${1:-}"
   [[ -f "$PRIVKEY" ]] || die "Private key not found for the SSH provision pass: ${PRIVKEY} (set --privkey)"
   command -v ssh >/dev/null 2>&1 || die "ssh client required for the SSH provision pass"
   resolve_qemu
 
   local tmp; tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' RETURN
+  emit_provision_script "${tmp}/provision.sh"
   local port=$(( 20000 + (RANDOM % 20000) ))
 
   log "Provision pass: booting golden (accel=${ACCEL}) to install packages over SSH..."
@@ -563,37 +872,14 @@ provision_pass() {
   done
   [[ "$up" == "1" ]] || { kill "$qpid" 2>/dev/null || true; die "Provision pass: SSH never came up"; }
 
-  local repo_host="deb.debian.org"
-  [[ "$DISTRO" == ubuntu* ]] && repo_host="archive.ubuntu.com"
-
-  # Build the remote script: always update; install packages and/or full-upgrade
-  # as requested; then clean up. The DNS precheck fails loudly instead of letting
-  # apt-get update no-op on a resolver failure (apt exits 0 with only W: warnings).
-  local remote="export DEBIAN_FRONTEND=noninteractive; set -e;
-    getent hosts ${repo_host} >/dev/null || { echo 'DNS FAIL: cannot resolve ${repo_host}'; exit 42; }
-    apt-get update;"
-  if [[ "$do_install" == "1" && -n "$EFFECTIVE_PACKAGES" ]]; then
-    local pkgs_space="${EFFECTIVE_PACKAGES//,/ }"
-    log "  will install: ${pkgs_space}"
-    remote+="
-    apt-get install -y -o Dpkg::Options::=--force-confold ${pkgs_space};"
-  fi
-  if [[ "$APT_UPGRADE" == "1" ]]; then
-    remote+="
-    apt-get -y -o Dpkg::Options::=--force-confold full-upgrade;"
-  fi
-  remote+="
-    apt-get -y autoremove --purge;
-    apt-get clean"
-
-  log "SSH up; running apt provisioning (can take a few minutes over NAT)..."
-  if ! ssh "${sshopts[@]}" "${SSH_USER}@127.0.0.1" "$remote"; then
+  log "SSH up; running provisioning script (can take a few minutes over NAT)..."
+  if ! ssh "${sshopts[@]}" "${SSH_USER}@127.0.0.1" 'sudo sh -s' < "${tmp}/provision.sh"; then
     kill "$qpid" 2>/dev/null || true
     die "apt provisioning failed (see output above)"
   fi
 
   log "Provisioning complete; powering off the VM..."
-  ssh "${sshopts[@]}" "${SSH_USER}@127.0.0.1" 'systemctl poweroff' 2>/dev/null || true
+  ssh "${sshopts[@]}" "${SSH_USER}@127.0.0.1" 'sudo systemctl poweroff' 2>/dev/null || true
 
   waited=0
   while kill -0 "$qpid" 2>/dev/null; do
@@ -610,17 +896,19 @@ case "$METHOD" in
 esac
 
 # The boot method couldn't install packages during cloud-init (slirp DNS), so do
-# it now over SSH. virt-customize already installed them inline, so it only needs
-# the pass when --apt-upgrade was requested.
-PKG_PASS=""
-[[ "$METHOD" == "boot" && -n "$EFFECTIVE_PACKAGES" ]] && PKG_PASS="1"
-if [[ -n "$PKG_PASS" || "$APT_UPGRADE" == "1" ]]; then
-  provision_pass "$PKG_PASS"
+# it now over SSH. virt-customize already installed them inline.
+if [[ "$METHOD" == "boot" ]]; then
+  if [[ -n "$EFFECTIVE_PACKAGES" || "$INSTALL_CLOUDFLARED" == "1" || "$INSTALL_FASTFETCH" == "1" || "$APT_UPGRADE" == "1" ]]; then
+    provision_pass
+  fi
 fi
 
 # Compact the final image.
 log "Compacting image..."
 qemu-img convert -O qcow2 "$OUT" "${OUT}.tmp" && mv "${OUT}.tmp" "$OUT"
+# qemu (the unprivileged vmnet user in prod) reads the base through each VM overlay,
+# so it must be world-readable — same reasoning as ensure-base-image.sh.
+chmod 0644 "$OUT" 2>/dev/null || true
 
 # Self-describing sidecar so vm_service auto-detects "skip cloud-init" for this base.
 write_meta "$OUT"
