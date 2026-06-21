@@ -492,12 +492,22 @@ run_in_docker() {
   local verbose_env=()
   [[ "$VERBOSE" == "1" ]] && verbose_env+=(-e LIBGUESTFS_DEBUG=1 -e LIBGUESTFS_TRACE=1)
 
+  # CRITICAL: libguestfs's appliance resolves DNS through QEMU slirp, which forwards
+  # to the CONTAINER's /etc/resolv.conf. Docker's embedded resolver (127.0.0.11) is
+  # a container-local address slirp cannot reach from the nested guest, so appliance
+  # DNS (apt, cloudflared, fastfetch, compose downloads) fails on plain Docker hosts
+  # ("cannot resolve deb.debian.org"). Pin public resolvers the slirp NAT *can* reach
+  # — the same 8.8.8.8/1.1.1.1 the runtime VMs bake in. Override via VM_BUILD_DNS.
+  local dns_flags=()
+  local dns; for dns in ${VM_BUILD_DNS:-8.8.8.8 1.1.1.1}; do dns_flags+=(--dns "$dns"); done
+
   log "Baking inside Docker (image ${BUILDER_IMAGE}:${ARCH}, accel=$([[ -e /dev/kvm ]] && echo kvm || echo tcg))..."
   # NOTE: ${arr[@]+"${arr[@]}"} expands a possibly-empty array safely under
   # `set -u` (macOS bash 3.2 errors on a plain "${arr[@]}" when empty).
   docker run --rm \
     ${tty_flag[@]+"${tty_flag[@]}"} \
     ${verbose_env[@]+"${verbose_env[@]}"} \
+    ${dns_flags[@]+"${dns_flags[@]}"} \
     ${devs[@]+"${devs[@]}"} \
     ${tcg_env[@]+"${tcg_env[@]}"} \
     ${DOCKER_MOUNTS[@]+"${DOCKER_MOUNTS[@]}"} \
