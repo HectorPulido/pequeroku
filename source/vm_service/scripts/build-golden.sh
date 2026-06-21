@@ -64,6 +64,7 @@
 #   --force                             Rebuild even if --out already exists
 #   --clobber-base                      Allow overwriting a base that live VM overlays back onto (CORRUPTS them)
 #   --write-meta-only                   Only (re)write <out>.meta.json for an existing image, then exit
+#   -v | --verbose                      Trace every step (set -x + verbose qemu/libguestfs) to locate a hang
 #   -h | --help                         Show this help
 #
 set -euo pipefail
@@ -115,6 +116,7 @@ USE_DOCKER="auto"        # auto|0|1 — whether to bake inside the Docker builde
 IN_CONTAINER="0"         # internal: set by --__in-container after the docker re-exec
 BUILDER_IMAGE="pequeroku-golden-builder"
 REBUILD_BUILDER="0"
+VERBOSE="0"              # --verbose/-v: set -x trace + verbose qemu/libguestfs/curl
 
 ORIG_ARGS=("$@")         # captured verbatim to forward into the builder container
 
@@ -183,10 +185,18 @@ while [[ $# -gt 0 ]]; do
     --clobber-base) CLOBBER_BASE="1"; shift ;;
     --write-meta-only) WRITE_META_ONLY="1"; shift ;;
     --__in-container) IN_CONTAINER="1"; shift ;;
+    -v|--verbose) VERBOSE="1"; shift ;;
     -h|--help)  usage ;;
     *) die "Unknown option: $1 (try --help)" ;;
   esac
 done
+
+# --verbose: trace every command (this script + the one re-exec'd in the container,
+# since --verbose rides along in ORIG_ARGS) so a hang shows exactly where it stops.
+if [[ "$VERBOSE" == "1" ]]; then
+  log "Verbose mode ON (set -x). The last line before a hang is the culprit."
+  set -x
+fi
 
 # --------------------------------------------------------------------------- #
 # Detect host arch + OS
@@ -472,10 +482,22 @@ run_in_docker() {
   local gcache="${CACHE_DIR}/.guestfs"
   mkdir -p "$gcache"
 
+  # Allocate a TTY when we have one so the inner script's progress (base-image
+  # download, virt-customize steps) streams LIVE instead of sitting in docker's
+  # output buffer and looking frozen. Skipped when stdout isn't a tty (cron/CI).
+  local tty_flag=()
+  [[ -t 1 ]] && tty_flag+=(-t)
+
+  # In verbose mode, also turn on full libguestfs appliance tracing inside the box.
+  local verbose_env=()
+  [[ "$VERBOSE" == "1" ]] && verbose_env+=(-e LIBGUESTFS_DEBUG=1 -e LIBGUESTFS_TRACE=1)
+
   log "Baking inside Docker (image ${BUILDER_IMAGE}:${ARCH}, accel=$([[ -e /dev/kvm ]] && echo kvm || echo tcg))..."
   # NOTE: ${arr[@]+"${arr[@]}"} expands a possibly-empty array safely under
   # `set -u` (macOS bash 3.2 errors on a plain "${arr[@]}" when empty).
   docker run --rm \
+    ${tty_flag[@]+"${tty_flag[@]}"} \
+    ${verbose_env[@]+"${verbose_env[@]}"} \
     ${devs[@]+"${devs[@]}"} \
     ${tcg_env[@]+"${tcg_env[@]}"} \
     ${DOCKER_MOUNTS[@]+"${DOCKER_MOUNTS[@]}"} \
@@ -519,14 +541,19 @@ fi
 if [[ -f "$OUT" && "$CLOBBER_BASE" != "1" ]]; then
   vms_dir="$(cd "$(dirname "$OUT")/.." 2>/dev/null && pwd || true)/vms"
   base_name="$(basename "$OUT")"
+  log "Safety check: scanning ${vms_dir} for VM overlays backing onto ${base_name}..."
   deps=()
   if [[ -d "$vms_dir" ]]; then
     for ov in "$vms_dir"/*/disk.qcow2; do
       [[ -e "$ov" ]] || continue
-      bk="$(qemu-img info "$ov" 2>/dev/null | sed -n 's/^backing file: //p')"
+      [[ "$VERBOSE" == "1" ]] && log "  inspecting overlay: ${ov}"
+      # -U (force-share) reads metadata WITHOUT taking a file lock, so an overlay
+      # held open by a RUNNING VM can never make qemu-img block or error here.
+      bk="$(qemu-img info -U "$ov" 2>/dev/null | sed -n 's/^backing file: //p')"
       [[ "$(basename "${bk:-}")" == "$base_name" ]] && deps+=("$ov")
     done
   fi
+  log "Safety check done: ${#deps[@]} dependent VM overlay(s) found."
   if (( ${#deps[@]} > 0 )); then
     warn "These VM overlays back onto ${base_name}; rebuilding it WILL corrupt them:"
     for d in "${deps[@]}"; do warn "  - $d"; done
@@ -538,9 +565,13 @@ DL() {
   # DL <url> <dest>
   local url="$1" dest="$2"
   if command -v curl >/dev/null 2>&1; then
-    curl -fL --retry 3 -o "$dest" "$url"
+    # Fail LOUD instead of hanging forever: abort if the connection takes >30s or
+    # the transfer drops below 2KB/s for 60s (a stalled mirror used to hang here).
+    curl -fL --retry 3 --retry-delay 5 \
+         --connect-timeout 30 --speed-limit 2048 --speed-time 60 \
+         -o "$dest" "$url"
   elif command -v wget >/dev/null 2>&1; then
-    wget -O "$dest" "$url"
+    wget --timeout=30 --tries=3 -O "$dest" "$url"
   else
     die "Neither curl nor wget available to download base image"
   fi
@@ -575,9 +606,11 @@ else
 fi
 
 # Work on a fresh copy, resized to the requested size.
-log "Copying base -> ${OUT} and resizing to ${SIZE_GIB}GiB"
+log "Converting base -> ${OUT} (qemu-img convert; can take a moment on a big image)..."
 qemu-img convert -O qcow2 "$BASE_IMG" "$OUT"
+log "Resizing ${OUT} to ${SIZE_GIB}GiB..."
 qemu-img resize "$OUT" "${SIZE_GIB}G" >/dev/null
+log "Base image ready; preparing bake config..."
 
 PUBKEY_CONTENT="$(cat "$PUBKEY")"
 
@@ -651,6 +684,9 @@ bake_virt_customize() {
   emit_provision_script "${tmp}/provision.sh"
 
   local args=(-a "$OUT" --network)
+  # -v -x makes libguestfs print every guest command + timing, so a hang inside the
+  # appliance is visible (pairs with LIBGUESTFS_DEBUG/TRACE set by run_in_docker).
+  [[ "$VERBOSE" == "1" ]] && args+=(-v -x)
 
   # Create non-root user with sudo + docker, passwordless.
   if [[ "$SSH_USER" != "root" ]]; then
