@@ -46,6 +46,8 @@ let mockContainers: Container[] = [
 		vcpus: 1,
 		disk_gib: 5,
 		status_label: "Running",
+		allowed_usernames: ["teammate"],
+		is_owner: true,
 	},
 	{
 		id: 2,
@@ -59,6 +61,8 @@ let mockContainers: Container[] = [
 		vcpus: 2,
 		disk_gib: 10,
 		status_label: "Stopped",
+		allowed_usernames: [],
+		is_owner: true,
 	},
 	{
 		id: 3,
@@ -72,6 +76,8 @@ let mockContainers: Container[] = [
 		vcpus: 1,
 		disk_gib: 5,
 		status_label: "Running",
+		allowed_usernames: ["mockuser"],
+		is_owner: false,
 	},
 ];
 
@@ -160,6 +166,8 @@ export function mockCreateContainer(payload: {
 		vcpus: type.vcpus,
 		disk_gib: type.disk_gib,
 		status_label: "Stopped",
+		allowed_usernames: [],
+		is_owner: true,
 	};
 	mockContainers = [...mockContainers, newContainer];
 	creditsUsed = Math.min(INITIAL_CREDITS, creditsUsed + cost);
@@ -237,9 +245,25 @@ export function mockDuplicateContainer(containerId: number): Promise<void> {
 		desired_state: "running",
 		status_label: "Running",
 		username: mockUser.username,
+		allowed_usernames: [],
+		is_owner: true,
 	};
 	mockContainers = [...mockContainers, copy];
 	creditsUsed = Math.min(INITIAL_CREDITS, creditsUsed + cost);
 	refreshUserStats();
 	return Promise.resolve();
+}
+
+export function mockUpdateAllowedUsers(
+	containerId: number,
+	usernames: string[],
+): Promise<{ usernames: string[]; not_found: string[] }> {
+	// In mock mode every non-empty username is treated as a real user.
+	const cleaned = Array.from(
+		new Set(usernames.map((name) => name.trim()).filter((name) => name.length > 0)),
+	).sort();
+	mockContainers = mockContainers.map((container) =>
+		container.id === containerId ? { ...container, allowed_usernames: cleaned } : container,
+	);
+	return Promise.resolve({ usernames: cleaned, not_found: [] });
 }

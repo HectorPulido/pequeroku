@@ -290,6 +290,17 @@ class Container(models.Model):
         STOPPED = "stopped", "stopped"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="containers")
+    allowed_users = models.ManyToManyField(
+        User,
+        related_name="shared_containers",
+        blank=True,
+        help_text=(
+            "Collaborators granted access to this container. They can use the VM "
+            "(IDE, terminal, AI, power on/off, restart, duplicate, files) but "
+            "cannot rename it, delete it, or manage this list — only the owner "
+            "(``user``) can. Credits always accrue to the owner."
+        ),
+    )
     node = models.ForeignKey(
         Node, on_delete=models.CASCADE, related_name="container_node"
     )
@@ -362,7 +373,18 @@ class Container(models.Model):
 
     @staticmethod
     def visible_containers_for(user: User):
-        return Container.objects.filter(user=user).select_related("user")
+        """Containers this user may see and use: the ones they own plus the
+        ones shared with them as a collaborator (``allowed_users``).
+
+        Owner-only actions (rename, delete, managing the collaborator list) are
+        re-checked at the view layer against ``user`` — being able to *see* a
+        container here does not grant ownership.
+        """
+        return (
+            Container.objects.filter(Q(user=user) | Q(allowed_users=user))
+            .distinct()
+            .select_related("user")
+        )
 
     @staticmethod
     def can_view_container(

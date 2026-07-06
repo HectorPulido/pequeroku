@@ -224,6 +224,41 @@ def test_ports_includes_preview_path(api, fake_vm, owned_container):
     assert row["preview_path"] == f"/api/containers/{c.pk}/preview/8000/"
 
 
+def test_collaborator_can_list_and_exec_shared_container(api, fake_vm, owned_container):
+    """A collaborator's API key can drive a container shared with them."""
+    owner, ct, c = owned_container
+    collab = create_user("api_collab")
+    c.allowed_users.add(collab)
+    token = make_key(collab)
+
+    # It shows up in their listing...
+    res = api(token).get("/api/v1/containers/")
+    assert res.status_code == 200
+    ids = {row["id"] for row in res.json()["results"]}
+    assert c.pk in ids
+
+    # ...and they can exec against it.
+    ex = api(token).post(
+        f"/api/v1/containers/{c.pk}/exec/", {"command": "echo hi"}, format="json"
+    )
+    assert ex.status_code == 200
+    assert ex.json()["exit_code"] == 0
+
+
+def test_collaborator_cannot_destroy_shared_container(api, fake_vm, owned_container):
+    """Even with an admin-scoped key, a collaborator can't delete a container
+    they don't own — destroy is gated on ownership, not just visibility."""
+    owner, ct, c = owned_container
+    collab = create_user("api_collab_del")
+    c.allowed_users.add(collab)
+    token = make_key(collab)  # read+exec+admin, but not the owner
+
+    res = api(token).delete(f"/api/v1/containers/{c.pk}/")
+    assert res.status_code == 404
+    assert res.json()["error"]["code"] == "not_found"
+    assert Container.objects.filter(pk=c.pk).exists()
+
+
 def test_types_lists_allowed(api, fake_vm, user_with_type):
     user, ct = user_with_type
     token = make_key(user)

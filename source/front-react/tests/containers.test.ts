@@ -8,6 +8,7 @@ import {
   powerOnContainer,
   powerOffContainer,
   renameContainer,
+  updateAllowedUsers,
 } from '@/services/containers';
 import { loaderStore } from '@/lib/loaderStore';
 
@@ -79,6 +80,30 @@ test('container mutation helpers update mock state and keep loader idle', async 
     await deleteContainer(created!.id);
     const finalContainers = await listContainers();
     assert.equal(finalContainers.length, baselineCount);
+  } finally {
+    loaderSpy.restore();
+  }
+});
+
+test('updateAllowedUsers normalizes and replaces the collaborator list', async () => {
+  const loaderSpy = withLoaderSpy();
+  try {
+    // Trims, drops blanks and duplicates, and sorts the result.
+    const result = await updateAllowedUsers(2, ['  alice  ', 'bob', 'alice', '']);
+    assert.deepEqual(result.usernames, ['alice', 'bob']);
+    assert.deepEqual(result.not_found, []);
+
+    const containers = await listContainers();
+    const target = containers.find((item) => item.id === 2);
+    assert.deepEqual(target?.allowed_usernames, ['alice', 'bob']);
+
+    // A subsequent call fully replaces the list (set semantics).
+    await updateAllowedUsers(2, ['carol']);
+    const after = await listContainers();
+    assert.deepEqual(after.find((item) => item.id === 2)?.allowed_usernames, ['carol']);
+
+    assert.equal(loaderSpy.counters.start, 0);
+    assert.equal(loaderSpy.counters.stop, 0);
   } finally {
     loaderSpy.restore();
   }

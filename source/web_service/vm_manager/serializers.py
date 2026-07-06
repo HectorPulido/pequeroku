@@ -29,6 +29,8 @@ class ContainerSerializer(serializers.ModelSerializer):
             "memory_mb",
             "vcpus",
             "disk_gib",
+            "allowed_usernames",
+            "is_owner",
         ]
         read_only_fields = [
             "id",
@@ -39,14 +41,30 @@ class ContainerSerializer(serializers.ModelSerializer):
             "memory_mb",
             "vcpus",
             "disk_gib",
+            "allowed_usernames",
+            "is_owner",
         ]
 
     username = serializers.SerializerMethodField(read_only=True)
     container_type_name = serializers.SerializerMethodField(read_only=True)
+    allowed_usernames = serializers.SerializerMethodField(read_only=True)
+    is_owner = serializers.SerializerMethodField(read_only=True)
 
     def get_username(self, obj: Container) -> str:
         """Get the username for the container"""
         return obj.user.username
+
+    def get_allowed_usernames(self, obj: Container) -> list[str]:
+        """Usernames of the collaborators granted access to this container."""
+        return sorted(u.username for u in obj.allowed_users.all())
+
+    def get_is_owner(self, obj: Container) -> bool:
+        """Whether the requesting user owns this container (vs. being a
+        collaborator). Drives which controls the frontend exposes."""
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return False
+        return obj.user_id == request.user.id
 
     def get_container_type_name(self, obj: Container) -> str:
         if not obj.container_type:

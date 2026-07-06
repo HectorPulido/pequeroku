@@ -21,6 +21,16 @@ export interface Container {
 	vcpus?: number;
 	disk_gib?: number;
 	status_label?: string;
+	/** Usernames of the collaborators granted access to this container. */
+	allowed_usernames?: string[];
+	/** Whether the current user owns this container (vs. being a collaborator). */
+	is_owner?: boolean;
+}
+
+export interface AllowedUsersResult {
+	usernames: string[];
+	/** Requested usernames that don't exist and were skipped. */
+	not_found: string[];
 }
 
 export interface ContainerType {

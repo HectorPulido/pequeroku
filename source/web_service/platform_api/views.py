@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -70,13 +71,33 @@ class ContainerViewSet(PlatformViewSet):
     # --- helpers ---------------------------------------------------------
 
     def _owned(self):
+        """Containers this key's user owns. Used for owner-only operations
+        (create/destroy) — collaborators must not reach those."""
         return (
             Container.objects.filter(user=self.request.user)
             .exclude(is_pool=True)
             .select_related("node", "container_type")
         )
 
+    def _visible(self):
+        """Containers this key's user may drive: owned + shared as collaborator.
+        Collaborators can inspect/exec/manage files but not destroy."""
+        return (
+            Container.objects.filter(
+                Q(user=self.request.user) | Q(allowed_users=self.request.user)
+            )
+            .exclude(is_pool=True)
+            .select_related("node", "container_type")
+            .distinct()
+        )
+
     def _get(self, pk) -> Container:
+        try:
+            return self._visible().get(pk=pk)
+        except (Container.DoesNotExist, ValueError, TypeError):
+            raise APIError("not_found", "Container not found")
+
+    def _get_owned(self, pk) -> Container:
         try:
             return self._owned().get(pk=pk)
         except (Container.DoesNotExist, ValueError, TypeError):
@@ -101,7 +122,7 @@ class ContainerViewSet(PlatformViewSet):
     # --- collection ------------------------------------------------------
 
     def list(self, request):
-        qs = self._owned().order_by("-created_at")
+        qs = self._visible().order_by("-created_at")
         paginator = V1Pagination()
         page = paginator.paginate_queryset(qs, request, view=self)
         data = ContainerSerializer(page, many=True).data
@@ -166,7 +187,9 @@ class ContainerViewSet(PlatformViewSet):
         return Response(ContainerSerializer(c).data)
 
     def destroy(self, request, pk=None):
-        c = self._get(pk)
+        # Deleting a container is owner-only; collaborators can drive it but not
+        # destroy it. (`create` mints a container owned by the key user.)
+        c = self._get_owned(pk)
         vmops.destroy(c)
         return Response(status=status.HTTP_204_NO_CONTENT)
 

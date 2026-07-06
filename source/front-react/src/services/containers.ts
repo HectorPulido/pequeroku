@@ -8,9 +8,10 @@ import {
 	mockPowerOffContainer,
 	mockPowerOnContainer,
 	mockRenameContainer,
+	mockUpdateAllowedUsers,
 } from "@/mocks/dashboard";
 import { makeApi } from "@/services/api";
-import type { Container, ContainerType } from "@/types/container";
+import type { AllowedUsersResult, Container, ContainerType } from "@/types/container";
 
 const api = USE_MOCKS ? null : makeApi("/api");
 
@@ -136,5 +137,18 @@ export async function duplicateContainer(containerId: number) {
 	}
 	return api(`/containers/${containerId}/duplicate/`, {
 		method: "POST",
+	});
+}
+
+export async function updateAllowedUsers(containerId: number, usernames: string[]) {
+	if (USE_MOCKS) {
+		return mockUpdateAllowedUsers(containerId, usernames);
+	}
+	if (!api) {
+		throw new Error("API client unavailable");
+	}
+	return api<AllowedUsersResult>(`/containers/${containerId}/allowed_users/`, {
+		method: "PUT",
+		body: JSON.stringify({ usernames }),
 	});
 }

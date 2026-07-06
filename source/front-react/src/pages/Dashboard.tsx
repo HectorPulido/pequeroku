@@ -32,6 +32,7 @@ import {
 	powerOffContainer,
 	powerOnContainer,
 	renameContainer,
+	updateAllowedUsers,
 } from "@/services/containers";
 import { fetchCurrentUser } from "@/services/user";
 import type { Container, ContainerType } from "@/types/container";
@@ -298,6 +299,28 @@ const Dashboard: React.FC = () => {
 		}
 	};
 
+	const handleUpdateAllowedUsers = async (usernames: string[]): Promise<string[]> => {
+		if (!configContainer) return usernames;
+		try {
+			const result = await updateAllowedUsers(configContainer.id, usernames);
+			const accepted = result?.usernames ?? usernames;
+			const notFound = result?.not_found ?? [];
+			if (notFound.length > 0) {
+				alertStore.push({
+					message: `These users don't exist and were skipped: ${notFound.join(", ")}`,
+					variant: "warning",
+				});
+			}
+			alertStore.push({ message: "Allowed users updated", variant: "success" });
+			await refreshContainers({ lazy: false });
+			return accepted;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Unable to update allowed users";
+			alertStore.push({ message, variant: "error" });
+			throw error;
+		}
+	};
+
 	const renderContainerCard = (container: Container, isOwner: boolean) => {
 		const actionKey = (action: "start" | "stop" | "delete") =>
 			pendingActions[`${container.id}:${action}` as PendingAction];
@@ -371,16 +394,18 @@ const Dashboard: React.FC = () => {
 					>
 						Config
 					</Button>
-					<Button
-						size="sm"
-						variant="danger"
-						className="ml-auto"
-						disabled={Boolean(actionKey("delete"))}
-						onClick={() => handleDelete(container)}
-						icon={<Trash className="h-4 w-4" />}
-					>
-						{actionKey("delete") ? "Deleting..." : "Delete"}
-					</Button>
+					{isOwner ? (
+						<Button
+							size="sm"
+							variant="danger"
+							className="ml-auto"
+							disabled={Boolean(actionKey("delete"))}
+							onClick={() => handleDelete(container)}
+							icon={<Trash className="h-4 w-4" />}
+						>
+							{actionKey("delete") ? "Deleting..." : "Delete"}
+						</Button>
+					) : null}
 				</div>
 			</div>
 		);
@@ -630,6 +655,7 @@ const Dashboard: React.FC = () => {
 				onClose={() => setConfigContainer(null)}
 				onRename={handleRename}
 				onDuplicate={handleDuplicate}
+				onUpdateAllowedUsers={handleUpdateAllowedUsers}
 			/>
 		</div>
 	);

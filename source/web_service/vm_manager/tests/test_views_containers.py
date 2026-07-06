@@ -732,4 +732,226 @@ def test_create_container_insufficient_credits(monkeypatch):
     assert "not enough credits" in res.content.decode().lower()
 
 
-# Removed duplicate tests for container creation validations
+# --- Collaborators (allowed_users) -----------------------------------------
+
+
+def test_collaborator_sees_shared_container_in_list(monkeypatch):
+    patch_services(monkeypatch)
+
+    owner = create_user("share_owner")
+    collab = create_user("share_collab")
+    create_quota(user=owner)
+    node = create_node()
+    c = create_container(user=owner, node=node, status=Container.Status.STOPPED)
+    c.allowed_users.add(collab)
+
+    client = APIClient()
+    client.force_authenticate(user=collab)
+
+    res = client.get(reverse("container-list"))
+    assert res.status_code == 200
+    body = res.json()
+    item = next((i for i in body if i["id"] == c.id), None)
+    assert item is not None, "shared container should be visible to the collaborator"
+    assert item["is_owner"] is False
+    assert item["username"] == "share_owner"
+
+
+def test_owner_serializer_exposes_allowed_usernames(monkeypatch):
+    patch_services(monkeypatch)
+
+    owner = create_user("ser_owner")
+    collab = create_user("ser_collab")
+    create_quota(user=owner)
+    node = create_node()
+    c = create_container(user=owner, node=node)
+    c.allowed_users.add(collab)
+
+    client = APIClient()
+    client.force_authenticate(user=owner)
+
+    res = client.get(reverse("container-detail", kwargs={"pk": c.pk}))
+    assert res.status_code == 200
+    body = res.json()
+    assert body["is_owner"] is True
+    assert body["allowed_usernames"] == ["ser_collab"]
+
+
+def test_collaborator_can_power_on_using_owner_quota(monkeypatch):
+    """A collaborator with no quota of their own can still drive the machine:
+    in-place actions are gated by the owner's quota."""
+    patch_services(monkeypatch)
+
+    owner = create_user("po_owner")
+    collab = create_user("po_collab")  # deliberately no quota
+    create_quota(user=owner)
+    node = create_node()
+    c = create_container(
+        user=owner,
+        node=node,
+        status=Container.Status.STOPPED,
+        desired_state=Container.DesirableStatus.STOPPED,
+    )
+    c.allowed_users.add(collab)
+
+    client = APIClient()
+    client.force_authenticate(user=collab)
+
+    res = client.post(reverse("container-power-on", kwargs={"pk": c.pk}))
+    assert res.status_code == 200, res.content
+    assert res.json()["status"] == "starting..."
+
+
+def test_collaborator_power_on_blocked_when_owner_quota_inactive(monkeypatch):
+    """If the owner is suspended (quota inactive) their machines can't be driven,
+    not even by a collaborator — the owner's quota is the gate."""
+    patch_services(monkeypatch)
+
+    owner = create_user("noq_owner")
+    collab = create_user("noq_collab")
+    node = create_node()
+    c = create_container(user=owner, node=node, status=Container.Status.STOPPED)
+    c.allowed_users.add(collab)
+    # Suspend the owner's quota. update() bypasses the model's save() side-effects
+    # (which would stop containers and reconcile) — we only need active=False.
+    ResourceQuota.objects.filter(user=owner).update(active=False)
+
+    client = APIClient()
+    client.force_authenticate(user=collab)
+
+    res = client.post(reverse("container-power-on", kwargs={"pk": c.pk}))
+    assert res.status_code == 403
+
+
+def test_collaborator_cannot_rename(monkeypatch):
+    patch_services(monkeypatch)
+
+    owner = create_user("rn_owner")
+    collab = create_user("rn_collab")
+    create_quota(user=owner)
+    create_quota(user=collab)  # even with their own quota, ownership blocks it
+    node = create_node()
+    c = create_container(user=owner, node=node, name="keepme")
+    c.allowed_users.add(collab)
+
+    client = APIClient()
+    client.force_authenticate(user=collab)
+
+    res = client.patch(
+        reverse("container-rename", kwargs={"pk": c.pk}),
+        data={"name": "hacked"},
+        format="json",
+    )
+    assert res.status_code == 403
+    c.refresh_from_db()
+    assert c.name == "keepme"
+
+
+def test_collaborator_cannot_destroy(monkeypatch):
+    patch_services(monkeypatch)
+
+    owner = create_user("del_owner")
+    collab = create_user("del_collab")
+    create_quota(user=owner)
+    create_quota(user=collab)
+    node = create_node()
+    c = create_container(user=owner, node=node)
+    c.allowed_users.add(collab)
+
+    client = APIClient()
+    client.force_authenticate(user=collab)
+
+    res = client.delete(reverse("container-detail", kwargs={"pk": c.pk}))
+    assert res.status_code == 403
+    assert Container.objects.filter(pk=c.pk).exists()
+
+
+def test_owner_sets_allowed_users(monkeypatch):
+    patch_services(monkeypatch)
+
+    owner = create_user("au_owner")
+    create_user("alice")
+    create_user("bob")
+    create_quota(user=owner)
+    node = create_node()
+    c = create_container(user=owner, node=node)
+
+    client = APIClient()
+    client.force_authenticate(user=owner)
+    url = reverse("container-allowed-users", kwargs={"pk": c.pk})
+
+    # Unknown user reported; the owner's own username is silently ignored.
+    res = client.put(
+        url,
+        data={"usernames": ["alice", "bob", "ghost", "au_owner", "alice"]},
+        format="json",
+    )
+    assert res.status_code == 200, res.content
+    body = res.json()
+    assert body["usernames"] == ["alice", "bob"]
+    assert body["not_found"] == ["ghost"]
+    assert set(c.allowed_users.values_list("username", flat=True)) == {"alice", "bob"}
+
+    # PUT replaces the whole list (set semantics), so removals stick.
+    res2 = client.put(url, data={"usernames": ["alice"]}, format="json")
+    assert res2.status_code == 200
+    assert set(c.allowed_users.values_list("username", flat=True)) == {"alice"}
+
+    # GET returns the current list for the owner.
+    res3 = client.get(url)
+    assert res3.status_code == 200
+    assert res3.json()["usernames"] == ["alice"]
+
+
+def test_collaborator_cannot_manage_allowed_users(monkeypatch):
+    patch_services(monkeypatch)
+
+    owner = create_user("m_owner")
+    collab = create_user("m_collab")
+    create_user("m_victim")
+    create_quota(user=owner)
+    node = create_node()
+    c = create_container(user=owner, node=node)
+    c.allowed_users.add(collab)
+
+    client = APIClient()
+    client.force_authenticate(user=collab)
+    url = reverse("container-allowed-users", kwargs={"pk": c.pk})
+
+    assert client.get(url).status_code == 403
+    res_put = client.put(url, data={"usernames": ["m_victim"]}, format="json")
+    assert res_put.status_code == 403
+    # The list is untouched.
+    assert set(c.allowed_users.values_list("username", flat=True)) == {"m_collab"}
+
+
+def test_collaborator_can_duplicate_and_owns_the_copy(monkeypatch):
+    patch_services(monkeypatch)
+
+    owner = create_user("dup_owner")
+    collab = create_user("dup_collab")
+    ct = create_container_type(
+        "small", memory_mb=1024, vcpus=1, disk_gib=5, credits_cost=1
+    )
+    create_quota(user=owner, credits=3, allowed_types=[ct])
+    create_quota(user=collab, credits=3, allowed_types=[ct])
+    node = create_node()
+    source = create_container(
+        user=owner,
+        node=node,
+        container_type=ct,
+        status=Container.Status.STOPPED,
+        desired_state=Container.DesirableStatus.STOPPED,
+        name="teamvm",
+    )
+    source.allowed_users.add(collab)
+
+    client = APIClient()
+    client.force_authenticate(user=collab)
+
+    res = client.post(reverse("container-duplicate", kwargs={"pk": source.pk}))
+    assert res.status_code == 201, res.content
+    copy = Container.objects.get(name="teamvm-copy")
+    # The clone belongs to whoever cloned it, billed against their own credits.
+    assert copy.user_id == collab.id
+

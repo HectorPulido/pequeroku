@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
 from django.views.decorators.clickjacking import xframe_options_exempt
 
 from rest_framework import permissions, status, viewsets
@@ -61,9 +62,41 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         # from every API view, including superusers; once claimed (is_pool=False)
         # they show up normally. Operators can still inspect them in the admin.
         if user.is_superuser:
-            return super().get_queryset().exclude(is_pool=True).select_related("node")
+            return (
+                super()
+                .get_queryset()
+                .exclude(is_pool=True)
+                .select_related("node")
+                .prefetch_related("allowed_users")
+            )
 
-        return Container.visible_containers_for(user).exclude(is_pool=True)
+        return (
+            Container.visible_containers_for(user)
+            .exclude(is_pool=True)
+            .prefetch_related("allowed_users")
+        )
+
+    def _require_owner(self, request, obj):
+        """Return a 403 Response if the requester is not the owner (nor a
+        superuser), else ``None``. Guards owner-only actions — rename, delete
+        and managing collaborators — that ``get_queryset()`` would otherwise
+        expose to collaborators (who can *see* the container but not own it)."""
+        if obj.user_id != request.user.id and not request.user.is_superuser:
+            return Response(
+                {"error": "Only the owner can perform this action"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def _owner_quota(self, obj):
+        """Quota that gates in-place actions (power/upload/download/...).
+
+        Credits always accrue to the container's owner and collaborators keep
+        100% of their own credits, so these actions are gated by the *owner's*
+        quota, never the requester's. ``duplicate`` is the exception (it mints a
+        new container owned by the requester) and keeps ``_check_quota``.
+        """
+        return orchestration.check_quota(obj.user)
 
     def list(self, request, *args, **kwargs):
         """
@@ -238,13 +271,17 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
         The name is a Django-side label only (the VM is identified by its
         ``container_id``), so this is a pure metadata update and never touches
-        the vm-service. Ownership/visibility is enforced by get_object().
+        the vm-service. Renaming is owner-only — collaborators can see and use
+        the container but not relabel it.
         """
+        obj: Container = self.get_object()
+        denied = self._require_owner(request, obj)
+        if denied:
+            return denied
+
         quota = self._check_quota(request)
         if not quota:
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
-
-        obj: Container = self.get_object()
 
         raw_name = request.data.get("name")
         name = raw_name.strip() if isinstance(raw_name, str) else ""
@@ -271,6 +308,73 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
         serializer = self.get_serializer(obj)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get", "put"])
+    def allowed_users(self, request, pk=None):
+        """GET/PUT /api/containers/{pk}/allowed_users/ — manage collaborators.
+
+        Collaborators can use the VM (IDE, terminal, AI, power, duplicate,
+        files) but cannot rename it, delete it, or edit this list. Reading and
+        writing the list is owner-only.
+
+        PUT body: ``{"usernames": ["alice", "bob"]}`` replaces the whole list.
+        Unknown usernames are ignored and echoed back under ``not_found`` so the
+        UI can flag typos; the owner is never added to their own list.
+        """
+        obj: Container = self.get_object()
+        denied = self._require_owner(request, obj)
+        if denied:
+            return denied
+
+        if request.method == "GET":
+            return Response(
+                {"usernames": sorted(u.username for u in obj.allowed_users.all())}
+            )
+
+        raw = request.data.get("usernames", [])
+        if not isinstance(raw, list):
+            return Response(
+                {"error": "usernames must be a list of strings"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Normalize: trim, drop blanks/dupes; ignore the owner (can't self-share).
+        requested: list[str] = []
+        seen: set[str] = set()
+        for item in raw:
+            if not isinstance(item, str):
+                continue
+            name = item.strip()
+            if not name or name in seen or name == obj.user.username:
+                continue
+            seen.add(name)
+            requested.append(name)
+
+        if len(requested) > 50:
+            return Response(
+                {"error": "too many collaborators (max 50)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        found = list(
+            User.objects.filter(username__in=requested).exclude(pk=obj.user_id)
+        )
+        found_names = {u.username for u in found}
+        not_found = [n for n in requested if n not in found_names]
+
+        obj.allowed_users.set(found)
+
+        audit_log_http(
+            request,
+            action="container.allowed_users.set",
+            target_type="container",
+            target_id=obj.pk,
+            message="Updated collaborator access list",
+            metadata={"usernames": sorted(found_names), "not_found": not_found},
+            success=True,
+        )
+
+        return Response({"usernames": sorted(found_names), "not_found": not_found})
 
     @action(detail=True, methods=["post"])
     def duplicate(self, request, pk=None):
@@ -349,11 +453,15 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         return Response(data, status=status.HTTP_201_CREATED)
 
     def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        denied = self._require_owner(request, obj)
+        if denied:
+            return denied
+
         quota = self._check_quota(request)
         if not quota:
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
-        obj = self.get_object()
         service = self._get_service(obj)
         try:
             service.delete_vm(obj.container_id)
@@ -412,13 +520,12 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
     def upload_file(self, request, pk=None):
-        quota = self._check_quota(request)
-        if not quota:
+        obj: Container = self.get_object()
+        if not self._owner_quota(obj):
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
         f = request.FILES.get("file")
         dest = request.data.get("dest_path", "/app")
-        obj: Container = self.get_object()
 
         if not f:
             audit_log_http(
@@ -467,11 +574,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["post"])
     def power_on(self, request, pk=None):
-        quota = self._check_quota(request)
-        if not quota:
+        obj: Container = self.get_object()
+        if not self._owner_quota(obj):
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
-        obj: Container = self.get_object()
         service = self._get_service(obj)
         # Rebuild the VM record on the node if its cache lost it (e.g. vm-service
         # restart); idempotent and avoids a 404 on start.
@@ -496,11 +602,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["post"])
     def power_off(self, request, pk=None):
-        quota = self._check_quota(request)
-        if not quota:
+        obj: Container = self.get_object()
+        if not self._owner_quota(obj):
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
-        obj: Container = self.get_object()
         service = self._get_service(obj)
         service.action_vm(
             str(obj.container_id), action=VMAction(action="stop", cleanup_disks=False)
@@ -522,11 +627,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["post"])
     def restart_container(self, request, pk=None):
-        quota = self._check_quota(request)
-        if not quota:
+        obj: Container = self.get_object()
+        if not self._owner_quota(obj):
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
-        obj: Container = self.get_object()
         service = self._get_service(obj)
         service.action_vm(
             str(obj.container_id), action=VMAction(action="reboot", cleanup_disks=False)
@@ -544,11 +648,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["get"])
     def download_file(self, request, pk=None):
-        quota = self._check_quota(request)
-        if not quota:
+        obj: Container = self.get_object()
+        if not self._owner_quota(obj):
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
-        obj: Container = self.get_object()
         path = request.query_params.get("path")
         if not path:
             return Response({"error": "path required"}, status=400)
@@ -574,11 +677,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
 
     @action(detail=True, methods=["get"])
     def download_folder(self, request, pk=None):
-        quota = self._check_quota(request)
-        if not quota:
+        obj: Container = self.get_object()
+        if not self._owner_quota(obj):
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
-        obj: Container = self.get_object()
         root = request.query_params.get("root", "/app")
         prefer_fmt = request.query_params.get("prefer_fmt", "zip")
 
@@ -633,11 +735,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
     @action(detail=True, methods=["get"])
     def conversations(self, request, pk=None):
         """List the AI conversations stored in the VM (+ the active one)."""
-        quota = self._check_quota(request)
-        if not quota:
+        obj: Container = self.get_object()
+        if not self._owner_quota(obj):
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
-        obj: Container = self.get_object()
         return Response(convo.list_with_current(request.user, obj))
 
     @action(
@@ -647,11 +748,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
     )
     def conversation(self, request, pk=None, conversation_id=None):
         """GET the messages of one AI conversation, or DELETE it."""
-        quota = self._check_quota(request)
-        if not quota:
+        obj: Container = self.get_object()
+        if not self._owner_quota(obj):
             return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
 
-        obj: Container = self.get_object()
         try:
             conv_id = int(cast(str, conversation_id))
         except (TypeError, ValueError):
@@ -796,8 +896,10 @@ class FileTemplateViewSet(viewsets.ModelViewSet):
         if request.user.is_superuser:
             container_obj = get_object_or_404(Container, pk=container_model_id)
         else:
+            # Owners and collaborators may apply templates (it only writes files
+            # into the VM). visible_containers_for covers both.
             container_obj = get_object_or_404(
-                Container, pk=container_model_id, user=request.user
+                Container.visible_containers_for(request.user), pk=container_model_id
             )
 
         apply_template(container_obj, tpl, dest_path=dest_path, clean=clean)
