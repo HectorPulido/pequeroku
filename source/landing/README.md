@@ -19,7 +19,6 @@ The file source/nginx/default.conf maps this folder to public root:
 - Dashboard (frontend):
   - /dashboard/ → index.html (mounted from source/front)
   - /dashboard/ide/ → ide.html
-  - /dashboard/metrics/ → metrics.html
 - Backend static:
   - /static/ → /usr/share/nginx/static (mounted from source/web_service/staticfiles)
 - Proxies to Django:

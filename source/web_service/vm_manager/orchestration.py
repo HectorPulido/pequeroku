@@ -21,7 +21,7 @@ from django.utils import timezone
 
 from . import pool
 from .models import Container, ContainerType, Node, ResourceQuota
-from .vm_client import VMCreate, VMServiceClient
+from .vm_client import VMCreate, VMDuplicate, VMServiceClient
 
 # Default output cap shared by the public API and the MCP server (256 KiB). Keeping
 # it here means exec/runs and the MCP facade truncate identically.
@@ -143,6 +143,55 @@ def claim_or_create_container(
         expires_at=expires_at,
     )
     return c, warning, False
+
+
+def duplicate_container(
+    *,
+    user: User,
+    source: Container,
+    name: str | None = None,
+) -> tuple[Container, str | None]:
+    """Clone ``source`` into a new container owned by ``user``.
+
+    This is a disk-level duplicate: the vm-service copies the source VM's qcow2
+    overlay into a fresh VM, so the copy boots with identical data. Because the
+    disk lives on the source's node, the duplicate is always placed on that SAME
+    node (cross-node cloning is not supported here) and the warm pool is bypassed
+    (a clone must copy a specific source disk, not a generic pool VM).
+
+    The source VM must be stopped — the node refuses (409) otherwise. Callers are
+    responsible for quota checks. Returns ``(container, warning)``; raises
+    :class:`NoNodeAvailable` if the source has no node.
+    """
+    node = source.node
+    if node is None:
+        raise NoNodeAvailable()
+
+    ct = source.container_type
+    vcpus = int(ct.vcpus) if ct else int(source.vcpus)
+    mem_mb = int(ct.memory_mb) if ct else int(source.memory_mb)
+    disk_gib = int(ct.disk_gib) if ct else int(source.disk_gib)
+
+    service = VMServiceClient(node)
+    vm = service.duplicate_vm(
+        str(source.container_id),
+        VMDuplicate(vcpus=vcpus, mem_mib=mem_mb, disk_gib=disk_gib, start=True),
+    )
+    c = Container.objects.create(
+        name=name,
+        user=user,
+        container_id=vm["id"],
+        status="creating",
+        memory_mb=mem_mb,
+        vcpus=vcpus,
+        disk_gib=disk_gib,
+        node=node,
+        container_type=ct,
+        # The clone already carries the source's full disk, so skip the
+        # first-connect "default" template that fresh VMs get.
+        first_start=False,
+    )
+    return c, None
 
 
 # --- Output handling --------------------------------------------------------

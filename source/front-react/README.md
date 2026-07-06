@@ -1,6 +1,6 @@
 # Front React
 
-Front React is the single-page application that powers the Pequeroku control panel. It offers the user dashboard, container orchestration tools, the in-browser IDE (file tree, Monaco editor, multiplexed terminals) and live metrics visualisations. This document explains every moving part—after reading it you should be able to run, extend and debug the front end without inspecting the source.
+Front React is the single-page application that powers the Pequeroku control panel. It offers the user dashboard, container orchestration tools and the in-browser IDE (file tree, Monaco editor, multiplexed terminals). This document explains every moving part—after reading it you should be able to run, extend and debug the front end without inspecting the source.
 
 
 ## 1. Technology Stack
@@ -9,7 +9,6 @@ Front React is the single-page application that powers the Pequeroku control pan
 - **Language & Tooling:** TypeScript 5.9 in “bundler” mode with path aliases and incremental builds.
 - **Bundler:** Vite 7 using `@vitejs/plugin-react` (Fast Refresh) and `@tailwindcss/vite`.
 - **Styling:** Tailwind CSS (class-based dark mode), vanilla CSS overrides in `src/index.css` and `src/styles/`.
-- **Visualization:** Chart.js 4 and `react-chartjs-2` for metrics.
 - **Editor/Terminal:** Monaco editor (`@monaco-editor/react`) and `@xterm/xterm` with the fit addon.
 - **Linting & Formatting:** Biome (primary) plus ESLint for React-specific rules.
 - **Testing:** Type-checked build artifacts under `tests/` compiled via `tsconfig.tests.json`; integrates with external runners.
@@ -89,7 +88,6 @@ export VITE_USE_MOCKS=true        # run against in-memory mocks instead of the r
    - `/login` → `Login` page.
    - `/` → `Dashboard` (protected).
    - `/ide` → `IDE` workspace (protected); expects `containerId` query param.
-   - `/metrics` → `Metrics` view (protected); expects `container` query param.
 
 ### Route Protection
 
@@ -160,9 +158,8 @@ const containers = await api<Container[]>("/containers/", { method: "GET", noLoa
   - `fetchCurrentUser()` validates type guards for `UserInfo`.
   - Falls back to `mockFetchCurrentUser()` when mocks are enabled.
 - **`services/containers.ts`**
-  - CRUD over containers, power control, statistics polling.
+  - CRUD over containers, rename, duplicate, and power control.
   - Uses `AbortController` for cancellation and supports `suppressLoader`.
-  - `fetchContainerStatistics` normalises CPU %, memory MiB and thread counts, converting timestamps to ISO strings.
 - **`services/ide/actions.ts`**
   - Uploads files, downloads archives, polls template previews (with exponential backoff), fetches run configurations via WebSocket (`FileSystemWebService`).
   - Caches per-container `makeApi` instances for repeated calls.
@@ -185,9 +182,9 @@ const containers = await api<Container[]>("/containers/", { method: "GET", noLoa
 
 - Fetches user info and containers on mount; polls containers every 5 seconds.
 - Stores ToS warning state in `sessionStorage` per non-superuser session.
-- Exposes actions: create, delete, power on/off containers.
+- Exposes actions: create, delete, rename, duplicate, power on/off containers.
 - Handles abortable fetches to avoid race conditions when navigating away.
-- Renders metrics and console modals by controlling component state.
+- Renders the IDE, AI and container config (rename + duplicate) modals by controlling component state.
 - Uses `CreateContainerModal`, `ThemeToggle`, `Modal`, and `Button` components for UI affordances.
 
 ### IDE (`src/pages/IDE.tsx`)
@@ -217,14 +214,6 @@ Core workspace combining multiple subsystems:
   - Editor reacts to `themeManager` updates to switch Monaco theme between light/dark.
 
 If the `containerId` query param is missing or invalid, `MissingContainer` renders guidance.
-
-### Metrics (`src/pages/Metrics.tsx`)
-
-- Expects `?container=<id>` query parameter.
-- Polls `fetchContainerStatistics` at intervals defined in `constants.METRICS.pollMs` (defaults to 1000 ms) with cancellation on tab blur/visibility change.
-- Maintains a sliding window capped at `METRICS.maxPoints`.
-- Displays CPU %, memory usage (MiB) and threads using Chart.js line charts, custom tooltip formatting and responsive layout.
-- Exposes `showHeader` query flag to embed the chart outside the full chrome (e.g. in iframes).
 
 ### Login (`src/pages/Login.tsx`)
 
@@ -354,9 +343,6 @@ Refer to `front-react/files.md` for an exhaustive file list.
 - **WebSocket disconnects**
   - Confirm proxy forwards WS upgrades.
   - File system service will retry with exponential backoff up to 5 seconds; check browser logs (`FS WS connected/error`).
-- **Metrics view shows “Unable to fetch metrics”**
-  - Ensure `container` query param is numeric.
-  - Confirm `/api/containers/:id/statistics/` is reachable and returns JSON with `cpu_percent`, `rss_*`, `num_threads`.
 - **Theme toggling not working**
   - Confirm `<html>` element receives `.dark`/`.light` classes.
   - Clear `localStorage` key `pequeroku:theme` to reset.

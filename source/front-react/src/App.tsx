@@ -9,7 +9,6 @@ import Browser from "./pages/Browser";
 import Dashboard from "./pages/Dashboard";
 import IDE from "./pages/IDE";
 import Login from "./pages/Login";
-import Metrics from "./pages/Metrics";
 import "./App.css";
 
 function App() {
@@ -63,14 +62,6 @@ function App() {
 					element={
 						<ProtectedRoute>
 							<Browser />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="/metrics"
-					element={
-						<ProtectedRoute>
-							<Metrics />
 						</ProtectedRoute>
 					}
 				/>

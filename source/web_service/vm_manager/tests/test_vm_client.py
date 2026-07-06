@@ -382,12 +382,11 @@ def test_list_vms_and_ensure_vm():
     assert session.last_json == {"vcpus": 1, "mem_mib": 128, "disk_gib": 2}
 
 
-def test_get_health_and_tail_console_and_statistics():
+def test_get_health_and_tail_console():
     node = create_node()
     session = FakeSession()
     session.queue.append(FakeResponse(json_data={"ok": "True"}, content=b"ok"))
     session.queue.append(FakeResponse(json_data={"log": "boot"}, content=b"ok"))
-    session.queue.append(FakeResponse(json_data={"cpu": 1.0}, content=b"ok"))
     client = VMServiceClient(node=node, session=session)
 
     h = client.get_health()
@@ -396,9 +395,6 @@ def test_get_health_and_tail_console_and_statistics():
     client.tail_console("vm-1", lines=10)
     assert session.last_url.endswith("/vms/vm-1/console/tail")
     assert session.last_params == {"lines": 10}
-
-    client.statistics("vm-1")
-    assert session.last_url.endswith("/metrics/vm-1")
 
 
 def test_execute_sh_widens_timeout_when_given():

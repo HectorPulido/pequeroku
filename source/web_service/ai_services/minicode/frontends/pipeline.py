@@ -160,6 +160,10 @@ def _synth_command(name: str, args: dict) -> str:
         return (
             f"process {args.get('action', 'status')} {args.get('job_id', '')}".strip()
         )
+    if name == "read_memories":
+        return "read_memories"
+    if name in ("save_memory", "edit_memory", "delete_memory"):
+        return f"{name} {args.get('id', '')}".strip()
     for key in ("filePath", "pattern", "path", "url", "search_query"):
         if key in args:
             return f"{name} {args[key]}"

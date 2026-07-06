@@ -11,7 +11,7 @@ interface HeaderProps {
 }
 
 /**
- * Minimal header shared by the standalone IDE and metrics pages.
+ * Minimal header shared by the standalone IDE and AI pages.
  * Mirrors the legacy `/front/page` layout: brand on the left and a single
  * back button that returns to the dashboard shell. Override the left-hand
  * branding via `leading` and inject custom actions through `children`. When

@@ -4,9 +4,9 @@ import {
 	Group,
 	Key,
 	Play,
+	Settings,
 	Sparks,
 	Square,
-	StatsUpSquare,
 	Trash,
 	User,
 	Wrench,
@@ -17,6 +17,7 @@ import { useNavigate } from "react-router-dom";
 import Button from "@/components/Button";
 import Header from "@/components/Header";
 import Modal from "@/components/Modal";
+import ConfigContainerModal from "@/components/modals/ConfigContainerModal";
 import CreateContainerModal from "@/components/modals/CreateContainerModal";
 import { alertStore } from "@/lib/alertStore";
 import { buildAppUrl, resolveAppBase } from "@/lib/appBase";
@@ -25,10 +26,12 @@ import { formatDate, isSmallScreen, statusTone } from "@/pages/Dashboard.helpers
 import {
 	createContainer,
 	deleteContainer,
+	duplicateContainer,
 	fetchContainerTypes,
 	listContainers,
 	powerOffContainer,
 	powerOnContainer,
+	renameContainer,
 } from "@/services/containers";
 import { fetchCurrentUser } from "@/services/user";
 import type { Container, ContainerType } from "@/types/container";
@@ -62,7 +65,7 @@ const Dashboard: React.FC = () => {
 	const [pendingActions, setPendingActions] = useState<Record<PendingAction, boolean>>({});
 	const [consoleContainer, setConsoleContainer] = useState<Container | null>(null);
 	const [aiContainer, setAiContainer] = useState<Container | null>(null);
-	const [metricsContainer, setMetricsContainer] = useState<Container | null>(null);
+	const [configContainer, setConfigContainer] = useState<Container | null>(null);
 	const [hasLoadedContainers, setHasLoadedContainers] = useState(false);
 
 	const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -268,12 +271,31 @@ const Dashboard: React.FC = () => {
 		setAiContainer(container);
 	};
 
-	const handleOpenMetrics = (container: Container) => {
-		if (isSmallScreen()) {
-			window.open(buildUrl(`metrics?container=${container.id}`), "_blank", "noopener,noreferrer");
-			return;
+	const handleRename = async (name: string) => {
+		if (!configContainer) return;
+		try {
+			await renameContainer(configContainer.id, name);
+			alertStore.push({ message: "Container renamed", variant: "success" });
+			await refreshContainers({ lazy: false });
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Unable to rename container";
+			alertStore.push({ message, variant: "error" });
+			throw error;
 		}
-		setMetricsContainer(container);
+	};
+
+	const handleDuplicate = async () => {
+		if (!configContainer) return;
+		try {
+			await duplicateContainer(configContainer.id);
+			alertStore.push({ message: "Container duplicated", variant: "success" });
+			await refreshContainers({ lazy: false });
+			await refreshUser();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Unable to duplicate container";
+			alertStore.push({ message, variant: "error" });
+			throw error;
+		}
 	};
 
 	const renderContainerCard = (container: Container, isOwner: boolean) => {
@@ -330,14 +352,6 @@ const Dashboard: React.FC = () => {
 							>
 								{actionKey("stop") ? "Stopping..." : "Stop"}
 							</Button>
-							<Button
-								size="sm"
-								variant="secondary"
-								onClick={() => handleOpenMetrics(container)}
-								icon={<StatsUpSquare className="h-4 w-4" />}
-							>
-								Metrics
-							</Button>
 						</>
 					) : (
 						<Button
@@ -349,6 +363,14 @@ const Dashboard: React.FC = () => {
 							{actionKey("start") ? "Starting..." : "Start"}
 						</Button>
 					)}
+					<Button
+						size="sm"
+						variant="secondary"
+						onClick={() => setConfigContainer(container)}
+						icon={<Settings className="h-4 w-4" />}
+					>
+						Config
+					</Button>
 					<Button
 						size="sm"
 						variant="danger"
@@ -603,41 +625,12 @@ const Dashboard: React.FC = () => {
 				) : null}
 			</Modal>
 
-			<Modal
-				isOpen={metricsContainer !== null}
-				onClose={() => setMetricsContainer(null)}
-				title={
-					metricsContainer ? `${metricsContainer.id} — ${metricsContainer.name} - Metrics` : ""
-				}
-				padding=""
-				size="xl"
-				headerActions={
-					metricsContainer ? (
-						<Button
-							variant="secondary"
-							size="sm"
-							onClick={() => {
-								if (!metricsContainer) return;
-								window.open(
-									buildUrl(`metrics?container=${metricsContainer.id}`),
-									"_blank",
-									"noopener,noreferrer",
-								);
-							}}
-						>
-							<Expand />
-						</Button>
-					) : null
-				}
-			>
-				{metricsContainer ? (
-					<iframe
-						title={`METRICS-${metricsContainer.id}`}
-						src={buildUrl(`metrics?container=${metricsContainer.id}&showHeader=1`)}
-						className="h-full w-full rounded-lg border border-gray-800"
-					/>
-				) : null}
-			</Modal>
+			<ConfigContainerModal
+				container={configContainer}
+				onClose={() => setConfigContainer(null)}
+				onRename={handleRename}
+				onDuplicate={handleDuplicate}
+			/>
 		</div>
 	);
 };

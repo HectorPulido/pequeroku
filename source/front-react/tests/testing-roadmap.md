@@ -42,7 +42,6 @@ Single source of truth for the unit/integration scenarios we still need to cover
 - [ ] Login → Dashboard end-to-end with mocked services: verifies redirect and store side-effects
 - [ ] IDE boot flow: container query string, websocket bootstrapping, panel collapse persistence
 - [ ] IDE container switch: ensures filesystem/editor/terminal hooks dispose connections when containerId changes
-- [ ] Metrics polling loop: API throttling, chart dataset rollover, offline/restore transitions
 - [ ] Theme toggle global event propagation across routes
 - [ ] Upload/download/template flows once backend endpoints are wired in Step 5
 

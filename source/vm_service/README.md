@@ -1,6 +1,6 @@
 # vm-service
 
-A lightweight FastAPI microservice for managing ephemeral VMs with QEMU/KVM. It provisions VMs, exposes lifecycle APIs, provides a simple TTY WebSocket bridge, basic file operations via SSH/SFTP, VM search, and metrics. A Redis-backed catalog maintains VM state across the node.
+A lightweight FastAPI microservice for managing ephemeral VMs with QEMU/KVM. It provisions VMs, exposes lifecycle APIs, provides a simple TTY WebSocket bridge, basic file operations via SSH/SFTP, and VM search. A Redis-backed catalog maintains VM state across the node.
 
 Important: This service is part of a multi-service environment orchestrated with a docker-compose at the repository root. See “Docker & Compose” below for details.
 
@@ -19,7 +19,6 @@ Table of Contents
   - Search
   - Execute shell
   - Downloads
-  - Metrics
 - How it Works
 - Docker & Compose
 - Local Development
@@ -32,14 +31,12 @@ Overview
 - VM backend: QEMU, with per-VM workdir and cloud-init seed ISO
 - SSH: Paramiko for remote exec and SFTP
 - Catalog: Redis to persist VM records and reconcile their health
-- Metrics: psutil, via per-VM PID tracked by QEMU
 - Security: Bearer token
 
 Architecture and Components
 - API (FastAPI)
   - vm_service/main.py: App factory, /health, WebSocket TTY route, router wiring
   - vm_service/vms.py: REST endpoints for VM lifecycle and operations
-  - vm_service/metrics.py: Per-VM resource usage via psutil
 - Domain models (Pydantic / dataclasses)
   - vm_service/models.py: VMRecord, VMOut, VMCreate, VMAction, etc.
 - Implementations
@@ -65,7 +62,6 @@ Project Layout
 - vm_service/
   - main.py: FastAPI app + WebSocket
   - vms.py: Core REST endpoints
-  - metrics.py: Metrics endpoint
   - models.py: Data models (Pydantic + dataclasses)
   - security.py: Bearer token dependency
   - settings.py: Environment-based config (paths, users, redis, QEMU)
@@ -103,7 +99,7 @@ All configuration is read in vm_service/settings.py. Key variables:
 
 API Overview
 Auth
-- All /vms/* and /metrics/* routes require Authorization: Bearer <AUTH_TOKEN>.
+- All /vms/* routes require Authorization: Bearer <AUTH_TOKEN>.
 - /health is public.
 
 Health
@@ -114,6 +110,12 @@ VM Lifecycle
 - POST /vms/
   - Body (JSON): { "vcpus": int, "mem_mib": int, "disk_gib": int, "base_image": str|null, "timeout_boot_s": int|null }
   - Creates a VM record, starts provisioning asynchronously; returns VMOut.
+- POST /vms/{vm_id}/duplicate
+  - Body (JSON): { "vcpus": int, "mem_mib": int, "disk_gib": int, "start": bool }
+  - Clones an existing VM into a brand-new one: copies the source's qcow2 overlay
+    (disk.qcow2) into a fresh workdir so the duplicate boots with identical data.
+    The source MUST be stopped (copying a live qcow2 would corrupt it); returns 409
+    otherwise, or 404 if the source has no disk yet. Returns VMOut for the new VM.
 - GET /vms/
   - List all VMs known in Redis.
 - GET /vms/{vm_id}
@@ -172,19 +174,6 @@ Downloads
   - Returns file bytes with proper content-disposition and media-type guess.
 - GET /vms/{vm_id}/download-folder?root=/app&prefer_fmt=zip|tar.gz
   - Quickly packs a directory with zip (if available) or tar.gz and streams it back.
-
-Metrics
-- GET /metrics/{vm_id}
-  - Uses the VM’s pidfile and psutil to return:
-    {
-      "ts": float,
-      "cpu_percent": float|null,
-      "rss_bytes": int|null,
-      "rss_human": "10.0 MB"|"-",
-      "rss_mib": float|null,
-      "num_threads": int|null,
-      "io": { ... } | {}
-    }
 
 Example requests
 - Create VM:

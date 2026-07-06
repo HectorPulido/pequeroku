@@ -63,6 +63,24 @@ class VMEnsure(BaseModel):
     disk_gib: int = Field(default=..., ge=5, json_schema_extra={"example": 10})
 
 
+class VMDuplicate(BaseModel):
+    """Payload to clone an existing VM into a brand-new one.
+
+    The new VM's disk is a copy of the source VM's qcow2 overlay, so the
+    duplicate boots with identical data. Specs come from the orchestrator (the
+    duplicate's container type); like :class:`VMEnsure` there is no host-CPU cap,
+    since the record faithfully restores specs the orchestrator already
+    validated.
+    """
+
+    vcpus: int = Field(default=..., ge=1, json_schema_extra={"example": 2})
+    mem_mib: int = Field(default=..., ge=256, json_schema_extra={"example": 2})
+    disk_gib: int = Field(default=..., ge=5, json_schema_extra={"example": 10})
+    start: bool = Field(
+        default=True, description="Boot the duplicate right after copying its disk"
+    )
+
+
 class VMAction(BaseModel):
     action: Literal["start", "stop", "reboot"]
     cleanup_disks: bool | None = False

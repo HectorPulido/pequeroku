@@ -13,10 +13,19 @@ from __future__ import annotations
 from .base import Tool, ToolContext, truncate
 from .files import EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .internet import WebReadTool, WebSearchTool
+from .memory import (
+    DeleteMemoryTool,
+    EditMemoryTool,
+    ReadMemoryTool,
+    SaveMemoryTool,
+)
 from .shell import BashTool, ProcessTool
 from .skill import SkillTool
 from .task import TaskTool
 from .todo import TodoWriteTool
+
+# Memory CRUD (save/read/edit/delete). Read-only agents get only ReadMemoryTool.
+MEMORY = [SaveMemoryTool, ReadMemoryTool, EditMemoryTool, DeleteMemoryTool]
 
 ALL = [
     ReadTool,
@@ -29,6 +38,7 @@ ALL = [
     WebSearchTool,
     WebReadTool,
     TodoWriteTool,
+    *MEMORY,
     SkillTool,
     TaskTool,
 ]
@@ -36,7 +46,15 @@ ALL = [
 
 def tools_for(agent_type: str = "build") -> list[Tool]:
     if agent_type == "explore":
-        classes = [ReadTool, GlobTool, GrepTool, WebSearchTool, WebReadTool]
+        # Read-only investigator: it may recall memories but never mutate them.
+        classes = [
+            ReadTool,
+            GlobTool,
+            GrepTool,
+            WebSearchTool,
+            WebReadTool,
+            ReadMemoryTool,
+        ]
     elif agent_type == "general":
         classes = [
             ReadTool,
@@ -49,6 +67,7 @@ def tools_for(agent_type: str = "build") -> list[Tool]:
             WebSearchTool,
             WebReadTool,
             SkillTool,
+            *MEMORY,
         ]
     else:  # build (main agent)
         classes = ALL

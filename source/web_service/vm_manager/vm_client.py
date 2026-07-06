@@ -66,6 +66,16 @@ class VMEnsure:
 
 
 @dataclass
+class VMDuplicate:
+    """Payload to clone an existing VM into a new one (disk-level copy)."""
+
+    vcpus: int
+    mem_mib: int
+    disk_gib: int
+    start: bool = True
+
+
+@dataclass
 class VMAction:
     """Payload of actions on the vm."""
 
@@ -244,6 +254,21 @@ class VMServiceClient:
         )
         return cast(dict[str, object], self._handle(resp))
 
+    def duplicate_vm(self, vm_id: str, payload: VMDuplicate) -> dict[str, object]:
+        """POST /vms/{vm_id}/duplicate — Clone a stopped VM's disk into a new VM.
+
+        Returns ``{"id": <new_vm_id>, ...}``. The source VM must be stopped; the
+        node refuses with 409 otherwise.
+        """
+        data = {k: v for k, v in asdict(payload).items() if v is not None}
+        resp = self.session.post(
+            self._url(f"/vms/{vm_id}/duplicate"),
+            json=data,
+            headers=self.headers,
+            timeout=self.timeout,
+        )
+        return cast(dict[str, object], self._handle(resp))
+
     def get_vms(self, vm_ids: list[str]) -> dict[str, object]:
         """GET /vms/list/{vm_ids}"""
         query = ",".join(vm_ids)
@@ -370,15 +395,6 @@ class VMServiceClient:
             self._url(f"/vms/{vm_id}/console/tail"),
             headers=self.headers,
             params=params,
-            timeout=self.timeout,
-        )
-        return self._handle(resp)
-
-    def statistics(self, vm_id: str) -> object:
-        """GET /metrics/{vm_id}"""
-        resp = self.session.get(
-            self._url(f"/metrics/{vm_id}"),
-            headers=self.headers,
             timeout=self.timeout,
         )
         return self._handle(resp)

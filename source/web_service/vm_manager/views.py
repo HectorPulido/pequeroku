@@ -4,6 +4,8 @@ import logging
 from dataclasses import asdict
 from typing import cast
 
+import requests
+
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -230,6 +232,122 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             resp["X-Warning"] = warn_msg
         return resp
 
+    @action(detail=True, methods=["patch"])
+    def rename(self, request, pk=None):
+        """PATCH /api/containers/{pk}/rename/ — change the friendly name.
+
+        The name is a Django-side label only (the VM is identified by its
+        ``container_id``), so this is a pure metadata update and never touches
+        the vm-service. Ownership/visibility is enforced by get_object().
+        """
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
+        obj: Container = self.get_object()
+
+        raw_name = request.data.get("name")
+        name = raw_name.strip() if isinstance(raw_name, str) else ""
+        if not name:
+            return Response({"error": "name required"}, status=status.HTTP_400_BAD_REQUEST)
+        if len(name) > 128:
+            return Response(
+                {"error": "name too long (max 128 characters)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        obj.name = name
+        obj.save(update_fields=["name"])
+
+        audit_log_http(
+            request,
+            action="container.rename",
+            target_type="container",
+            target_id=obj.pk,
+            message="Container renamed",
+            metadata={"name": name},
+            success=True,
+        )
+
+        serializer = self.get_serializer(obj)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def duplicate(self, request, pk=None):
+        """POST /api/containers/{pk}/duplicate/ — clone a stopped container.
+
+        Disk-level duplicate: the vm-service copies the source VM's qcow2 overlay
+        into a new VM on the SAME node, so the copy boots with identical data.
+        Respects quota exactly like ``create`` and requires the source to be
+        stopped (copying a live qcow2 would corrupt it).
+        """
+        quota = self._check_quota(request)
+        if not quota:
+            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
+
+        source: Container = self.get_object()
+
+        ct = source.container_type
+        if ct is None:
+            return Response(
+                {"error": "Container has no type; cannot duplicate"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # A disk copy is only safe on a quiesced qcow2, so the source must be off.
+        # The node is the hard gate (409); this gives a clearer, earlier message.
+        if source.status == Container.Status.RUNNING:
+            return Response(
+                {"error": "Stop the container before duplicating"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not quota.allowed_types.filter(pk=ct.pk).exists():
+            return Response(
+                "Container type not allowed for this quota",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not quota.can_create_container(container_type=ct):
+            return Response(
+                "Not enough credits for selected type",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            c, warn_msg = orchestration.duplicate_container(
+                user=request.user, source=source, name=f"{source.name}-copy"
+            )
+        except orchestration.NoNodeAvailable:
+            return Response(
+                "No node available", status=status.HTTP_501_NOT_IMPLEMENTED
+            )
+        except requests.HTTPError as e:
+            # The node refused (e.g. the source is still running, or has no disk
+            # yet). Surface a clean 400 instead of a 500. No DB row was created.
+            return Response(
+                {"error": "Could not duplicate container", "detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        audit_log_http(
+            request,
+            action="container.duplicate",
+            target_type="container",
+            target_id=c.pk,
+            message="Container duplicated from source",
+            metadata={
+                "source_id": source.pk,
+                "source_container_id": source.container_id,
+                "new_container_id": c.container_id,
+            },
+            success=True,
+        )
+
+        data = dict(self.get_serializer(c).data)
+        if warn_msg:
+            data["warning"] = warn_msg
+        return Response(data, status=status.HTTP_201_CREATED)
+
     def destroy(self, request, *args, **kwargs):
         quota = self._check_quota(request)
         if not quota:
@@ -345,20 +463,6 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
             metadata={"remote_path": dest, "length": response.get("length", 0)},
             success=True,
         )
-        return Response(response)
-
-    @action(detail=True, methods=["get"])
-    def statistics(self, request, pk=None):
-        quota = self._check_quota(request)
-        if not quota:
-            return Response("No quota assigned", status=status.HTTP_403_FORBIDDEN)
-
-        obj: Container = self.get_object()
-        if obj.status != "running":
-            return Response({"error": "VM off"}, status=400)
-
-        service = self._get_service(obj)
-        response = service.statistics(str(obj.container_id))
         return Response(response)
 
     @action(detail=True, methods=["post"])

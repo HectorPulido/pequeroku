@@ -1,5 +1,4 @@
 import type { Container, ContainerType } from "@/types/container";
-import type { MetricData } from "@/types/metrics";
 import type { UserInfo } from "@/types/user";
 
 const INITIAL_CREDITS = 5;
@@ -210,73 +209,37 @@ export function mockPowerOffContainer(containerId: number): Promise<void> {
 	return Promise.resolve();
 }
 
-type MockMetricsState = {
-	cpu: number;
-	memory: number;
-	threads: number;
-};
-
-const metricsState = new Map<number, MockMetricsState>();
-
-function ensureMetricsState(containerId: number) {
-	if (metricsState.has(containerId)) return;
-	const container = mockContainers.find((item) => item.id === containerId);
-	const running = container?.status === "running";
-	const baseCpu = running ? 12 + Math.random() * 8 : Math.random() * 2;
-	const baseMemory = (() => {
-		const type = mockContainerTypes.find(
-			(item) => item.container_type_name === container?.container_type_name,
-		);
-		const maxMb = type?.memory_mb ?? 512;
-		return running ? maxMb * (0.55 + Math.random() * 0.25) : maxMb * 0.05;
-	})();
-	const threads = running ? 4 + Math.floor(Math.random() * 6) : 1;
-	metricsState.set(containerId, {
-		cpu: baseCpu,
-		memory: baseMemory,
-		threads,
-	});
-}
-
-function randomStep(value: number, min: number, max: number, delta: number) {
-	const next = value + (Math.random() * 2 - 1) * delta;
-	return Math.max(min, Math.min(max, next));
-}
-
-export function mockFetchContainerStatistics(containerId: number): Promise<MetricData> {
-	ensureMetricsState(containerId);
-	const state = metricsState.get(containerId);
-	if (!state) {
-		return Promise.resolve({
-			cpu: 0,
-			memory: 0,
-			threads: 0,
-			timestamp: new Date().toISOString(),
-		});
-	}
-
-	const container = mockContainers.find((item) => item.id === containerId);
-	const running = container?.status === "running";
-	const type = mockContainerTypes.find(
-		(item) => item.container_type_name === container?.container_type_name,
+export function mockRenameContainer(containerId: number, name: string): Promise<void> {
+	mockContainers = mockContainers.map((container) =>
+		container.id === containerId ? { ...container, name } : container,
 	);
-	const maxMb = type?.memory_mb ?? 512;
+	return Promise.resolve();
+}
 
-	state.cpu = running ? randomStep(state.cpu, 2, 85, 6) : randomStep(state.cpu, 0, 5, 2);
-	state.memory = running
-		? randomStep(state.memory, maxMb * 0.4, maxMb * 0.95, maxMb * 0.05)
-		: randomStep(state.memory, 0, maxMb * 0.1, maxMb * 0.02);
-	state.threads = running
-		? Math.max(
-				1,
-				Math.min(32, state.threads + (Math.random() > 0.7 ? (Math.random() > 0.5 ? 1 : -1) : 0)),
-			)
-		: 1;
-
-	return Promise.resolve({
-		cpu: Number.parseFloat(state.cpu.toFixed(2)),
-		memory: Number.parseFloat(state.memory.toFixed(2)),
-		threads: state.threads,
-		timestamp: new Date().toISOString(),
-	});
+export function mockDuplicateContainer(containerId: number): Promise<void> {
+	const source = mockContainers.find((item) => item.id === containerId);
+	if (!source) {
+		return Promise.reject(new Error("Container not found in mock mode"));
+	}
+	const type = mockContainerTypes.find(
+		(item) => item.container_type_name === source.container_type_name,
+	);
+	const cost = type?.credits_cost ?? 1;
+	if (INITIAL_CREDITS - creditsUsed < cost) {
+		return Promise.reject(new Error("No quota available in mock mode"));
+	}
+	const copy: Container = {
+		...source,
+		id: nextContainerId++,
+		name: `${source.name}-copy`,
+		created_at: new Date().toISOString(),
+		status: "running",
+		desired_state: "running",
+		status_label: "Running",
+		username: mockUser.username,
+	};
+	mockContainers = [...mockContainers, copy];
+	creditsUsed = Math.min(INITIAL_CREDITS, creditsUsed + cost);
+	refreshUserStats();
+	return Promise.resolve();
 }

@@ -7,7 +7,7 @@ import {
   deleteContainer,
   powerOnContainer,
   powerOffContainer,
-  fetchContainerStatistics,
+  renameContainer,
 } from '@/services/containers';
 import { loaderStore } from '@/lib/loaderStore';
 
@@ -71,32 +71,14 @@ test('container mutation helpers update mock state and keep loader idle', async 
     const stopped = afterPowerOff.find((item) => item.id === created!.id);
     assert.equal(stopped?.status, 'stopped');
 
+    await renameContainer(created!.id, 'renamed-vm');
+    const afterRename = await listContainers();
+    const renamed = afterRename.find((item) => item.id === created!.id);
+    assert.equal(renamed?.name, 'renamed-vm');
+
     await deleteContainer(created!.id);
     const finalContainers = await listContainers();
     assert.equal(finalContainers.length, baselineCount);
-  } finally {
-    loaderSpy.restore();
-  }
-});
-
-test('fetchContainerStatistics returns plausible metrics in mock mode', async () => {
-  const [container] = await listContainers();
-  assert.ok(container);
-
-  const loaderSpy = withLoaderSpy();
-  try {
-    const metrics = await fetchContainerStatistics(container!.id);
-    const parsedTimestamp = Date.parse(metrics.timestamp);
-
-    assert.equal(typeof metrics.cpu, 'number');
-    assert.equal(typeof metrics.memory, 'number');
-    assert.equal(typeof metrics.threads, 'number');
-    assert.ok(metrics.cpu >= 0 && metrics.cpu <= 100);
-    assert.ok(metrics.memory >= 0);
-    assert.ok(metrics.threads >= 0);
-    assert.ok(Number.isFinite(parsedTimestamp));
-    assert.equal(loaderSpy.counters.start, 0);
-    assert.equal(loaderSpy.counters.stop, 0);
   } finally {
     loaderSpy.restore();
   }

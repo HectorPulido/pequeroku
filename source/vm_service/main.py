@@ -22,7 +22,7 @@ from implementations import (
     Runner,
 )
 
-from routes import router_metrics, vms_router
+from routes import vms_router
 
 
 store = RedisStore(settings.REDIS_URL, settings.REDIS_PREFIX)
@@ -105,7 +105,6 @@ async def tty_ws(websocket: WebSocket, vm_id: str):
             pass
 
 
-app.include_router(router_metrics)
 app.include_router(vms_router)
 
 # ===== Entrypoint =====

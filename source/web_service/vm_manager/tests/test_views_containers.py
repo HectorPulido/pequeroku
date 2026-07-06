@@ -60,6 +60,10 @@ class FakeVMServiceClient:
         FakeVMServiceClient.created_counter += 1
         return {"id": f"vm-new-{FakeVMServiceClient.created_counter}"}
 
+    def duplicate_vm(self, vm_id, payload):
+        FakeVMServiceClient.created_counter += 1
+        return {"id": f"vm-dup-{FakeVMServiceClient.created_counter}"}
+
     def get_vms(self, vm_ids):
         # Return a dict keyed by id as expected by _index_vms_by_id
         return {str(i): {"id": str(i), "state": "running"} for i in vm_ids}
@@ -81,9 +85,6 @@ class FakeVMServiceClient:
         files = payload.get("files") or []
         # For text uploads, count files
         return {"length": len(files)}
-
-    def statistics(self, vm_id):
-        return {"cpu": 0.12, "mem": 123}
 
     def listening_ports(self, vm_id):
         return [
@@ -262,38 +263,105 @@ def test_upload_file_succeeds(monkeypatch):
     assert res.json()["length"] == 1
 
 
-def test_statistics_requires_running(monkeypatch):
+def test_rename_success(monkeypatch):
     patch_services(monkeypatch)
 
-    user = create_user("u6")
+    user = create_user("u8")
     create_quota(user=user)
     node = create_node()
-    c = create_container(user=user, node=node, status=Container.Status.STOPPED)
+    c = create_container(user=user, node=node)
 
     client = APIClient()
     client.force_authenticate(user=user)
 
-    url = reverse("container-statistics", kwargs={"pk": c.pk})
-    res = client.get(url)
+    url = reverse("container-rename", kwargs={"pk": c.pk})
+    res = client.patch(url, data={"name": "  new-name  "}, format="json")
+    assert res.status_code == 200, res.content
+    assert res.json()["name"] == "new-name"
+
+    c.refresh_from_db()
+    assert c.name == "new-name"
+
+
+def test_rename_requires_name(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("u9")
+    create_quota(user=user)
+    node = create_node()
+    c = create_container(user=user, node=node)
+    original_name = c.name
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-rename", kwargs={"pk": c.pk})
+    res = client.patch(url, data={"name": "   "}, format="json")
     assert res.status_code == 400
     assert "error" in res.json()
 
+    c.refresh_from_db()
+    assert c.name == original_name
 
-def test_statistics_success(monkeypatch):
+
+def test_duplicate_success(monkeypatch):
     patch_services(monkeypatch)
 
-    user = create_user("u7")
-    create_quota(user=user)
+    user = create_user("u10")
+    ct = create_container_type("small", memory_mb=1024, vcpus=1, disk_gib=5, credits_cost=1)
+    create_quota(user=user, credits=3, allowed_types=[ct])
     node = create_node()
-    c = create_container(user=user, node=node, status=Container.Status.RUNNING)
+    source = create_container(
+        user=user,
+        node=node,
+        container_type=ct,
+        status=Container.Status.STOPPED,
+        desired_state=Container.DesirableStatus.STOPPED,
+        name="original",
+    )
 
     client = APIClient()
     client.force_authenticate(user=user)
 
-    url = reverse("container-statistics", kwargs={"pk": c.pk})
-    res = client.get(url)
-    assert res.status_code == 200
-    assert "cpu" in res.json()
+    url = reverse("container-duplicate", kwargs={"pk": source.pk})
+    res = client.post(url)
+    assert res.status_code == 201, res.content
+    body = res.json()
+    assert body["name"] == "original-copy"
+
+    copy = Container.objects.get(name="original-copy")
+    assert copy.pk != source.pk
+    assert copy.container_id != source.container_id
+    assert copy.node_id == source.node_id
+    assert copy.container_type_id == ct.pk
+    # The clone carries the source disk, so the first-connect template is skipped.
+    assert copy.first_start is False
+
+
+def test_duplicate_refuses_running_source(monkeypatch):
+    patch_services(monkeypatch)
+
+    user = create_user("u11")
+    ct = create_container_type("small", memory_mb=1024, vcpus=1, disk_gib=5, credits_cost=1)
+    create_quota(user=user, credits=3, allowed_types=[ct])
+    node = create_node()
+    source = create_container(
+        user=user,
+        node=node,
+        container_type=ct,
+        status=Container.Status.RUNNING,
+        name="original",
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("container-duplicate", kwargs={"pk": source.pk})
+    res = client.post(url)
+    assert res.status_code == 400
+    assert "error" in res.json()
+    # No copy was created.
+    assert not Container.objects.filter(name="original-copy").exists()
 
 
 @pytest.mark.parametrize(

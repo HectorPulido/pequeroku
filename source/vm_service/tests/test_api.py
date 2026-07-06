@@ -750,55 +750,54 @@ def test_websocket_tty_echo(client: TestClient, store_and_runner):
         assert msg in ("REMOTE:hello", "REMOTE:hello\n")
 
 
-def test_metrics_endpoint(
-    client: TestClient, auth_header, store_and_runner, monkeypatch
-):
+def test_duplicate_endpoint_copies_disk(client, auth_header, store_and_runner):
     store, runner, base_dir = store_and_runner
 
-    vm_id = "metrics-vm"
-    wd = runner.workdir(vm_id)
-    vm = models.VMRecord(
-        id=vm_id,
-        state=models.VMState.running,
-        workdir=wd,
-        vcpus=1,
-        mem_mib=256,
-        disk_gib=5,
+    # A stopped source VM with a disk on disk.
+    src_id = "dup-src"
+    wd = runner.workdir(src_id)
+    with open(os.path.join(wd, "disk.qcow2"), "wb") as f:
+        f.write(b"QCOW2-FAKE-DISK-DELTA")
+    store.put(
+        models.VMRecord(
+            id=src_id,
+            state=models.VMState.stopped,
+            workdir=wd,
+            vcpus=1,
+            mem_mib=256,
+            disk_gib=5,
+        )
     )
-    store.put(vm)
 
-    pidfile = os.path.join(base_dir, "vms", vm_id, "qemu.pid")
-    os.makedirs(os.path.dirname(pidfile), exist_ok=True)
-    with open(pidfile, "w", encoding="utf-8") as f:
-        f.write(str(os.getpid()))
-
-    class FakePsutilProcess:
-        def __init__(self, pid):
-            self.pid = pid
-
-        def cpu_percent(self, interval=None):
-            return 12.5
-
-        def memory_info(self):
-            return types.SimpleNamespace(rss=10 * 1024 * 1024)
-
-        def num_threads(self):
-            return 7
-
-        def io_counters(self):
-            return types.SimpleNamespace(
-                _asdict=lambda: {"read_count": 1, "write_count": 2}
-            )
-
-    # Patch psutil.Process used by metrics
-    import psutil  # noqa: F401
-
-    monkeypatch.setattr("routes.metrics.psutil.Process", FakePsutilProcess)
-
-    r = client.get(f"/metrics/{vm_id}", headers=auth_header)
-    assert r.status_code == 200
+    r = client.post(
+        f"/vms/{src_id}/duplicate",
+        headers=auth_header,
+        json={"vcpus": 1, "mem_mib": 256, "disk_gib": 5, "start": True},
+    )
+    assert r.status_code == 201, r.text
     data = r.json()
-    assert data["cpu_percent"] == pytest.approx(12.5)
-    assert data["rss_mib"] == pytest.approx(10.0, rel=1e-3)
-    assert data["num_threads"] == 7
-    assert "io" in data and isinstance(data["io"], dict)
+    new_id = data["id"]
+    assert new_id != src_id
+
+    # The new VM's disk is a byte-for-byte copy of the source overlay.
+    new_disk = os.path.join(base_dir, "vms", new_id, "disk.qcow2")
+    assert os.path.exists(new_disk)
+    with open(new_disk, "rb") as f:
+        assert f.read() == b"QCOW2-FAKE-DISK-DELTA"
+    # And the source disk is untouched.
+    with open(os.path.join(wd, "disk.qcow2"), "rb") as f:
+        assert f.read() == b"QCOW2-FAKE-DISK-DELTA"
+
+
+def test_duplicate_endpoint_missing_disk(client, auth_header, store_and_runner):
+    store, runner, base_dir = store_and_runner
+
+    src_id = "dup-nodisk"
+    runner.workdir(src_id)  # workdir exists but no disk.qcow2
+
+    r = client.post(
+        f"/vms/{src_id}/duplicate",
+        headers=auth_header,
+        json={"vcpus": 1, "mem_mib": 256, "disk_gib": 5},
+    )
+    assert r.status_code == 404

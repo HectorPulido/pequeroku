@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import threading
 import uuid
 import shlex
@@ -16,6 +18,7 @@ from models import (
     VMState,
     VMCreate,
     VMEnsure,
+    VMDuplicate,
     VMOut,
     VMAction,
     VMRecord,
@@ -81,6 +84,53 @@ async def create_vm(req: VMCreate) -> VMOut:
     )
     store.put(vm)
     runner.start(vm)
+    return VMOut.from_record(vm, runner)
+
+
+@vms_router.post("/{vm_id}/duplicate", response_model=VMOut, status_code=201)
+async def duplicate_vm(vm_id: str, req: VMDuplicate) -> VMOut:
+    """Clone an existing VM into a brand-new one.
+
+    Copies the source VM's qcow2 overlay (``disk.qcow2``) verbatim into a fresh
+    workdir, so the duplicate boots with the exact same disk state. The copy is a
+    thin overlay that keeps backing the shared read-only golden image plus the
+    source's delta, so it is cheap and fast.
+
+    The source MUST be stopped: copying a qcow2 while a live QEMU is writing to
+    it would produce a corrupt/inconsistent image. ``store.get`` reconciles the
+    record (a VM is ``running`` only if its SSH port actually answers), so a
+    truly-stopped VM passes even if a stale pidfile is left on disk.
+    """
+    src_wd = runner.workdir(vm_id)
+    src_disk = os.path.join(src_wd, "disk.qcow2")
+    if not os.path.exists(src_disk):
+        raise HTTPException(404, "Source VM has no disk to duplicate")
+
+    src: VMRecord | None = None
+    try:
+        src = store.get(vm_id)
+    except KeyError:
+        src = None
+    if src is not None and src.state == VMState.running:
+        raise HTTPException(409, "Source VM must be stopped before duplicating")
+
+    new_id = str(uuid.uuid4())
+    new_wd = runner.workdir(new_id)
+    shutil.copy2(src_disk, os.path.join(new_wd, "disk.qcow2"))
+
+    vm = VMRecord(
+        id=new_id,
+        state=VMState.provisioning,
+        workdir=new_wd,
+        vcpus=req.vcpus,
+        mem_mib=req.mem_mib,
+        disk_gib=req.disk_gib,
+    )
+    store.put(vm)
+    if req.start:
+        runner.start(vm)
+    else:
+        store.set_status(vm, VMState.stopped)
     return VMOut.from_record(vm, runner)
 
 

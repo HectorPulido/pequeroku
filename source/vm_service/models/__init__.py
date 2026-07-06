@@ -3,6 +3,7 @@ from .vms import (
     VMState,
     VMCreate,
     VMEnsure,
+    VMDuplicate,
     VMAction,
     VMRecord,
     VMOut,
@@ -31,13 +32,12 @@ from .control import (
     VMProxyResponse,
 )
 
-from .metrics import MachineMetrics
-
 __all__ = [
     "VMProc",
     "VMState",
     "VMCreate",
     "VMEnsure",
+    "VMDuplicate",
     "VMAction",
     "VMRecord",
     "VMOut",
@@ -51,7 +51,6 @@ __all__ = [
     "VMPath",
     "VMPaths",
     "VMUploadFiles",
-    "MachineMetrics",
     "VMShResponse",
     "StartProcessRequest",
     "ProcessStatusRequest",

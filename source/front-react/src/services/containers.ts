@@ -2,15 +2,15 @@ import { USE_MOCKS } from "@/config";
 import {
 	mockCreateContainer,
 	mockDeleteContainer,
-	mockFetchContainerStatistics,
+	mockDuplicateContainer,
 	mockFetchContainerTypes,
 	mockListContainers,
 	mockPowerOffContainer,
 	mockPowerOnContainer,
+	mockRenameContainer,
 } from "@/mocks/dashboard";
 import { makeApi } from "@/services/api";
 import type { Container, ContainerType } from "@/types/container";
-import type { MetricData } from "@/types/metrics";
 
 const api = USE_MOCKS ? null : makeApi("/api");
 
@@ -112,50 +112,29 @@ export async function powerOffContainer(
 	});
 }
 
-type FetchStatsOptions = CommonOptions & { suppressLoader?: boolean };
-
-export async function fetchContainerStatistics(
-	containerId: number,
-	options: FetchStatsOptions = {},
-): Promise<MetricData> {
+export async function renameContainer(containerId: number, name: string) {
 	if (USE_MOCKS) {
-		return mockFetchContainerStatistics(containerId);
+		await mockRenameContainer(containerId, name);
+		return;
 	}
 	if (!api) {
 		throw new Error("API client unavailable");
 	}
-	const { signal, suppressLoader = true } = options;
-	const data = await api<{
-		cpu_percent?: number;
-		rss_mib?: number;
-		rss_bytes?: number;
-		num_threads?: number;
-		ts?: number;
-	}>(`/containers/${containerId}/statistics/`, {
-		method: "GET",
-		signal,
-		noLoader: suppressLoader,
-		noAuthRedirect: true,
-		noAuthAlert: true,
+	return api(`/containers/${containerId}/rename/`, {
+		method: "PATCH",
+		body: JSON.stringify({ name }),
 	});
+}
 
-	const cpu = Number.isFinite(data?.cpu_percent) ? Number(data?.cpu_percent) : 0;
-	const memoryMiB =
-		typeof data?.rss_mib === "number"
-			? data.rss_mib
-			: typeof data?.rss_bytes === "number"
-				? data.rss_bytes / (1024 * 1024)
-				: 0;
-	const threads = Number.isFinite(data?.num_threads) ? Number(data?.num_threads) : 0;
-	const timestamp =
-		typeof data?.ts === "number"
-			? new Date(data.ts * 1000).toISOString()
-			: new Date().toISOString();
-
-	return {
-		cpu,
-		memory: memoryMiB,
-		threads,
-		timestamp,
-	};
+export async function duplicateContainer(containerId: number) {
+	if (USE_MOCKS) {
+		await mockDuplicateContainer(containerId);
+		return;
+	}
+	if (!api) {
+		throw new Error("API client unavailable");
+	}
+	return api(`/containers/${containerId}/duplicate/`, {
+		method: "POST",
+	});
 }
