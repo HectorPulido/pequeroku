@@ -231,7 +231,9 @@ def test_sse_request_returns_streaming_response():
 
 def test_non_sse_request_uses_buffered_path():
     # A normal (HTML) request must NOT be streamed — it needs the rewrite pass.
-    req = RequestFactory().get("/api/containers/15/preview/8000/", HTTP_ACCEPT="text/html")
+    req = RequestFactory().get(
+        "/api/containers/15/preview/8000/", HTTP_ACCEPT="text/html"
+    )
     env = _env(b"<html><head></head><body></body></html>")
     resp = build_preview_response(req, _container(), "8000", "", _service(env))
     assert not isinstance(resp, StreamingHttpResponse)
@@ -260,7 +262,7 @@ def test_build_preview_response_reroots_self_origin_with_forwarded_proto():
         "/api/containers/15/preview/7860/", HTTP_X_FORWARDED_PROTO="https"
     )
     env = _env(
-        b'<html><head></head><body>'
+        b"<html><head></head><body>"
         b'<script>window.gradio_config={"root":"http://127.0.0.1:7860"};</script>'
         b"</body></html>",
     )
@@ -281,7 +283,7 @@ def test_build_preview_response_cf_visitor_overrides_clobbered_proto():
         HTTP_CF_VISITOR='{"scheme":"https"}',
     )
     env = _env(
-        b'<html><head></head><body>'
+        b"<html><head></head><body>"
         b'<script>window.gradio_config={"root":"http://127.0.0.1:7860"};</script>'
         b"</body></html>",
     )
