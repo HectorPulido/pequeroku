@@ -1,0 +1,23 @@
+import { chromium } from "playwright";
+const measure = () => {
+  const r = (el) => { if(!el) return null; const b=el.getBoundingClientRect(); return {top:Math.round(b.top),bottom:Math.round(b.bottom),h:Math.round(b.height)}; };
+  const ea = document.querySelector("div.min-h-0");
+  const monaco = document.querySelector(".monaco-editor");
+  const kids = ea ? Array.from(ea.children).map(c=>({cls:(c.className||"").toString().slice(0,26),...r(c)})) : [];
+  const sb = Array.from(document.querySelectorAll("div")).find(d=>/Ln \d+, Col/.test(d.textContent||"") && d.getBoundingClientRect().height<60);
+  return { editorArea:r(ea), children:kids, monaco:r(monaco), overflow: monaco&&ea? r(monaco).bottom>r(ea).bottom+1:null, statusBarBox: r(sb) };
+};
+const b = await chromium.launch({executablePath:"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",headless:true});
+const p = await b.newPage({viewport:{width:1500,height:1000}});
+await p.goto("http://localhost:5209/ide?containerId=1",{waitUntil:"domcontentloaded"});
+await p.waitForSelector('button[aria-label="Resize console"]',{timeout:15000});
+await p.waitForTimeout(1500);
+console.log("BEFORE:", JSON.stringify(await p.evaluate(measure)));
+const box = await p.locator('button[aria-label="Resize console"]').boundingBox();
+const x=box.x+box.width/2, y=box.y+box.height/2;
+await p.mouse.move(x,y); await p.mouse.down();
+for (const ty of [y-200,y-500,200,90]) await p.mouse.move(x,ty,{steps:8});
+await p.mouse.up(); await p.waitForTimeout(500);
+console.log("AFTER :", JSON.stringify(await p.evaluate(measure)));
+await p.screenshot({path:"_verify.png"});
+await b.close();

@@ -26,8 +26,16 @@ agent starts with context instead of guessing.
 | `process_status` | status + output of a background process |
 | `write_files` | batch-write files to a container |
 | `read_path` | file → contents; dir → listing |
-| `get_preview` | listening ports + preview paths |
+| `get_preview` | listening ports + `preview_url`s; with `port`/`path` → fetch the live app response |
 | `destroy_container` | destroy a container (requires `confirm=true`) |
+
+**Preview access.** The preview endpoint (`{PEQUEROKU_API_URL}/api/containers/<id>/preview/<port>/<path>`)
+authenticates with your platform API key — no login session needed. `get_preview`
+uses it for you when you pass a `port`. To reach it directly (or hand a browser a
+link), present the key as an `Authorization: Bearer pk_...` header **or** a
+`?__pk_token=pk_...` query param. It is owner-only (you only see your own
+containers), and a query-param hit sets a short-lived, path-scoped cookie so an
+embedded page's assets load too.
 
 ## Prompts (3)
 

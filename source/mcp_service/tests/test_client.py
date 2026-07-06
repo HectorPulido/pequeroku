@@ -129,3 +129,54 @@ def test_destroy_calls_delete():
     make_client(handler).destroy_container(5)
     assert calls["method"] == "DELETE"
     assert calls["url"].endswith("/api/v1/containers/5/")
+
+
+def test_get_preview_adds_absolute_preview_url():
+    def handler(request):
+        assert str(request.url).endswith("/api/v1/containers/7/ports/")
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "port": 8000,
+                    "process": "python3",
+                    "preview_path": "/api/containers/7/preview/8000/",
+                },
+                {"port": 5173, "process": "node"},  # no preview_path → derived
+            ],
+        )
+
+    ports = make_client(handler).get_preview(7)
+    assert ports[0]["preview_url"] == "http://web:8000/api/containers/7/preview/8000/"
+    assert ports[1]["preview_url"] == "http://web:8000/api/containers/7/preview/5173/"
+
+
+def test_fetch_preview_returns_live_response_with_token():
+    def handler(request):
+        # Hits the preview endpoint (NOT /api/v1) with the caller's bearer token.
+        assert str(request.url) == "http://web:8000/api/containers/7/preview/8000/health"
+        assert request.headers["authorization"] == "Bearer pk_test_secret"
+        return httpx.Response(
+            200, text='{"ok": true}', headers={"content-type": "application/json"}
+        )
+
+    out = make_client(handler).fetch_preview(7, 8000, "/health")
+    assert out["status"] == 200
+    assert out["content_type"] == "application/json"
+    assert out["body"] == '{"ok": true}'
+    assert out["url"].endswith("/api/containers/7/preview/8000/health")
+
+
+def test_fetch_preview_normalizes_path_and_summarizes_binary():
+    seen = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200, content=b"\x89PNG" + b"\x00" * 30, headers={"content-type": "image/png"}
+        )
+
+    out = make_client(handler).fetch_preview(7, 8000, "logo.png")  # no leading slash
+    assert seen["url"] == "http://web:8000/api/containers/7/preview/8000/logo.png"
+    assert out["content_type"] == "image/png"
+    assert "bytes of image/png" in out["body"]  # binary summarized, not decoded

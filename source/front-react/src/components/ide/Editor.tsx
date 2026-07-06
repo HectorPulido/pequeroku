@@ -123,8 +123,12 @@ const MonacoEditor: React.FC<EditorProps> = ({
 		instance.onDidChangeCursorPosition(emitPosition);
 	};
 
+		// flex-1 + min-h-0 (NOT h-full): the editor shares the editor-area column with
+		// the tabs and status bar. `h-full` forced Monaco to 100% of that column, so
+		// when the console grew and the column shrank, Monaco overflowed and clipped
+		// the status bar. flex-1/min-h-0 sizes it to its real remaining slot instead.
 	return (
-		<div className="flex-1 h-full">
+		<div className="flex-1 min-h-0">
 			<Editor
 				height="100%"
 				defaultLanguage="plaintext"

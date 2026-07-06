@@ -5,6 +5,7 @@ import LoaderOverlay from "@/components/LoaderOverlay";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AiStudio from "./pages/AiStudio";
 import ApiKeys from "./pages/ApiKeys";
+import Browser from "./pages/Browser";
 import Dashboard from "./pages/Dashboard";
 import IDE from "./pages/IDE";
 import Login from "./pages/Login";
@@ -54,6 +55,14 @@ function App() {
 					element={
 						<ProtectedRoute>
 							<AiStudio />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/browser"
+					element={
+						<ProtectedRoute>
+							<Browser />
 						</ProtectedRoute>
 					}
 				/>

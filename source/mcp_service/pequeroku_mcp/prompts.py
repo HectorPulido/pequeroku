@@ -50,9 +50,13 @@ Each running container/run holds credits equal to its type's cost; a \
 To serve an app, bind it to `0.0.0.0` (not just 127.0.0.1) on a high, unprivileged \
 port, and start it detached so the command returns — e.g. \
 `container_exec(..., background=true)`, or `nohup ... &` / `setsid -f ...`. Then \
-call `get_preview` to see which ports are listening and their preview paths. \
-Long-running processes started with `background=true` return a `process_id` you \
-poll with `process_status`.
+call `get_preview` to list the listening ports, each with a ready-to-use \
+`preview_url`. To verify the app end-to-end, call `get_preview(container_id, port, \
+path)`: it fetches the LIVE response (status + body) using your API key, so you \
+see what the app actually serves, not just that a port is open. To hand a human a \
+link, append `?__pk_token=<your key>` to the `preview_url` (owner-only; the key \
+also works as an `Authorization: Bearer` header). Long-running processes started \
+with `background=true` return a `process_id` you poll with `process_status`.
 
 # Conventions
 - Tool outputs are truncated to keep your context bounded; a `truncated` flag tells \
@@ -90,8 +94,9 @@ need to choose a flavor with enough resources).
 `container_exec`.
 3. Start the server in the background bound to `0.0.0.0` on a high port \
 (`container_exec(..., background=true)`); keep the returned process_id.
-4. Verify it is up with `process_status` and `get_preview`, then report the \
-listening port(s) and preview path.
+4. Verify it is up with `process_status`, then `get_preview(container_id, port)` to \
+fetch the live response and confirm it actually serves. Report the listening \
+port(s) and the `preview_url`.
 If something fails, read logs/files and fix it before reporting back.
 
 App to deploy:

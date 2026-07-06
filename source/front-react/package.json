@@ -9,6 +9,8 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:mock": "vite --mode mock",
+    "test:e2e": "node e2e/console-resize.mjs",
     "build": "pnpm run build:ts && pnpm run build:vite",
     "build:ts": "tsc -b",
     "build:vite": "vite build",
@@ -52,6 +54,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
+    "playwright": "^1.61.1",
     "tailwindcss": "^4.1.16",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.45.0",

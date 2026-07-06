@@ -5,9 +5,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import ChatComposer from "@/components/ai/ChatComposer";
 import ChatThread from "@/components/ai/ChatThread";
 import CommandsPanel from "@/components/ai/CommandsPanel";
-import PreviewBrowser from "@/components/ai/PreviewBrowser";
 import Header from "@/components/Header";
 import ResizablePanel from "@/components/ide/ResizablePanel";
+import BrowserDock from "@/components/preview/BrowserDock";
 import { useAiChatSession } from "@/hooks/useAiChatSession";
 import { fetchListeningPorts } from "@/services/ide/actions";
 
@@ -146,9 +146,10 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 		[containerId, persistPanel],
 	);
 
-	// Poll for listening ports only while the browser is collapsed; once it is open
-	// PreviewBrowser owns detection. Gated on a live chat connection as a cheap
-	// "container reachable" signal.
+	// Poll for listening ports only while the browser is collapsed (to pulse the
+	// Browser button when an app appears); once open, the embedded browser owns
+	// detection. Gated on a live chat connection as a cheap "container reachable"
+	// signal.
 	useEffect(() => {
 		if (rightOpen || connectionState !== "connected") return;
 		let cancelled = false;
@@ -212,7 +213,30 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 				)}
 
 				<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-					<div className="flex items-center justify-end border-b border-gray-800 px-4 py-2">
+					<div className="flex items-center justify-end gap-2 border-b border-gray-800 px-4 py-2">
+						<button
+							type="button"
+							className={`relative inline-flex items-center gap-1 md:gap-2 rounded border px-3 py-1.5 text-xs transition hover:border-indigo-500 hover:text-white ${
+								rightOpen
+									? "border-indigo-500 text-white"
+									: hasDetectedPorts
+										? "border-emerald-500/60 text-emerald-300"
+										: "border-gray-700 text-gray-200"
+							}`}
+							onClick={() => toggleRight(!rightOpen)}
+							aria-label="Toggle browser"
+							title={
+								!rightOpen && hasDetectedPorts
+									? "Browser — app detected, click to preview"
+									: "Toggle embedded browser"
+							}
+						>
+							<Globe className="h-4 w-4" />
+							<span className="hidden md:inline">Browser</span>
+							{!rightOpen && hasDetectedPorts ? (
+								<span className="absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+							) : null}
+						</button>
 						<button
 							type="button"
 							className="inline-flex items-center gap-1 md:gap-2 rounded border border-gray-700 px-3 py-1.5 text-xs text-gray-200 transition hover:border-indigo-500 hover:text-white"
@@ -247,26 +271,12 @@ const AiStudioLayout: React.FC<{ containerId: string; showHeader: boolean }> = (
 					</div>
 				</div>
 
-				{rightOpen ? (
-					<ResizablePanel
-						side="right"
-						storageKey={`ai:${containerId}:right:px`}
-						defaultWidth={420}
-						minWidth={280}
-						maxWidth={760}
-						isCollapsed={false}
-					>
-						<PreviewBrowser containerId={containerId} onCollapse={() => toggleRight(false)} />
-					</ResizablePanel>
-				) : (
-					<CollapsedRail
-						side="right"
-						label="Browser"
-						icon={<Globe className="h-4 w-4" />}
-						onExpand={() => toggleRight(true)}
-						pulse={hasDetectedPorts}
-					/>
-				)}
+				<BrowserDock
+					containerId={containerId}
+					open={rightOpen}
+					onClose={() => toggleRight(false)}
+					storageKey={`ai:${containerId}:right:px`}
+				/>
 			</div>
 		</div>
 	);

@@ -1,15 +1,12 @@
-import { NavArrowRight, OpenNewWindow, RefreshDouble } from "iconoir-react";
+import { Collapse, Expand, Globe, OpenNewWindow, RefreshDouble, Xmark } from "iconoir-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import PortSelector from "@/components/ide/PortSelector";
 import { usePreviewPorts } from "@/hooks/usePreviewPorts";
 import { alertStore } from "@/lib/alertStore";
+import { BROWSER_DOCK_MESSAGE, isEmbeddedInDock, postBrowserDockMessage } from "@/lib/browserDock";
 import { fetchRunConfig, pollPreview } from "@/services/ide/actions";
-
-interface PreviewBrowserProps {
-	containerId: string;
-	onCollapse: () => void;
-}
 
 const normalizePath = (raw: string): string => {
 	const trimmed = raw.trim();
@@ -17,30 +14,54 @@ const normalizePath = (raw: string): string => {
 	return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 };
 
-const PreviewBrowser: React.FC<PreviewBrowserProps> = ({ containerId, onCollapse }) => {
-	const [configPort, setConfigPort] = useState<number | null>(null);
+const parsePortParam = (raw: string | null): number | null => {
+	if (!raw) return null;
+	const value = Number.parseInt(raw, 10);
+	return Number.isFinite(value) ? value : null;
+};
+
+/**
+ * Standalone embedded browser. Rendered at `/browser?containerId=…` and embedded
+ * by the IDE and AI studio through an iframe (`BrowserDock`), so both hosts get
+ * the exact same preview UI. When embedded it exposes expand (fullscreen) and
+ * close controls that drive the host panel via `postMessage`; opened directly in
+ * a tab it is already fullscreen, so those controls are hidden.
+ */
+const BrowserPage: React.FC = () => {
+	const [searchParams] = useSearchParams();
+	const containerId = (searchParams.get("containerId") ?? "").trim();
+	const initialPort = parsePortParam(searchParams.get("port"));
+	const initialPath = normalizePath(searchParams.get("path") ?? "/");
+
+	const [configPort, setConfigPort] = useState<number | null>(initialPort);
 	const { selectedPort, setSelectedPort, portOptions, rescanPorts } = usePreviewPorts(
 		containerId,
 		configPort,
 	);
-	const [path, setPath] = useState("/");
+	const [path, setPath] = useState(initialPath);
 	const [targetUrl, setTargetUrl] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [expanded, setExpanded] = useState(false);
 	const autoLoadedRef = useRef(false);
+	const embedded = isEmbeddedInDock();
 
+	// Load the run config port (the preferred default) and kick off port detection.
+	// initialPort is derived from the (stable) query string, so re-run on container only.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset-on-container-change
 	useEffect(() => {
+		if (!containerId) return;
 		let cancelled = false;
 		autoLoadedRef.current = false;
-		setConfigPort(null);
+		setConfigPort(initialPort);
 		setTargetUrl(null);
 		setError(null);
 		void fetchRunConfig(containerId)
 			.then(({ port }) => {
-				if (!cancelled) setConfigPort(port);
+				if (!cancelled) setConfigPort(port ?? initialPort);
 			})
 			.catch(() => {
-				if (!cancelled) setConfigPort(null);
+				if (!cancelled) setConfigPort(initialPort);
 			});
 		void rescanPorts();
 		return () => {
@@ -82,6 +103,7 @@ const PreviewBrowser: React.FC<PreviewBrowserProps> = ({ containerId, onCollapse
 		[containerId, path, selectedPort],
 	);
 
+	// Auto-load once a port is known so the app shows up without a manual "Go".
 	useEffect(() => {
 		if (!selectedPort || autoLoadedRef.current) return;
 		autoLoadedRef.current = true;
@@ -96,21 +118,53 @@ const PreviewBrowser: React.FC<PreviewBrowserProps> = ({ containerId, onCollapse
 		window.open(targetUrl, "_blank", "noopener,noreferrer");
 	}, [targetUrl]);
 
+	const toggleExpand = useCallback(() => {
+		setExpanded((prev) => {
+			const next = !prev;
+			postBrowserDockMessage({ source: BROWSER_DOCK_MESSAGE, type: "expand", expanded: next });
+			return next;
+		});
+	}, []);
+
+	const close = useCallback(() => {
+		postBrowserDockMessage({ source: BROWSER_DOCK_MESSAGE, type: "close" });
+	}, []);
+
+	if (!containerId) {
+		return (
+			<div className="flex h-screen items-center justify-center bg-[#0B1220] px-6 text-sm text-gray-300">
+				Missing <code className="mx-1 rounded bg-[#111827] px-1">containerId</code> query parameter.
+			</div>
+		);
+	}
+
 	return (
-		<div className="flex h-full flex-col bg-[#0B1220]">
+		<div className="flex h-screen flex-col bg-[#0B1220]">
 			<div className="flex items-center gap-2 border-b border-gray-800 px-3 py-2.5">
-				<button
-					type="button"
-					onClick={onCollapse}
-					title="Collapse panel"
-					aria-label="Collapse panel"
-					className="rounded border border-gray-800 p-1 text-gray-400 transition hover:border-indigo-500 hover:text-white"
-				>
-					<NavArrowRight className="h-4 w-4" />
-				</button>
+				<Globe className="h-4 w-4 text-gray-400" />
 				<span className="text-sm font-semibold text-white">Browser</span>
-				{selectedPort ? (
-					<span className="ml-auto text-[11px] text-gray-500">:{selectedPort}</span>
+				{selectedPort ? <span className="text-[11px] text-gray-500">:{selectedPort}</span> : null}
+				{embedded ? (
+					<div className="ml-auto flex items-center gap-1.5">
+						<button
+							type="button"
+							onClick={toggleExpand}
+							title={expanded ? "Restore" : "Expand"}
+							aria-label={expanded ? "Restore preview" : "Expand preview"}
+							className="rounded border border-gray-800 p-1 text-gray-400 transition hover:border-indigo-500 hover:text-white"
+						>
+							{expanded ? <Collapse className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
+						</button>
+						<button
+							type="button"
+							onClick={close}
+							title="Close"
+							aria-label="Close preview"
+							className="rounded border border-gray-800 p-1 text-gray-400 transition hover:border-rose-500 hover:text-white"
+						>
+							<Xmark className="h-4 w-4" />
+						</button>
+					</div>
 				) : null}
 			</div>
 
@@ -199,4 +253,4 @@ const PreviewBrowser: React.FC<PreviewBrowserProps> = ({ containerId, onCollapse
 	);
 };
 
-export default PreviewBrowser;
+export default BrowserPage;

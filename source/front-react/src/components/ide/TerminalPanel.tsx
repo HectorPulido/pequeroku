@@ -29,6 +29,21 @@ const ensureViewport = (terminal: Terminal) => {
 	}
 };
 
+const MIN_CONSOLE_PX = 180;
+const MAX_CONSOLE_PX = 640;
+// Reserve a small slab for the editor so the console can never take the whole
+// column (which would leave the editor at 0). The editor itself now lays out
+// correctly at any height (see Editor.tsx: flex-1/min-h-0), so this only needs to
+// guarantee the tabs + status bar + a few lines stay visible.
+const MIN_EDITOR_PX = 140;
+
+/** Largest the console may grow without covering the editor, given its container. */
+const consoleMaxFor = (panel: HTMLElement | null): number => {
+	const parent = panel?.parentElement;
+	if (!parent || parent.clientHeight <= 0) return MAX_CONSOLE_PX;
+	return Math.max(MIN_CONSOLE_PX, Math.min(MAX_CONSOLE_PX, parent.clientHeight - MIN_EDITOR_PX));
+};
+
 const TERMINAL_THEMES: Record<Theme, ITheme> = {
 	dark: {
 		background: "#0B1220",
@@ -318,11 +333,28 @@ const TerminalPanel: React.FC<{
 			if (!isResizing) return;
 			const { startY, startHeight } = dragSnapshot.current;
 			const delta = startY - event.clientY;
-			const newHeight = Math.max(180, Math.min(640, startHeight + delta));
+			const max = consoleMaxFor(containerRef.current);
+			const newHeight = Math.max(MIN_CONSOLE_PX, Math.min(max, startHeight + delta));
 			setHeight(newHeight);
 		},
 		[isResizing],
 	);
+
+	// Keep the console from covering the editor when the viewport shrinks (short
+	// windows, the embedded IDE inside the dashboard modal, orientation changes).
+	useEffect(() => {
+		const clampToViewport = () => {
+			const max = consoleMaxFor(containerRef.current);
+			setHeight((current) => (current > max ? max : current));
+		};
+		clampToViewport();
+		window.addEventListener("resize", clampToViewport);
+		window.addEventListener("terminal-resize", clampToViewport);
+		return () => {
+			window.removeEventListener("resize", clampToViewport);
+			window.removeEventListener("terminal-resize", clampToViewport);
+		};
+	}, []);
 
 	const handleStopDrag = useCallback(() => {
 		if (!isResizing) return;
@@ -458,7 +490,13 @@ const TerminalPanel: React.FC<{
 		};
 	}, [showShortcutMenu]);
 
-	const containerStyle = isCollapsed ? {} : { height: `${height}px` };
+	// height sets the target; maxHeight is a hard CSS cap the browser enforces on
+	// every layout pass (100% = the editor column), so the console can never cover
+	// the editor even if a JS measurement is momentarily stale/wrong. Reserves
+	// MIN_EDITOR_PX for Monaco + tabs + status bar above it.
+	const containerStyle: React.CSSProperties = isCollapsed
+		? {}
+		: { height: `${height}px`, maxHeight: `calc(100% - ${MIN_EDITOR_PX}px)` };
 
 	return (
 		<div
@@ -499,7 +537,8 @@ const TerminalPanel: React.FC<{
 					}
 					if (event.key === "ArrowUp" || event.key === "ArrowDown") {
 						const delta = event.key === "ArrowUp" ? step : -step;
-						const next = Math.max(180, Math.min(640, height + delta));
+						const max = consoleMaxFor(containerRef.current);
+						const next = Math.max(MIN_CONSOLE_PX, Math.min(max, height + delta));
 						setHeight(next);
 						if (typeof window !== "undefined") {
 							window.localStorage.setItem(storageKey, String(next));

@@ -9,9 +9,12 @@ from rest_framework.test import APIRequestFactory
 
 from vm_manager import preview_proxy
 from vm_manager.preview_proxy import (
+    PREVIEW_TOKEN_COOKIE,
+    PREVIEW_TOKEN_QUERY,
     CSRFExemptSessionAuthentication,
     PreviewPassthroughRenderer,
     _rewrite_html,
+    _strip_preview_token,
     build_preview_response,
 )
 
@@ -387,3 +390,57 @@ def test_build_preview_response_reroots_location_redirect():
     resp = build_preview_response(req, _container(), "8000", "old", _service(env))
     assert resp.status_code == 302
     assert resp["Location"] == "/api/containers/15/preview/8000/new"
+
+
+# --- preview token (query stripping + bootstrap cookie) --------------------- #
+def test_strip_preview_token_removes_only_our_param():
+    # Our namespaced token is dropped; the guest app's own params pass through.
+    out = _strip_preview_token(f"a=1&{PREVIEW_TOKEN_QUERY}=pk_x_y&b=2")
+    assert PREVIEW_TOKEN_QUERY not in out
+    assert "a=1" in out and "b=2" in out
+    # No token param → returned unchanged (fast path).
+    assert _strip_preview_token("a=1&b=2") == "a=1&b=2"
+    assert _strip_preview_token("") == ""
+
+
+def test_query_token_never_forwarded_to_guest_app():
+    # The API key in ?__pk_token must NOT reach the (untrusted) guest app.
+    captured = {}
+
+    def fake_proxy(vm_id, payload):
+        captured["path"] = payload["path"]
+        return _env(b"<html></html>")
+
+    req = RequestFactory().get(
+        f"/api/containers/15/preview/8000/?{PREVIEW_TOKEN_QUERY}=pk_x_y&keep=1"
+    )
+    build_preview_response(
+        req, _container(), "8000", "", types.SimpleNamespace(proxy=fake_proxy)
+    )
+    assert "pk_x_y" not in captured["path"]
+    assert PREVIEW_TOKEN_QUERY not in captured["path"]
+    assert "keep=1" in captured["path"]  # the app's own params survive
+
+
+def test_query_token_auth_sets_pathscoped_bootstrap_cookie():
+    # After a query-param token hit, we drop a path-scoped HttpOnly cookie so the
+    # embedded page's subresources (which carry no query string) authenticate too.
+    req = RequestFactory().get(f"/api/containers/15/preview/8000/?{PREVIEW_TOKEN_QUERY}=pk_x_y")
+    req._preview_query_token = "pk_x_y"  # set by PreviewTokenAuthentication
+    resp = build_preview_response(
+        req, _container(), "8000", "", _service(_env(b"<html></html>"))
+    )
+    cookie = resp.cookies[PREVIEW_TOKEN_COOKIE]
+    assert cookie.value == "pk_x_y"
+    assert cookie["path"] == "/api/containers/15/preview/8000/"
+    assert cookie["httponly"] is True
+    assert cookie["samesite"].lower() == "lax"
+
+
+def test_no_bootstrap_cookie_without_query_token():
+    # Session-authed (IDE) hits have no query token → no cookie is set.
+    req = RequestFactory().get("/api/containers/15/preview/8000/")
+    resp = build_preview_response(
+        req, _container(), "8000", "", _service(_env(b"<html></html>"))
+    )
+    assert PREVIEW_TOKEN_COOKIE not in resp.cookies

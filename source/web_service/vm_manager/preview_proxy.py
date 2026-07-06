@@ -13,9 +13,11 @@ ES modules and JSON before.
 
 import base64
 import re
+from urllib.parse import parse_qsl, urlencode
 
 import httpx
 from django.http import HttpResponse, StreamingHttpResponse
+from rest_framework import authentication
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.renderers import BaseRenderer
 
@@ -51,6 +53,101 @@ class CSRFExemptSessionAuthentication(SessionAuthentication):
 
     def enforce_csrf(self, request):  # noqa: D401 - intentional no-op
         return
+
+
+# Preview token auth: agents (and browser embeds that can't set request headers)
+# present their platform API key to the SAME preview URL the IDE uses. It travels
+# as ``Authorization: Bearer pk_...``, the ``__pk_token`` query param, or the
+# short-lived ``__pk_preview_token`` cookie we set after a query-param hit so an
+# embedded page's subresources authenticate too. The query param is namespaced
+# (``__pk_``) so it won't collide with the guest app's own params, and it is
+# STRIPPED before the request is forwarded upstream (the guest app must never see
+# the key). Header/cookie tokens are never forwarded either (see the header
+# allowlist / server-side cookie jar).
+PREVIEW_TOKEN_QUERY = "__pk_token"
+PREVIEW_TOKEN_COOKIE = "__pk_preview_token"
+PREVIEW_TOKEN_TTL = 3600  # seconds the bootstrap cookie stays valid
+
+
+class PreviewTokenAuthentication(authentication.BaseAuthentication):
+    """Authenticate the preview with a platform API key (header / query / cookie).
+
+    Registered BEFORE session auth on the preview view so scripts and agents can
+    reach the preview without a login cookie. Any failure returns ``None`` (it
+    never raises) so DRF falls through to session auth — the IDE keeps working and
+    a bad/expired token just yields a clean 401. Ownership is still enforced by the
+    view's ``get_object()``: the key owner only ever sees their own containers.
+    """
+
+    def authenticate(self, request):
+        raw, via = self._extract(request)
+        if not raw:
+            return None
+        # Lazy import: platform_api imports vm_manager, so importing it at module
+        # load could race Django's app registry.
+        from platform_api.models import APIKey
+
+        key = self._verify(APIKey, raw)
+        if key is None or not key.has_scope(APIKey.SCOPE_READ):
+            return None
+        if via == "query":
+            # Flag it so the view drops a path-scoped cookie for the subresources
+            # (which load via the injected <base> and carry no query string).
+            request._preview_query_token = raw
+        return (key.user, key)
+
+    def authenticate_header(self, request):
+        return "Bearer"
+
+    @staticmethod
+    def _extract(request):
+        parts = authentication.get_authorization_header(request).split()
+        if len(parts) == 2 and parts[0].lower() == b"bearer":
+            token = parts[1].decode("latin-1")
+            if token.startswith("pk_"):
+                return token, "header"
+        params = getattr(request, "query_params", None)
+        if params is None:
+            params = request.GET
+        query_token = params.get(PREVIEW_TOKEN_QUERY)
+        if query_token and query_token.startswith("pk_"):
+            return query_token, "query"
+        cookie_token = request.COOKIES.get(PREVIEW_TOKEN_COOKIE)
+        if cookie_token and cookie_token.startswith("pk_"):
+            return cookie_token, "cookie"
+        return None, None
+
+    @staticmethod
+    def _verify(api_key_model, raw):
+        prefix, _, secret = raw[3:].partition("_")
+        if not prefix or not secret:
+            return None
+        try:
+            key = api_key_model.objects.select_related("user").get(
+                prefix=prefix, revoked=False
+            )
+        except api_key_model.DoesNotExist:
+            return None
+        if not key.verify_secret(secret) or not key.user.is_active:
+            return None
+        return key
+
+
+def _strip_preview_token(query: str) -> str:
+    """Drop the preview auth token from a query string before forwarding upstream.
+
+    The guest app is untrusted; it must never receive the platform API key that
+    the browser put in the URL. Only our namespaced param is removed, so the app's
+    own query params pass through untouched.
+    """
+    if not query or PREVIEW_TOKEN_QUERY not in query:
+        return query
+    kept = [
+        (key, value)
+        for key, value in parse_qsl(query, keep_blank_values=True)
+        if key != PREVIEW_TOKEN_QUERY
+    ]
+    return urlencode(kept)
 
 
 # Request headers we forward upstream. Deliberately tiny: never leak pequeroku's
@@ -328,7 +425,7 @@ def _forward_payload(request, container, port, path):
     from the server-side jar (never the browser's cookies — those carry
     pequeroku's session and must not leak into the previewed app).
     """
-    query = request.META.get("QUERY_STRING", "")
+    query = _strip_preview_token(request.META.get("QUERY_STRING", ""))
     target = "/" + (path or "")
     if query:
         target = f"{target}?{query}"
@@ -471,4 +568,30 @@ def build_preview_response(request, container, port, path, service) -> HttpRespo
     resp["X-Robots-Tag"] = "noindex"
     # Allow embedding: bypass XFrameOptionsMiddleware (which would add DENY).
     resp.xframe_options_exempt = True
+    _bootstrap_preview_cookie(request, resp, prefix)
     return _no_cache(resp)
+
+
+def _bootstrap_preview_cookie(request, resp, prefix: str) -> None:
+    """Drop a short-lived, path-scoped cookie after a query-param token auth.
+
+    A page reached with ``?__pk_token=`` loads its assets via the injected
+    ``<base>`` (no query string), so those subresource requests would be
+    unauthenticated. Setting the token as an ``HttpOnly`` cookie scoped to this
+    exact preview path lets them authenticate too — without ever leaking the key
+    into the URL of every asset. The cookie stays server-visible only (it is never
+    forwarded to the guest app, which uses the server-side cookie jar).
+    """
+    token = getattr(request, "_preview_query_token", None)
+    if not token:
+        return
+    secure = _public_origin(request).lower().startswith("https")
+    resp.set_cookie(
+        PREVIEW_TOKEN_COOKIE,
+        token,
+        max_age=PREVIEW_TOKEN_TTL,
+        path=prefix,
+        httponly=True,
+        samesite="Lax",
+        secure=secure,
+    )

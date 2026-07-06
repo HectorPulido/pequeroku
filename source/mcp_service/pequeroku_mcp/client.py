@@ -27,7 +27,9 @@ class PlatformClient:
         timeout: float = 180.0,
         transport: httpx.BaseTransport | None = None,
     ):
-        self.base = base_url.rstrip("/") + "/api/v1"
+        self._root = base_url.rstrip("/")
+        self.base = self._root + "/api/v1"
+        self._api_key = api_key
         self._client = httpx.Client(
             timeout=timeout,
             headers={"Authorization": f"Bearer {api_key}"},
@@ -148,7 +150,45 @@ class PlatformClient:
         return {"kind": "dir", "path": path, "entries": entries or []}
 
     def get_preview(self, container_id) -> list[dict]:
-        return self._request("GET", f"/containers/{container_id}/ports/") or []
+        ports = self._request("GET", f"/containers/{container_id}/ports/") or []
+        for p in ports:
+            rel = p.get("preview_path") or (
+                f"/api/containers/{container_id}/preview/{p.get('port')}/"
+            )
+            # Absolute, ready to fetch (with your API key) or embed in a browser.
+            p["preview_url"] = f"{self._root}{rel}"
+        return ports
+
+    def fetch_preview(self, container_id, port, path="/") -> dict:
+        """GET the live app response served inside the VM, authenticated by the key.
+
+        The preview endpoint accepts our ``Authorization: Bearer`` header (already
+        set on the client), so an agent can read what the app actually serves
+        without a browser session. Redirects are followed inside the preview.
+        """
+        rel = path if path.startswith("/") else "/" + path
+        url = f"{self._root}/api/containers/{container_id}/preview/{port}{rel}"
+        try:
+            resp = self._client.request("GET", url, follow_redirects=True)
+        except httpx.TimeoutException:
+            raise PlatformError("timeout", "The preview request timed out")
+        except httpx.HTTPError as e:
+            raise PlatformError("network_error", f"Could not reach the preview: {e}")
+        ctype = resp.headers.get("content-type", "")
+        lowered = ctype.lower()
+        is_text = (
+            lowered.startswith("text/")
+            or "json" in lowered
+            or "xml" in lowered
+            or "javascript" in lowered
+        )
+        body = resp.text if is_text else f"<{len(resp.content)} bytes of {ctype or 'binary'}>"
+        return {
+            "status": resp.status_code,
+            "content_type": ctype,
+            "url": url,
+            "body": body,
+        }
 
     def destroy_container(self, container_id) -> None:
         self._request("DELETE", f"/containers/{container_id}/")

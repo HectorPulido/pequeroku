@@ -211,13 +211,29 @@ def read_path(container_id: int, path: str, ctx: Context = None) -> str:
 
 @mcp.tool()
 @_guard
-def get_preview(container_id: int, ctx: Context = None) -> str:
-    """List the ports an app is listening on, with preview paths.
+def get_preview(
+    container_id: int, port: int | None = None, path: str = "/", ctx: Context = None
+) -> str:
+    """Inspect or fetch a web app running inside the container.
 
-    Empty until your app is actually listening — start it (e.g.
-    `container_exec(..., background=true)`) bound to 0.0.0.0 on a high port first.
+    - No `port`: list the ports an app is listening on. Each entry includes a
+      ready-to-use absolute `preview_url`. Empty until your app is actually
+      listening — start it (e.g. `container_exec(..., background=true)`) bound to
+      0.0.0.0 on a high port first.
+    - With `port` (and optional `path`, default `/`): fetch the LIVE response the
+      app serves and return its `status`, `content_type` and `body` — so you can
+      verify the app end-to-end, not just that a port is open.
+
+    Auth is automatic: the preview is reached with your own API key. To hand the
+    URL to a human/browser instead, append `?__pk_token=<your key>` to the
+    `preview_url` (or send `Authorization: Bearer <your key>`); it authenticates
+    the same owner-only preview and drops a short-lived cookie so the page's
+    assets load too.
     """
-    return _dump(_client(ctx).get_preview(container_id))
+    client = _client(ctx)
+    if port is None:
+        return _dump(client.get_preview(container_id))
+    return _dump(client.fetch_preview(container_id, port, path))
 
 
 @mcp.tool()
