@@ -74,6 +74,12 @@ def test_first_start_applies_default_template_and_flips_flag():
     assert container.first_start is False
     assert FakeVMClient.last_call is not None  # template was applied
 
+    _cid, payload = FakeVMClient.last_call
+    # Regression: the welcome seed must NEVER wipe /app. Containers populated via
+    # the API/MCP keep first_start=True until their first IDE connect, so a
+    # destructive seed here would delete an agent's whole workspace.
+    assert payload.clean is False
+
 
 @pytest.mark.django_db
 def test_first_start_skips_when_flag_false():

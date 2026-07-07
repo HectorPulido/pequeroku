@@ -159,7 +159,13 @@ class ContainerViewSet(PlatformViewSet):
 
         try:
             container, warning, _from_pool = orchestration.claim_or_create_container(
-                user=request.user, ct=ct, name=name, expires_at=expires_at
+                user=request.user,
+                ct=ct,
+                name=name,
+                expires_at=expires_at,
+                # API/MCP workspaces are populated programmatically before any IDE
+                # session; never run the destructive-in-past welcome seed on them.
+                first_start=False,
             )
         except orchestration.NoNodeAvailable:
             raise APIError(

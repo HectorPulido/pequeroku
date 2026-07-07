@@ -62,7 +62,11 @@ def execute_run(run: Run) -> Run:
             seconds=int(run.timeout_seconds) + _TTL_MARGIN_SECONDS
         )
         container, _warning, _from_pool = orchestration.claim_or_create_container(
-            user=run.user, ct=ct, name=f"run-{run.pk}", expires_at=expires_at
+            user=run.user,
+            ct=ct,
+            name=f"run-{run.pk}",
+            expires_at=expires_at,
+            first_start=False,
         )
         run.container = container
         run.save(update_fields=["container"])

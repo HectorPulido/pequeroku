@@ -32,8 +32,16 @@ def apply_template(
 
 
 def first_start_of_container(instance: Container):
-    """
-    Apply first template
+    """Seed a brand-new workspace with the "default" welcome template, once.
+
+    Triggered when the IDE filesystem WebSocket first connects to a container.
+    It MUST NEVER destroy existing files: containers created and populated through
+    the public API / MCP keep ``first_start=True`` until their first IDE connect,
+    so a destructive seed here would wipe an agent's already-populated ``/app``
+    (the exact "MCP deletes /app after a reboot / at random" bug). The template is
+    therefore applied with ``clean=False`` — it only adds the welcome files, it
+    never ``rm -rf``s the directory. Fresh IDE containers still get seeded on an
+    empty ``/app``; the visible result is identical.
     """
 
     if not instance.first_start:
@@ -47,5 +55,5 @@ def first_start_of_container(instance: Container):
     if not default_template:
         return
 
-    _ = apply_template(instance, default_template)
+    _ = apply_template(instance, default_template, clean=False)
     instance.save()

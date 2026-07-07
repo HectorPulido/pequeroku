@@ -21,6 +21,9 @@ def test_create_with_type_id_and_name(api, fake_vm, user_with_type):
     obj = Container.objects.get(pk=body["id"])
     assert obj.user == user
     assert obj.container_id.startswith("vm-new-")
+    # API/MCP workspaces must never carry the armed welcome-seed flag, so a later
+    # IDE connect can't overwrite the agent's programmatically-populated /app.
+    assert obj.first_start is False
 
 
 def test_create_with_type_name(api, fake_vm, user_with_type):

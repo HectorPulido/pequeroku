@@ -90,6 +90,7 @@ def claim_or_create_container(
     ct: ContainerType,
     name: str | None = None,
     expires_at=None,
+    first_start: bool = True,
 ) -> tuple[Container, str | None, bool]:
     """Hand ``user`` a container of type ``ct``.
 
@@ -101,6 +102,12 @@ def claim_or_create_container(
     (best-effort placement) or ``None``. Raises :class:`NoNodeAvailable` when not
     even a random node exists. ``expires_at`` (optional) marks the container for
     the TTL reaper; ``None`` means persistent.
+
+    ``first_start`` controls the one-time "default" welcome template. The IDE
+    leaves it ``True`` (fresh workspaces get seeded on first open). The public
+    API / MCP and ephemeral runs pass ``False``: those workspaces are populated
+    programmatically before any IDE session, so the seed must not run against
+    them — see :func:`vm_manager.templates.first_start_of_container`.
     """
     claimed = pool.claim_warm_container(
         user=user,
@@ -109,9 +116,18 @@ def claim_or_create_container(
         name=name,
     )
     if claimed is not None:
+        update_fields: list[str] = []
         if expires_at is not None:
             claimed.expires_at = expires_at
-            claimed.save(update_fields=["expires_at"])
+            update_fields.append("expires_at")
+        # Warm-pool rows are provisioned with the model default (first_start=True);
+        # clear it here when the caller opts out so a later IDE connect never seeds
+        # (or, pre-fix, wiped) an API-populated workspace.
+        if not first_start and claimed.first_start:
+            claimed.first_start = False
+            update_fields.append("first_start")
+        if update_fields:
+            claimed.save(update_fields=update_fields)
         return claimed, None, True
 
     vcpus = int(ct.vcpus)
@@ -141,6 +157,7 @@ def claim_or_create_container(
         node=node,
         container_type=ct,
         expires_at=expires_at,
+        first_start=first_start,
     )
     return c, warning, False
 
