@@ -199,7 +199,7 @@ def test_command_with_container_ids_executes_only_one(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     # Should mention container mode, and one action/update
-    assert "container_id=" in out
+    assert "container_ids=" in out
     assert "actions=1" in out
     assert "local_updates=1" in out
 
@@ -211,3 +211,26 @@ def test_command_with_container_ids_executes_only_one(monkeypatch, capsys):
     # Status should have been updated in DB
     c.refresh_from_db()
     assert c.status == "provisioning"
+
+
+def test_command_with_multiple_container_ids_does_not_crash(monkeypatch, capsys):
+    """Regression: passing several ids used to hit get(pk__in=[...]) ->
+    MultipleObjectsReturned. It must now reconcile all of them."""
+    user = create_user(username="recon_multi_user")
+    node = create_node()
+    c1 = create_container(user=user, node=node, container_id="vm-m1")
+    c2 = create_container(user=user, node=node, container_id="vm-m2")
+    for c in (c1, c2):
+        c.desired_state = "running"
+        c.status = "stopped"
+        c.save()
+
+    client = FakeClient()
+    monkeypatch.setattr(Reconciler, "_sync_statuses", lambda self, objs: [])
+    monkeypatch.setattr(Reconciler, "_service_for", lambda self, obj: client)
+
+    call_command("reconcile_containers", "--container-ids", f"{c1.pk},{c2.pk}")
+
+    out = capsys.readouterr().out
+    assert "container_ids=" in out
+    assert "actions=2" in out

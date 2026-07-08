@@ -112,7 +112,27 @@ class Runner:
                 pid = None
         return pid, pidfile
 
-    def stop(self, vm: VMRecord, cleanup_disks: bool = False) -> None:
+    @staticmethod
+    def _drop_ssh_state(vm_id: str) -> None:
+        """Best-effort close of cached SSH connections/pools for a VM.
+
+        Without this, a connection cached against a stopped VM stays
+        ``transport.is_active()`` and would be reused for whatever VM later binds
+        the same loopback port — making a port collision persist even after it is
+        corrected. Lazy-imported to avoid an import cycle with ``implementations``.
+        """
+        try:
+            from implementations import ssh_pool, preview_pool, ssh_cache
+
+            ssh_pool.drop_pool(vm_id)
+            preview_pool.drop_preview_pool(vm_id)
+            ssh_cache.clear_cache(vm_id)
+        except Exception:
+            pass
+
+    def stop(
+        self, vm: VMRecord, cleanup_disks: bool = False, clear_port: bool = True
+    ) -> None:
         def _run():
             try:
                 pid, pidfile = self._try_to_get_pid(vm)
@@ -130,6 +150,15 @@ class Runner:
                         os.remove(pidfile)
                 except Exception:
                     pass
+
+                self._drop_ssh_state(vm.id)
+
+                # Clear the stale ssh_port so this stopped record can never alias
+                # onto another VM that later binds the same port. Skipped on reboot,
+                # whose immediate restart re-picks a fresh port on the same vm object
+                # (nulling it here could clobber that new port).
+                if clear_port:
+                    vm.ssh_port = None
 
                 self.store.set_status(vm, VMState.stopped)
             except Exception as e:  # pylint: disable=broad-except

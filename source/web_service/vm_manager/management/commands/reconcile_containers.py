@@ -275,23 +275,25 @@ class Command(BaseCommand):
             reconciler._sync_statuses = _dry_sync  # type: ignore
             reconciler.reconcile_batch = _dry_reconcile  # type: ignore
 
-        if len(container_ids) > 0:
-            try:
-                obj = Container.objects.select_related("node", "user").get(
-                    pk__in=container_ids
-                )
-            except Container.DoesNotExist:
+        ids = [i for i in container_ids if str(i).strip()]
+        if len(ids) > 0:
+            # NOTE: filter(), not get(pk__in=...): get() raises MultipleObjectsReturned
+            # for more than one id, and this command is invoked with ALL of a user's
+            # container pks at once (e.g. ResourceQuota.save on deactivation), so get()
+            # crashed whenever a user owned 2+ containers.
+            objs = list(
+                Container.objects.select_related("node", "user").filter(pk__in=ids)
+            )
+            if not objs:
                 self.stderr.write(
-                    self.style.ERROR(
-                        f"[reconciler] container {container_ids} not found"
-                    )
+                    self.style.ERROR(f"[reconciler] container {ids} not found")
                 )
                 return
-            actions_total, updated_total = reconciler.reconcile_batch([obj])
+            actions_total, updated_total = reconciler.reconcile_batch(objs)
             batches = 1
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"[reconciler] container_id={container_ids} batches={batches} actions={actions_total} local_updates={updated_total}"
+                    f"[reconciler] container_ids={ids} batches={batches} actions={actions_total} local_updates={updated_total}"
                 )
             )
             return

@@ -14,7 +14,7 @@ import threading
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-from .ssh_cache import _connect
+from .ssh_cache import _connect, assert_vm_identity
 
 # Browsers open ~6 connections per origin; size the lane to match so a page's
 # assets proxy concurrently without queueing behind one another.
@@ -71,6 +71,9 @@ def borrow_preview(container: Any) -> Iterator[Any]:
             cli = None
         if cli is None:
             cli = _connect(container.ssh_port, container.ssh_user)
+            # Fresh connection: refuse to proxy a preview to the wrong VM if this
+            # port collided onto another vm_id. The finally below closes it on raise.
+            assert_vm_identity(cli, getattr(container, "id", None))
         yield cli
     except Exception:
         failed = True

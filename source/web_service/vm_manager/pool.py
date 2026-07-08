@@ -182,14 +182,36 @@ def trim_pools(nodes: list[Node]) -> int:
 
 
 def _destroy_warm(c: Container) -> bool:
-    """Best-effort delete of a warm VM on its node, then drop the row."""
+    """Best-effort delete of a surplus warm VM on its node, then drop the row.
+
+    Re-asserts under a row lock that the VM is STILL an unclaimed pool VM. Between
+    ``trim_pools``' unlocked snapshot and here, ``claim_warm_container`` may have
+    handed this exact row to a real user (``is_pool=False``) — destroying it then
+    would wipe a live user's VM and disk. If the row was claimed (or a claim holds
+    the lock), we skip it and let that VM live.
+    """
     try:
-        VMServiceClient(c.node).delete_vm(c.container_id)
-    except Exception:
-        # The row goes away regardless; a leaked VM is reconciled/cleaned later.
-        pass
-    try:
-        c.delete()
-        return True
+        with transaction.atomic():
+            locked = (
+                Container.objects.select_for_update(skip_locked=True)
+                .filter(pk=c.pk, is_pool=True)
+                .first()
+            )
+            if locked is None:
+                # Claimed since the snapshot, locked by an in-flight claim, or already
+                # gone — never destroy it.
+                return False
+            node = locked.node
+            container_id = locked.container_id
+            locked.delete()
     except Exception:
         return False
+
+    # Row is safely removed under the lock; now tear the VM down on its node. Do this
+    # AFTER commit so a slow HTTP call never holds the DB row lock open. A failure
+    # here only leaks the node VM, which the reconciler/cleanup handles later.
+    try:
+        VMServiceClient(node).delete_vm(container_id)
+    except Exception:
+        pass
+    return True

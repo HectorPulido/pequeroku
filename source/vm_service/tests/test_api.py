@@ -74,7 +74,14 @@ class FakeRunner:
         )
         self.store.set_status(vm, models.VMState.running)
 
-    def stop(self, vm: models.VMRecord, cleanup_disks: bool = False) -> None:
+    def stop(
+        self,
+        vm: models.VMRecord,
+        cleanup_disks: bool = False,
+        clear_port: bool = True,
+    ) -> None:
+        if clear_port:
+            vm.ssh_port = None
         self.store.set_status(vm, models.VMState.stopped)
 
 

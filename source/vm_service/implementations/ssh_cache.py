@@ -1,9 +1,21 @@
 from typing import cast
+import shlex
 import socket
 import paramiko
 import settings
 from models import VMRecord
 from qemu_manager.crypto import load_pkey
+
+# Identity marker: each VM stamps its own vm_id into the guest at boot (see
+# qemu_manager.ssh_ready.wait_ssh) so a consumer can verify the machine behind a
+# loopback SSH port is really the VM it asked for — defending against ssh_port
+# collisions that would otherwise route one container to another's VM.
+VM_ID_MARKER_PATH = "/etc/pequeroku-vm-id"
+
+
+class VMIdentityMismatch(Exception):
+    """Raised when the VM behind an SSH port is not the vm_id we expected."""
+
 
 cache_data: dict[
     str, dict[str, paramiko.SSHClient | paramiko.SFTPClient | paramiko.Channel | None]
@@ -68,6 +80,50 @@ def exec_and_close_status(
             stdout.channel.close()
         except Exception:
             pass
+
+
+def write_vm_id_marker(cli: paramiko.SSHClient, vm_id: str) -> None:
+    """Best-effort: stamp ``vm_id`` into the guest at ``VM_ID_MARKER_PATH``.
+
+    Written on EVERY boot to the CURRENT vm_id, so a duplicated disk (which carries
+    the source's stamp) is corrected as soon as the clone boots. Never raises — a
+    VM that can't be stamped just stays 'legacy' and is treated tolerantly on read.
+    """
+    if not vm_id:
+        return
+    try:
+        cmd = f"printf %s {shlex.quote(str(vm_id))} > {VM_ID_MARKER_PATH}"
+        _ = exec_and_close(cli, cmd, timeout=5)
+    except Exception as e:
+        print("Could not write vm-id marker:", e)
+
+
+def read_vm_id_marker(cli: paramiko.SSHClient) -> str | None:
+    """Read the guest's stamped vm_id, or ``None`` if absent/unreadable (tolerant)."""
+    try:
+        out, _ = exec_and_close(cli, f"cat {VM_ID_MARKER_PATH} 2>/dev/null", timeout=5)
+        marker = out.decode(errors="ignore").strip()
+        return marker or None
+    except Exception:
+        return None
+
+
+def assert_vm_identity(cli: paramiko.SSHClient, expected_vm_id: str | None) -> None:
+    """
+    Verify the VM reachable over ``cli`` is ``expected_vm_id``; raise otherwise.
+
+    TOLERANT by design so it deploys without disrupting VMs booted before the marker
+    existed: a MISSING marker (legacy VM, or transiently unreadable) is accepted.
+    Only a marker that is PRESENT and DIFFERENT — i.e. a real cross-wiring where
+    operating would touch the wrong machine — raises :class:`VMIdentityMismatch`.
+    """
+    if not expected_vm_id:
+        return
+    marker = read_vm_id_marker(cli)
+    if marker is not None and marker != str(expected_vm_id):
+        raise VMIdentityMismatch(
+            f"VM identity mismatch: expected {expected_vm_id}, port hosts {marker}"
+        )
 
 
 def clear_cache(vm_id: str):
@@ -235,6 +291,17 @@ def generate_console(container: VMRecord):
     session budget, so heavy AI activity can never knock it offline.
     """
     cli = _connect(container.ssh_port, container.ssh_user)
+
+    # Never open a terminal onto the wrong VM: if the port hosts a different vm_id
+    # (collision), refuse instead of handing the user someone else's machine.
+    try:
+        assert_vm_identity(cli, container.id)
+    except Exception:
+        try:
+            cli.close()
+        except Exception:
+            pass
+        raise
 
     chan = cli.invoke_shell(width=120, height=32)
     # Small timeout (not 0.0): recv() blocks until data arrives (zero added latency)

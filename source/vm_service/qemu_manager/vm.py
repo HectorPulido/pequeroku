@@ -10,7 +10,7 @@ import settings
 
 from models import VMProc
 from .seed import make_overlay, make_seed_iso
-from .ports import pick_free_port
+from .ports import pick_free_port, release_port
 from .qemu_args import vm_qemu_arm64_args, vm_qemu_x86_args
 from .ssh_ready import wait_ssh
 
@@ -283,69 +283,77 @@ def start_vm(
 
     port = pick_free_port()
 
-    if platform.machine() in ("aarch64", "arm64"):
-        print("Using arm64...")
-        args = vm_qemu_arm64_args(
-            vcpus=vcpus,
-            mem_mib=mem_mib,
-            console_log=console_log,
-            port=port,
-            overlay=overlay,
-            seed_iso=seed_iso,
-            pidfile=pidfile,
-        )
-    else:
-        print("Using x86...")
-        args = vm_qemu_x86_args(
-            vcpus=vcpus,
-            mem_mib=mem_mib,
-            console_log=console_log,
-            port=port,
-            overlay=overlay,
-            seed_iso=seed_iso,
-            pidfile=pidfile,
-        )
-
-    proc = subprocess.Popen(
-        args,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        preexec_fn=_drop_privs,
-    )
-    print("Process executed", proc)
-
+    # Hold the port reservation until QEMU has actually bound it (i.e. wait_ssh
+    # succeeded) or the boot failed — then release it. This keeps any concurrent
+    # start_vm from being handed the same port during our whole boot window.
     try:
-        ok = wait_ssh(
-            port=port,
-            timeout=vm_timeout_boot_s,
-            user=vm_ssh_user,
-            is_vm_alive=lambda: proc.poll() is None,
-            vm_id=vm_id,
-        )
-        if not ok:
-            raise TimeoutError("SSH not ready (returned False early)")
-    except Exception as e:
-        print("Error waiting for ssh", e)
-        try:
-            tail = subprocess.run(
-                ["tail", "-n", "120", console_log],
-                capture_output=True,
-                text=True,
-                check=True,
+        if platform.machine() in ("aarch64", "arm64"):
+            print("Using arm64...")
+            args = vm_qemu_arm64_args(
+                vcpus=vcpus,
+                mem_mib=mem_mib,
+                console_log=console_log,
+                port=port,
+                overlay=overlay,
+                seed_iso=seed_iso,
+                pidfile=pidfile,
             )
-            print("=== console.log (tail) ===\n", tail.stdout)
-        except Exception as ex:
-            print("Error reading the diagnostic", ex)
-        if proc.poll() is not None and proc.stdout is not None:
-            out = proc.stdout.read().decode(errors="ignore")
-            print("QEMU finished during the startup. STDERR/STDOUT:\n", out)
-        raise e
-    return VMProc(
-        workdir=workdir,
-        overlay=overlay,
-        seed_iso=seed_iso,
-        port_ssh=port,
-        proc=proc,
-        console_log=console_log,
-        pidfile=pidfile,
-    )
+        else:
+            print("Using x86...")
+            args = vm_qemu_x86_args(
+                vcpus=vcpus,
+                mem_mib=mem_mib,
+                console_log=console_log,
+                port=port,
+                overlay=overlay,
+                seed_iso=seed_iso,
+                pidfile=pidfile,
+            )
+
+        proc = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            preexec_fn=_drop_privs,
+        )
+        print("Process executed", proc)
+
+        try:
+            ok = wait_ssh(
+                port=port,
+                timeout=vm_timeout_boot_s,
+                user=vm_ssh_user,
+                is_vm_alive=lambda: proc.poll() is None,
+                vm_id=vm_id,
+            )
+            if not ok:
+                raise TimeoutError("SSH not ready (returned False early)")
+        except Exception as e:
+            print("Error waiting for ssh", e)
+            try:
+                tail = subprocess.run(
+                    ["tail", "-n", "120", console_log],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                print("=== console.log (tail) ===\n", tail.stdout)
+            except Exception as ex:
+                print("Error reading the diagnostic", ex)
+            if proc.poll() is not None and proc.stdout is not None:
+                out = proc.stdout.read().decode(errors="ignore")
+                print("QEMU finished during the startup. STDERR/STDOUT:\n", out)
+            raise e
+        return VMProc(
+            workdir=workdir,
+            overlay=overlay,
+            seed_iso=seed_iso,
+            port_ssh=port,
+            proc=proc,
+            console_log=console_log,
+            pidfile=pidfile,
+        )
+    finally:
+        # QEMU now owns the port (success) or the attempt failed (port freed).
+        # Either way the allocator no longer needs to reserve it.
+        release_port(port)

@@ -16,13 +16,14 @@ Two SSH "lanes" coexist per VM:
 The pool lives in-process (vm_service is a single process); connections are real
 paramiko TCP sockets and cannot be shared across processes or stored in Redis.
 """
+
 from __future__ import annotations
 
 import threading
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-from .ssh_cache import _connect
+from .ssh_cache import _connect, assert_vm_identity
 
 # Max concurrent borrowed connections per VM. Each is independent (own channels +
 # own SFTP), so this bounds channels-per-VM well under the sshd MaxSessions while
@@ -91,6 +92,10 @@ def borrow(container: Any) -> Iterator["_Conn"]:
         if conn is None:
             cli = _connect(container.ssh_port, container.ssh_user)
             conn = _Conn(cli, cli.open_sftp())
+            # Fresh connection: confirm the port really hosts THIS vm before use.
+            # A mismatch raises; the finally below closes the connection so it never
+            # enters the pool and no file/exec op ever lands on the wrong VM.
+            assert_vm_identity(conn.cli, getattr(container, "id", None))
         yield conn
     except Exception:
         failed = True

@@ -240,6 +240,42 @@ def test_trim_removes_all_warm_vms_of_non_poolable_type(fake_vm):
     assert Container.objects.filter(is_pool=True, container_type=ct).count() == 0
 
 
+def test_destroy_warm_skips_a_row_claimed_after_snapshot(fake_vm):
+    """The trim race: a warm row claimed between trim's snapshot and _destroy_warm
+    must NOT be destroyed — that would wipe a live user's VM and disk."""
+    node = create_node()
+    ct = _poolable_type()
+    warm = _make_warm(node, ct, container_id="warm-claimed-race")
+
+    # trim_pools snapshotted this row while it was still a pool VM.
+    stale_snapshot = Container.objects.get(pk=warm.pk)
+
+    # Meanwhile a real user claims it (is_pool -> False).
+    warm.is_pool = False
+    warm.user = create_user("racer")
+    warm.save()
+
+    # trim now acts on its stale snapshot: it must re-check and skip.
+    destroyed = pool._destroy_warm(stale_snapshot)
+
+    assert destroyed is False
+    assert FakeVMClient.deleted == []  # the node VM (and its disk) was never touched
+    assert Container.objects.filter(pk=warm.pk).exists()  # the row survives
+
+
+def test_destroy_warm_deletes_a_genuine_pool_row(fake_vm):
+    """Regression: a row that is still is_pool=True is destroyed as before."""
+    node = create_node()
+    ct = _poolable_type()
+    warm = _make_warm(node, ct, container_id="warm-genuine")
+
+    destroyed = pool._destroy_warm(warm)
+
+    assert destroyed is True
+    assert FakeVMClient.deleted == ["warm-genuine"]
+    assert not Container.objects.filter(pk=warm.pk).exists()
+
+
 # --------------------------------------------------------------------------- #
 # create() endpoint integration
 # --------------------------------------------------------------------------- #

@@ -114,6 +114,18 @@ async def duplicate_vm(vm_id: str, req: VMDuplicate) -> VMOut:
     if src is not None and src.state == VMState.running:
         raise HTTPException(409, "Source VM must be stopped before duplicating")
 
+    # Ground-truth liveness: copying a qcow2 that a live QEMU is mid-write on yields
+    # a torn/corrupt image. store.get()'s state is inferred from SSH-port reachability
+    # (SSH down != QEMU stopped, and 'provisioning' also slips past the check above),
+    # so additionally refuse if a QEMU process is actually holding this disk.
+    from qemu_manager.vm import _read_pid, _pid_alive
+
+    src_pid = _read_pid(os.path.join(src_wd, "qemu.pid"))
+    if src_pid and _pid_alive(src_pid):
+        raise HTTPException(
+            409, "Source VM is still running; stop it before duplicating"
+        )
+
     new_id = str(uuid.uuid4())
     new_wd = runner.workdir(new_id)
     shutil.copy2(src_disk, os.path.join(new_wd, "disk.qcow2"))
@@ -207,7 +219,9 @@ async def action_vm(vm_id: str, act: VMAction) -> VMOut:
         runner.start(vm)
         store.set_status(vm, VMState.provisioning)
     elif act.action == "reboot":
-        runner.stop(vm)
+        # clear_port=False: the restart below re-picks a fresh port on this same vm
+        # object; nulling ssh_port in the stop thread could clobber that new port.
+        runner.stop(vm, clear_port=False)
         threading.Timer(1.0, lambda: runner.start(vm)).start()
         store.set_status(vm, VMState.provisioning)
     else:
