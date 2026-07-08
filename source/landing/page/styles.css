@@ -1,6 +1,7 @@
 /* ============================================================
    PequeRoku landing — "phosphor terminal" design system
-   Dark-first (CRT phosphor green + amber), light = paper terminal.
+   Palette shared with front-react: indigo (#4f46e5) + cyan (#06b6d4)
+   on slate. Dark-first; light = paper-white terminal.
    No build step; everything is vanilla CSS.
    ============================================================ */
 
@@ -8,27 +9,27 @@
    Design tokens
    ======================== */
 :root {
-	/* Dark (default) — green-black CRT */
-	--color-bg: #060a08;
-	--color-surface: #0b110d;
-	--color-surface-2: #0e1711;
-	--color-text: #d6e6da;
-	--color-text-2: #8ba593;
-	--color-primary: #4ff086; /* phosphor green */
-	--color-accent: #4ff086;
-	--color-amber: #ffb454;
-	--color-border: #1d2b22;
-	--color-success: #4ff086;
-	--color-warning: #ffb454;
-	--color-error: #ff6b6b;
+	/* Dark (default) — front-react indigo/cyan on slate */
+	--color-bg: #0b1220;
+	--color-surface: #111827;
+	--color-surface-2: #161c2b;
+	--color-text: #e5e7eb;
+	--color-text-2: #94a3b8;
+	--color-primary: #4f46e5; /* indigo */
+	--color-accent: #4f46e5;
+	--color-amber: #06b6d4; /* cyan (secondary accent) */
+	--color-border: #1f2937;
+	--color-success: #22c55e;
+	--color-warning: #f59e0b;
+	--color-error: #ef4444;
 
-	--term-bg: #03100a;
-	--term-text: #b8f0c9;
+	--term-bg: #0b1220;
+	--term-text: #e5e7eb;
 
-	--glow-text: 0 0 22px rgba(79, 240, 134, 0.35);
+	--glow-text: 0 0 22px rgba(79, 70, 229, 0.35);
 	--glow-box:
-		0 0 0 1px rgba(79, 240, 134, 0.18), 0 18px 60px rgba(0, 0, 0, 0.55), 0 0
-		42px rgba(79, 240, 134, 0.1);
+		0 0 0 1px rgba(79, 70, 229, 0.18), 0 18px 60px rgba(0, 0, 0, 0.55), 0 0 42px
+		rgba(79, 70, 229, 0.1);
 	--shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
 	--shadow-2: 0 14px 40px rgba(0, 0, 0, 0.5);
 
@@ -46,28 +47,28 @@
 	--scanlines: block;
 }
 
-/* Light theme — paper terminal */
+/* Light theme — front-react light (indigo on paper-white) */
 html[data-theme="light"] {
-	--color-bg: #f3efe4;
-	--color-surface: #faf7ee;
-	--color-surface-2: #ece7d6;
-	--color-text: #1c2a20;
-	--color-text-2: #5b6f60;
-	--color-primary: #0c7c3f;
-	--color-accent: #0c7c3f;
-	--color-amber: #a85f00;
-	--color-border: #d9d2bd;
-	--color-success: #0c7c3f;
-	--color-warning: #a85f00;
-	--color-error: #b3261e;
+	--color-bg: #f5f7fb;
+	--color-surface: #ffffff;
+	--color-surface-2: #eef2f9;
+	--color-text: #0f172a;
+	--color-text-2: #475569;
+	--color-primary: #4f46e5;
+	--color-accent: #4f46e5;
+	--color-amber: #0e7490; /* darker cyan for contrast on light */
+	--color-border: #d8e3f6;
+	--color-success: #16a34a;
+	--color-warning: #b45309;
+	--color-error: #dc2626;
 
-	--term-bg: #11231a;
-	--term-text: #b8f0c9;
+	--term-bg: #0b1220;
+	--term-text: #e5e7eb;
 
 	--glow-text: none;
-	--glow-box: 0 10px 30px rgba(28, 42, 32, 0.12);
-	--shadow-1: 0 1px 2px rgba(28, 42, 32, 0.08);
-	--shadow-2: 0 12px 30px rgba(28, 42, 32, 0.14);
+	--glow-box: 0 10px 30px rgba(15, 23, 42, 0.12);
+	--shadow-1: 0 1px 2px rgba(15, 23, 42, 0.08);
+	--shadow-2: 0 12px 30px rgba(15, 23, 42, 0.14);
 	--scanlines: none;
 }
 
@@ -100,7 +101,7 @@ a {
 }
 ::selection {
 	background: var(--color-accent);
-	color: var(--color-bg);
+	color: #fff;
 }
 :focus-visible {
 	outline: 2px solid var(--color-accent);
@@ -283,7 +284,7 @@ body::after {
 .btn.accent {
 	background: var(--color-accent);
 	border-color: color-mix(in oklab, var(--color-accent), black 25%);
-	color: var(--color-bg);
+	color: #fff;
 	font-weight: 600;
 }
 .btn.primary:hover,
@@ -477,7 +478,7 @@ body::after {
 	margin-left: 8px;
 	font-family: var(--font-mono);
 	font-size: 12px;
-	color: #7d9b88;
+	color: #7d8597;
 	flex: 1;
 }
 .term-body {
