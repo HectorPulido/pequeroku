@@ -17,26 +17,35 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+# Superusers get an effectively unlimited quota instead of the Config defaults.
+SUPERUSER_QUOTA = 999
+
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_user_quota(sender, instance, created, **kwargs):
     """
     Create default user quota
     """
-    default_values = Config.get_config_values(
-        [
-            "default_ai_use_per_day",
-            "default_credits",
-        ]
-    )
+    if instance.is_superuser:
+        defaults = {
+            "ai_use_per_day": SUPERUSER_QUOTA,
+            "credits": SUPERUSER_QUOTA,
+        }
+    else:
+        default_values = Config.get_config_values(
+            [
+                "default_ai_use_per_day",
+                "default_credits",
+            ]
+        )
+        defaults = {
+            "ai_use_per_day": int(default_values.get("default_ai_use_per_day", "5")),
+            "credits": int(default_values.get("default_credits", "3")),
+        }
 
     ResourceQuota.objects.get_or_create(
         user=instance,
-        defaults={
-            "ai_use_per_day": int(default_values.get("default_ai_use_per_day", "5")),
-            "credits": int(default_values.get("default_credits", "3")),
-            "active": True,
-        },
+        defaults={**defaults, "active": True},
     )
 
 

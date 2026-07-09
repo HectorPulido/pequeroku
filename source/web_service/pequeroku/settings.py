@@ -33,9 +33,14 @@ HTTP_PORT = os.environ.get("HTTP_PORT", "80").strip()
 _csrf_ports = [""]
 if HTTP_PORT and HTTP_PORT not in ("80", "443"):
     _csrf_ports.append(f":{HTTP_PORT}")
+# A bare "*" matches any Host but is not a hostname, so it cannot become a trusted
+# origin. Dropping it is safe: Django accepts an Origin that equals the request's
+# own scheme://host without consulting this list. ("*.example.com" stays — Django
+# understands that wildcard in CSRF_TRUSTED_ORIGINS.)
 CSRF_TRUSTED_ORIGINS = [
     f"{scheme}://{h}{port}"
     for h in ALLOWED_HOSTS
+    if h != "*"
     for port in _csrf_ports
     for scheme in ("http", "https")
 ]

@@ -32,9 +32,12 @@ services:
     volumes:
       - ./web_service:/app
     environment:
-      # Allow internal service-to-service calls by the compose hostname (the MCP
-      # server hits http://web:8000/api/v1). "localhost" is always allowed too.
-      ALLOWED_HOSTS: web
+      # Public Host headers Django answers to, from source/.env — a LAN IP, an
+      # mDNS name, your domain. Defaults to "*" when the key is absent (older
+      # .env files); set it empty to allow only the internal hosts. The compose
+      # hostname "web" (the MCP server hits http://web:8000/api/v1), "localhost"
+      # and "127.0.0.1" are always allowed by settings.py either way.
+      ALLOWED_HOSTS: "${ALLOWED_HOSTS-*}"
       # DB credentials from source/.env, shared with the `db` service so both
       # agree on one value. web_service/.env still overrides these for web when
       # present (entrypoint.sh sources it); these are the fallback otherwise.
