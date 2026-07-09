@@ -32,9 +32,7 @@ class _FakeVMClient:
 
 @pytest.fixture(autouse=True)
 def _patch_client(monkeypatch):
-    monkeypatch.setattr(
-        orchestration, "VMServiceClient", _FakeVMClient, raising=False
-    )
+    monkeypatch.setattr(orchestration, "VMServiceClient", _FakeVMClient, raising=False)
 
 
 def _user_ct():

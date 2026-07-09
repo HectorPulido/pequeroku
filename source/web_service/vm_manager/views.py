@@ -19,6 +19,8 @@ from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
+from drf_spectacular.utils import extend_schema
+
 from internal_config.audit import audit_log_http
 
 from .preview_proxy import build_preview_response
@@ -286,7 +288,9 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         raw_name = request.data.get("name")
         name = raw_name.strip() if isinstance(raw_name, str) else ""
         if not name:
-            return Response({"error": "name required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "name required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         if len(name) > 128:
             return Response(
                 {"error": "name too long (max 128 characters)"},
@@ -422,9 +426,7 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
                 user=request.user, source=source, name=f"{source.name}-copy"
             )
         except orchestration.NoNodeAvailable:
-            return Response(
-                "No node available", status=status.HTTP_501_NOT_IMPLEMENTED
-            )
+            return Response("No node available", status=status.HTTP_501_NOT_IMPLEMENTED)
         except requests.HTTPError as e:
             # The node refused (e.g. the source is still running, or has no disk
             # yet). Surface a clean 400 instead of a 500. No DB row was created.
@@ -718,6 +720,10 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
     # NB: registered explicitly in urls.py (NOT via the router) so the catch-all
     # path matches with or without a trailing slash — apps POST to arbitrary URLs
     # and the router's forced trailing slash would 404 → APPEND_SLASH RuntimeError.
+    # Excluded from the OpenAPI schema: it's a wildcard binary proxy (media_type
+    # ``*/*``, format ``None``) with no meaningful OpenAPI shape, and enumerating it
+    # crashes drf_spectacular's renderer resolution on the ``None`` format.
+    @extend_schema(exclude=True)
     @xframe_options_exempt
     def preview(self, request, pk=None, port=None, path=None, format=None):
         """Binary-safe HTTP proxy to an app listening inside the container's VM."""

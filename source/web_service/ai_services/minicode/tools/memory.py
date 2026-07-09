@@ -141,7 +141,12 @@ class SaveMemoryTool(Tool):
             updated = False
 
         _write_memory(client, cid, path, data)
-        vm.audit("save_memory", cid, "Memory updated" if updated else "Memory saved", {"id": mem_id})
+        vm.audit(
+            "save_memory",
+            cid,
+            "Memory updated" if updated else "Memory saved",
+            {"id": mem_id},
+        )
         verb = "Updated" if updated else "Saved"
         return f"{verb} memory '{mem_id}'. Total memories: {len(data)}."
 
@@ -187,7 +192,10 @@ class EditMemoryTool(Tool):
     parameters = {
         "type": "object",
         "properties": {
-            "id": {"type": "string", "description": "Id of the memory to update (created if new)."},
+            "id": {
+                "type": "string",
+                "description": "Id of the memory to update (created if new).",
+            },
             "content": {
                 "type": "string",
                 "description": "The new content; replaces the memory's current content.",
@@ -208,7 +216,12 @@ class EditMemoryTool(Tool):
 
         updated = _upsert(data, mem_id, content)
         _write_memory(client, cid, path, data)
-        vm.audit("edit_memory", cid, "Memory updated" if updated else "Memory created", {"id": mem_id})
+        vm.audit(
+            "edit_memory",
+            cid,
+            "Memory updated" if updated else "Memory created",
+            {"id": mem_id},
+        )
         return f"{'Updated' if updated else 'Created'} memory '{mem_id}'."
 
 

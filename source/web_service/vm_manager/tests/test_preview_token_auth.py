@@ -46,7 +46,9 @@ def _read_key(user, scopes=("read",)):
 
 def test_header_bearer_token_authenticates():
     user = create_user("hdr")
-    result = PreviewTokenAuthentication().authenticate(_drf_request(header=_read_key(user)))
+    result = PreviewTokenAuthentication().authenticate(
+        _drf_request(header=_read_key(user))
+    )
     assert result is not None
     auth_user, key = result
     assert auth_user == user
@@ -76,7 +78,9 @@ def test_no_token_returns_none():
 
 def test_unknown_token_returns_none_not_raises():
     # Must fall through (None), never raise, so session auth can still run.
-    got = PreviewTokenAuthentication().authenticate(_drf_request(header="pk_deadbeef_nope"))
+    got = PreviewTokenAuthentication().authenticate(
+        _drf_request(header="pk_deadbeef_nope")
+    )
     assert got is None
 
 

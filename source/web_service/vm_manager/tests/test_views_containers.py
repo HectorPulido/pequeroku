@@ -308,7 +308,9 @@ def test_duplicate_success(monkeypatch):
     patch_services(monkeypatch)
 
     user = create_user("u10")
-    ct = create_container_type("small", memory_mb=1024, vcpus=1, disk_gib=5, credits_cost=1)
+    ct = create_container_type(
+        "small", memory_mb=1024, vcpus=1, disk_gib=5, credits_cost=1
+    )
     create_quota(user=user, credits=3, allowed_types=[ct])
     node = create_node()
     source = create_container(
@@ -342,7 +344,9 @@ def test_duplicate_refuses_running_source(monkeypatch):
     patch_services(monkeypatch)
 
     user = create_user("u11")
-    ct = create_container_type("small", memory_mb=1024, vcpus=1, disk_gib=5, credits_cost=1)
+    ct = create_container_type(
+        "small", memory_mb=1024, vcpus=1, disk_gib=5, credits_cost=1
+    )
     create_quota(user=user, credits=3, allowed_types=[ct])
     node = create_node()
     source = create_container(
@@ -954,4 +958,3 @@ def test_collaborator_can_duplicate_and_owns_the_copy(monkeypatch):
     copy = Container.objects.get(name="teamvm-copy")
     # The clone belongs to whoever cloned it, billed against their own credits.
     assert copy.user_id == collab.id
-

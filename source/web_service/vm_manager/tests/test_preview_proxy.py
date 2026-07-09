@@ -427,7 +427,9 @@ def test_query_token_never_forwarded_to_guest_app():
 def test_query_token_auth_sets_pathscoped_bootstrap_cookie():
     # After a query-param token hit, we drop a path-scoped HttpOnly cookie so the
     # embedded page's subresources (which carry no query string) authenticate too.
-    req = RequestFactory().get(f"/api/containers/15/preview/8000/?{PREVIEW_TOKEN_QUERY}=pk_x_y")
+    req = RequestFactory().get(
+        f"/api/containers/15/preview/8000/?{PREVIEW_TOKEN_QUERY}=pk_x_y"
+    )
     req._preview_query_token = "pk_x_y"  # set by PreviewTokenAuthentication
     resp = build_preview_response(
         req, _container(), "8000", "", _service(_env(b"<html></html>"))
