@@ -478,6 +478,11 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
         await self.send_json({"event": "start_text"})
         await self.send_json({"event": "text", "content": "..."})
 
+        check_vm_access = self.scope.get("check_vm_access")
+
+        async def check_access():
+            return check_vm_access is None or await check_vm_access(fresh=True)
+
         # Process LLM
         self.messages, token_usage = await run_pipeline(
             query=user_text,
@@ -488,8 +493,11 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
             on_start_chunking=on_start_chunk,
             on_finish_chunking=on_finish,
             on_event=on_event,
+            **({"check_access": check_access} if check_vm_access is not None else {}),
         )
 
+        if not await check_access():
+            return
         await self._set_quota(
             self.user,
             user_text,
@@ -504,7 +512,8 @@ class AIConsumer(AsyncJsonWebsocketConsumer, ContainerAccessMixin):
                 "conversation": self.conversation_id,
             }
         )
-        await self._set_memory(self.conversation_id, self.messages)
+        if await check_access():
+            await self._set_memory(self.conversation_id, self.messages)
 
         quota, ai_uses_left_today = await self._get_quota(self.user_pk)
         await self.send_json(

@@ -193,11 +193,8 @@ export async function applyTemplate(
 }
 
 function buildPreviewUrl(containerId: string, port: number, rawPath: string) {
-	// Real paths (no %2F encoding): the binary-safe proxy serves at this prefix and
-	// the injected <base> resolves relative assets against it. No cache-buster —
-	// the proxy passes through the app's real cache headers.
 	const sanitized = rawPath.replace(/^\/+/, "");
-	const base = `/api/containers/${containerId}/preview/${port}/`;
+	const base = `/api/containers/${containerId}/preview-launch/${port}/`;
 	return new URL(base + sanitized, window.location.href).toString();
 }
 
@@ -214,25 +211,20 @@ export async function pollPreview(options: PollPreviewOptions) {
 
 	for (let i = 0; i < attempts; i += 1) {
 		const url = buildPreviewUrl(containerId, port, path);
+		let response: Response;
 		try {
-			const response = await fetch(url, {
-				method: "GET",
+			response = await fetch(url, {
+				method: "HEAD",
 				credentials: "same-origin",
 			});
-			if (response.status !== 200) {
-				await delay(delayMs);
-				continue;
-			}
-			const html = await response.text();
-			if (html.trim().length < 10) {
-				await delay(delayMs);
-				continue;
-			}
-			return { url, html };
 		} catch (error) {
 			console.warn("Preview polling error", error);
 			await delay(delayMs);
+			continue;
 		}
+		if (response.status === 200) return { url };
+		if (response.status === 503) throw new Error("Configure an isolated HTTPS preview origin.");
+		await delay(delayMs);
 	}
 	return null;
 }

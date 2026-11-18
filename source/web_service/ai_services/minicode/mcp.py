@@ -15,8 +15,8 @@ the part that maps cleanly:
   in the pipeline worker thread; each MCP tool is appended to the agent's toolset for
   that turn as a normal minicode ``Tool`` named ``<server>_<tool>``.
 - Egress guard: requests leave the SHARED server, so user-controlled URLs are an
-  SSRF risk; private/loopback/link-local hosts are blocked unless
-  ``PEQUENIN_MCP_ALLOW_PRIVATE`` is set.
+  SSRF risk; the HTTP transport checks resolved IPs and connects only to
+  public destinations. MCP redirects are disabled.
 
 Everything is SYNC (``requests``), matching minicode's worker-thread model — no async
 bridge, no new dependency.
@@ -38,16 +38,14 @@ mcp.json schema (opencode-compatible subset)::
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import logging
-import os
 import re
 from dataclasses import dataclass, field
-from urllib.parse import urlparse
 
 import requests
 
+from .public_http import public_http_session, validate_public_url
 from .tools.base import Tool, truncate
 
 logger = logging.getLogger(__name__)
@@ -76,36 +74,10 @@ def _sanitize(s: str) -> str:
 
 
 def _url_allowed(url: str) -> tuple[bool, str]:
-    """SSRF guard. Block non-http(s), and private/loopback/link-local IP literals
-    (and ``localhost``) unless ``PEQUENIN_MCP_ALLOW_PRIVATE`` is set. Hostnames that
-    are not IP literals are allowed (we don't resolve DNS here — documented limit)."""
     try:
-        u = urlparse(url)
-    except Exception:
-        return False, "unparseable URL"
-    if u.scheme not in ("http", "https"):
-        return False, f"scheme '{u.scheme}' not allowed (use http/https)"
-    host = (u.hostname or "").strip()
-    if not host:
-        return False, "missing host"
-    if os.environ.get("PEQUENIN_MCP_ALLOW_PRIVATE", "").lower() in ("1", "true", "yes"):
-        return True, ""
-    low = host.lower()
-    if low == "localhost" or low.endswith(".localhost"):
-        return False, "loopback host blocked"
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        ip = None
-    if ip is not None and (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_reserved
-        or ip.is_multicast
-        or ip.is_unspecified
-    ):
-        return False, f"private/loopback IP {host} blocked"
+        validate_public_url(url)
+    except requests.exceptions.InvalidURL as exc:
+        return False, str(exc)
     return True, ""
 
 
@@ -242,7 +214,7 @@ class McpHttpClient:
         self._sid: str | None = None
         self._proto = PROTOCOL_VERSION
         self._id = 0
-        self._session = requests.Session()
+        self._session = public_http_session()
         self._base_headers = {
             "Accept": "application/json, text/event-stream",
             "Content-Type": "application/json",
@@ -265,7 +237,11 @@ class McpHttpClient:
             headers=self._headers(),
             timeout=self.timeout_s,
             stream=True,
+            allow_redirects=False,
         )
+        if 300 <= resp.status_code < 400:
+            resp.close()
+            raise McpError("MCP redirects are disabled; use the final server URL")
         sid = resp.headers.get("Mcp-Session-Id")
         if sid:
             self._sid = sid

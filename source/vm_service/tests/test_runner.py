@@ -81,7 +81,7 @@ def test_workdir_creates_directory(store_and_runner, base_env):
 def test_start_success_sets_running_and_ports(monkeypatch, store_and_runner):
     store, runner = store_and_runner
 
-    def fake_start_vm(workdir, vcpus, mem_mib, disk_gib, vm_id):
+    def fake_start_vm(workdir, vcpus, mem_mib, disk_gib):
         return models.VMProc(
             workdir=workdir,
             overlay=os.path.join(workdir, "disk.qcow2"),
@@ -109,7 +109,7 @@ def test_start_success_sets_running_and_ports(monkeypatch, store_and_runner):
 def test_start_failure_sets_error(monkeypatch, store_and_runner):
     store, runner = store_and_runner
 
-    def fake_start_vm_fail(workdir, vcpus, mem_mib, disk_gib, vm_id):
+    def fake_start_vm_fail(workdir, vcpus, mem_mib, disk_gib):
         raise RuntimeError("boom-start")
 
     monkeypatch.setattr("implementations.runner.start_vm", fake_start_vm_fail)

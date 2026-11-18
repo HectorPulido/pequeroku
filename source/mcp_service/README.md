@@ -29,13 +29,16 @@ agent starts with context instead of guessing.
 | `get_preview` | listening ports + `preview_url`s; with `port`/`path` → fetch the live app response |
 | `destroy_container` | destroy a container (requires `confirm=true`) |
 
-**Preview access.** The preview endpoint (`{PEQUEROKU_API_URL}/api/containers/<id>/preview/<port>/<path>`)
-authenticates with your platform API key — no login session needed. `get_preview`
-uses it for you when you pass a `port`. To reach it directly (or hand a browser a
-link), present the key as an `Authorization: Bearer pk_...` header **or** a
-`?__pk_token=pk_...` query param. It is owner-only (you only see your own
-containers), and a query-param hit sets a short-lived, path-scoped cookie so an
-embedded page's assets load too.
+**Preview access.** Open `browser_preview_path` on the PequeRoku panel origin
+while signed in to the panel. The panel opens the app on its dedicated HTTPS
+preview hostname. API clients use `/api/containers/<id>/preview/<port>/<path>`
+with an `Authorization: Bearer pk_...` header, which `get_preview` sends when
+you pass a `port`. Use a `read` key for safe HTTP methods and an `exec` key for
+writes.
+Preview fetches follow redirects inside the same VM and port. External redirects
+and redirects to other platform routes are blocked.
+Remove the credential parameter from saved preview links. Revoke keys that
+were shared in links because copies can persist in logs and browser history.
 
 ## Prompts (3)
 

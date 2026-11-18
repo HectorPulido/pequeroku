@@ -276,6 +276,9 @@ class ContainerViewSet(PlatformViewSet):
         for p in ports:
             # Informative only; access still requires auth (token/session).
             p["preview_path"] = f"/api/containers/{c.pk}/preview/{p.get('port')}/"
+            p["browser_preview_path"] = (
+                f"/api/containers/{c.pk}/preview-launch/{p.get('port')}/"
+            )
         return Response(ports)
 
 

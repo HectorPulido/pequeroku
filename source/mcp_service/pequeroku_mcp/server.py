@@ -217,18 +217,16 @@ def get_preview(
     """Inspect or fetch a web app running inside the container.
 
     - No `port`: list the ports an app is listening on. Each entry includes a
-      ready-to-use absolute `preview_url`. Empty until your app is actually
+      API `preview_url` and a `browser_preview_url`. Empty until your app is actually
       listening — start it (e.g. `container_exec(..., background=true)`) bound to
       0.0.0.0 on a high port first.
     - With `port` (and optional `path`, default `/`): fetch the LIVE response the
       app serves and return its `status`, `content_type` and `body` — so you can
       verify the app end-to-end, not just that a port is open.
 
-    Auth is automatic: the preview is reached with your own API key. To hand the
-    URL to a human/browser instead, append `?__pk_token=<your key>` to the
-    `preview_url` (or send `Authorization: Bearer <your key>`); it authenticates
-    the same owner-only preview and drops a short-lived cookie so the page's
-    assets load too.
+    Auth is automatic for MCP fetches. Open `browser_preview_url` in a browser signed
+    in to PequeRoku with access to that VM. Use an Authorization: Bearer header
+    for direct API requests.
     """
     client = _client(ctx)
     if port is None:

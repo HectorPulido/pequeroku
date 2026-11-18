@@ -40,6 +40,7 @@ NODE_NAME = os.environ.get("NODE_NAME", "local-node")
 # "0,2,4"). Empty disables pinning and lets the kernel scheduler place threads.
 VM_TASKSET_CPUS: str = os.environ.get("VM_TASKSET_CPUS", "")
 
+
 # Whether to build and attach a cloud-init seed ISO at boot. Off when VM_BASE_IMAGE
 # is a pre-baked golden image (user + SSH key + sshd config already inside) so VMs
 # skip the ~40s cloud-init pipeline and SSH is ready as soon as sshd starts.
@@ -92,7 +93,9 @@ print(
 REDIS_URL: str = os.environ.get("REDIS_URL", "redis://redis:6379/1")
 REDIS_PREFIX: str = os.environ.get("REDIS_PREFIX", "vmservice:")
 
-AUTH_TOKEN: str = os.environ.get("AUTH_TOKEN", "")
+AUTH_TOKEN: str = os.environ.get("BASE_NODE_AUTH_TOKEN") or os.environ.get(
+    "AUTH_TOKEN", ""
+)
 
 vm_run_as_uid = None
 vm_run_as_gid = None

@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 def load_dotenv(path: str = ".env") -> None:
@@ -45,6 +45,7 @@ class Config:
     # Container (vm_manager.models.Container) the tools operate on. Set by the Django
     # wrapper; subagents inherit the same object (same VM).
     container: Any = None
+    check_vm_request: Callable[[], bool] | None = None
     # Default timeout (s) for foreground commands via execute_sh.
     foreground_timeout: int = 25
     # ---- Per-turn project context (loaded by the pipeline ONCE, in the worker

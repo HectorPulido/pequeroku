@@ -73,7 +73,7 @@ def borrow_preview(container: Any) -> Iterator[Any]:
             cli = _connect(container.ssh_port, container.ssh_user)
             # Fresh connection: refuse to proxy a preview to the wrong VM if this
             # port collided onto another vm_id. The finally below closes it on raise.
-            assert_vm_identity(cli, getattr(container, "id", None))
+            assert_vm_identity(cli, container.workdir)
         yield cli
     except Exception:
         failed = True

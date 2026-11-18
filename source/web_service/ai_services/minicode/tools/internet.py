@@ -7,6 +7,7 @@ are imported lazily so they aren't loaded if the agent never uses them.
 
 from __future__ import annotations
 
+from ..public_http import public_http_session
 from .base import Tool, ToolContext, truncate
 
 _DEFAULT_UA = (
@@ -75,11 +76,11 @@ class WebReadTool(Tool):
         if not url:
             return "Error: missing url."
         try:
-            import requests
             from bs4 import BeautifulSoup
 
-            resp = requests.get(url, headers={"User-Agent": _DEFAULT_UA}, timeout=10)
-            resp.raise_for_status()
+            with public_http_session() as session:
+                resp = session.get(url, headers={"User-Agent": _DEFAULT_UA}, timeout=10)
+                resp.raise_for_status()
         except Exception as e:
             return f"Error opening {url}: {e}"
 

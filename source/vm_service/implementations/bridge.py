@@ -7,6 +7,7 @@ from fastapi import WebSocket
 import paramiko
 
 from models import VMRecord
+from qemu_manager.ssh_peer import VMIdentityMismatch
 from .ssh_cache import generate_console
 
 # How many output frames may be in flight (scheduled on the loop but not yet sent)
@@ -108,6 +109,8 @@ class TTYBridge:
                         except Exception:
                             break
                 self._alive = False
+            except VMIdentityMismatch:
+                asyncio.run_coroutine_threadsafe(self.ws.close(code=1011), self.loop)
             finally:
                 try:
                     if self.chan and not self.chan.closed:

@@ -114,7 +114,7 @@ class _AgentInfo:
 agent = _AgentInfo()
 
 
-def _build_config(container_obj: Any) -> Config:
+def _build_config(container_obj: Any, check_vm_request=None) -> Config:
     """Build minicode's Config with DB credentials + the container.
 
     SYNC (touches the ORM and container attributes): must run in the worker thread.
@@ -129,6 +129,7 @@ def _build_config(container_obj: Any) -> Config:
         workdir="/app",
     )
     config.container = container_obj
+    config.check_vm_request = check_vm_request
     # Project context (best-effort: a VM failure must never bring the turn down).
     try:
         config.project_doc = load_project_doc(config)
@@ -203,6 +204,7 @@ async def run_pipeline(
     on_start_chunking: Callable[[], Awaitable[None]],
     on_finish_chunking: Callable[[str], Awaitable[None]],
     on_event: Callable[[dict], Awaitable[None]] | None = None,
+    check_access: Callable[[], Awaitable[bool]] | None = None,
 ) -> tuple[list[dict], TokenUsage]:
     """Run one agent turn.
 
@@ -229,9 +231,9 @@ async def run_pipeline(
         except Exception:
             pass
 
-    def _on_loop(coro) -> None:
+    def _on_loop(coro):
         # From the worker thread: schedule the callback on the loop and wait (preserves order).
-        asyncio.run_coroutine_threadsafe(coro, loop).result()
+        return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
     def _emit(payload: dict) -> None:
         if on_event is not None:
@@ -239,7 +241,11 @@ async def run_pipeline(
 
     def drive() -> None:
         # Runs in a thread: this is where all the blocking work lives (OpenAI, VM, ORM).
-        config = _build_config(container_obj)
+        if check_access is not None and not _on_loop(check_access()):
+            return
+        config = _build_config(
+            container_obj, (lambda: _on_loop(check_access())) if check_access else None
+        )
         llm = LLM(config)
         block: list[str] = []
         try:
@@ -264,6 +270,10 @@ async def run_pipeline(
                             "depth": event.depth,
                         }
                     )
+                    # Agent.run yields this event immediately before calling the
+                    # tool. Recheck here before resuming it, including subagents.
+                    if check_access is not None and not _on_loop(check_access()):
+                        return
                 elif isinstance(event, ToolResult):
                     _emit(
                         {

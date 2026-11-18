@@ -2,6 +2,9 @@ services:
   vm_services:
     build: ./vm_service/.
     command: ./entrypoint.sh
+    env_file:
+      - path: ./vm_service/.env
+        required: false
     volumes:
       - ./vm_data:/app/vm_data
       # Bring your own VM SSH key (optional): set VM_SSH_KEY to an ABSOLUTE path in
@@ -11,6 +14,7 @@ services:
     # KVM passthrough is written to docker-compose.override.yaml by setup.sh on Linux
     # hosts that have /dev/kvm; on macOS nothing is written. No manual edit needed.
     environment:
+      BASE_NODE_AUTH_TOKEN: "${BASE_NODE_AUTH_TOKEN:-}"
       VM_SSH_PRIVKEY: /root/.ssh/id_vm_pequeroku
       VM_BASE_IMAGE: /app/vm_data/base/debian12-golden.qcow2
       # cloud-init mode is auto-resolved (off for a golden via its *.meta.json, on
@@ -29,9 +33,14 @@ services:
   web:
     build: ./web_service/.
     command: ./entrypoint.sh
+    env_file:
+      - path: ./web_service/.env
+        required: false
     volumes:
       - ./web_service:/app
     environment:
+      BASE_NODE_AUTH_TOKEN: "${BASE_NODE_AUTH_TOKEN:-}"
+      PREVIEW_ORIGIN_TEMPLATE: "${PREVIEW_ORIGIN_TEMPLATE:-}"
       # Public Host headers Django answers to, from source/.env — a LAN IP, an
       # mDNS name, your domain. Defaults to "*" when the key is absent (older
       # .env files); set it empty to allow only the internal hosts. The compose
@@ -68,6 +77,9 @@ services:
   mcp_service:
     build: ./mcp_service/.
     command: ./entrypoint.sh
+    env_file:
+      - path: ./mcp_service/.env
+        required: false
     volumes:
       - ./mcp_service:/app
     environment:

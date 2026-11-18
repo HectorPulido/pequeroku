@@ -1,6 +1,8 @@
 import os
+import re
 from pathlib import Path
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 load_dotenv()
 
@@ -8,7 +10,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "thisisnotasecretkey")
-DEBUG = os.environ.get("DEBUG", "true").lower() != "false"
+DEBUG = os.environ.get("DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
 
 # Internal docker-compose hostname(s) other services use to reach web over the
 # compose network (e.g. the MCP server and vm_service call http://web:8000/api/v1).
@@ -45,6 +47,23 @@ CSRF_TRUSTED_ORIGINS = [
     for scheme in ("http", "https")
 ]
 
+PREVIEW_ORIGIN_TEMPLATE = os.environ.get("PREVIEW_ORIGIN_TEMPLATE", "").strip()
+PREVIEW_HOST_SUFFIX = ""
+if PREVIEW_ORIGIN_TEMPLATE:
+    _preview_template = re.fullmatch(
+        r"https://\{preview\}\.([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)(?::([1-9][0-9]{0,4}))?",
+        PREVIEW_ORIGIN_TEMPLATE,
+    )
+    if _preview_template is None or int(_preview_template[2] or 443) > 65535:
+        raise ImproperlyConfigured(
+            "PREVIEW_ORIGIN_TEMPLATE must be https://{preview}.preview.example.com"
+        )
+    PREVIEW_HOST_SUFFIX = _preview_template[1]
+    PREVIEW_ORIGIN_TEMPLATE = PREVIEW_ORIGIN_TEMPLATE.removesuffix(":443")
+    ALLOWED_HOSTS.append(f".{PREVIEW_HOST_SUFFIX}")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/1")
 REDIS_PORT = int(REDIS_URL.split(":")[-1].split("/")[0])
 REDIS_HOST = REDIS_URL.split(":")[1].split("/")[-1]
@@ -70,6 +89,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "vm_manager.preview_access.preview_host_urls",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

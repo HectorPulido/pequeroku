@@ -1,5 +1,7 @@
+import asyncio
 import base64
 import types
+import pytest
 
 from django.http import StreamingHttpResponse
 from django.test import RequestFactory
@@ -9,20 +11,12 @@ from rest_framework.test import APIRequestFactory
 
 from vm_manager import preview_proxy
 from vm_manager.preview_proxy import (
-    PREVIEW_TOKEN_COOKIE,
     PREVIEW_TOKEN_QUERY,
-    CSRFExemptSessionAuthentication,
     PreviewPassthroughRenderer,
     _rewrite_html,
     _strip_preview_token,
     build_preview_response,
 )
-
-
-def test_csrf_exempt_session_auth_skips_enforcement():
-    # enforce_csrf is a no-op (returns None) so previewed-app form POSTs aren't
-    # blocked by pequeroku's CSRF check.
-    assert CSRFExemptSessionAuthentication().enforce_csrf(None) is None
 
 
 def test_passthrough_renderer_satisfies_event_stream_accept():
@@ -254,6 +248,30 @@ async def test_sse_relay_streams_chunks(monkeypatch):
     assert out == chunks
 
 
+async def test_sse_idle_upstream_read_is_cancelled_after_revocation(monkeypatch):
+    monkeypatch.setattr(preview_proxy, "_ACCESS_INTERVAL", 0.01)
+    active = True
+    closed = False
+
+    async def access_check():
+        return active
+
+    async def source():
+        nonlocal closed
+        try:
+            yield b"data: first\n\n"
+            await asyncio.Event().wait()
+        finally:
+            closed = True
+
+    chunks = preview_proxy._authorized_chunks(source(), access_check)
+    assert await anext(chunks) == b"data: first\n\n"
+    active = False
+    with pytest.raises(StopAsyncIteration):
+        await asyncio.wait_for(anext(chunks), timeout=1)
+    assert closed
+
+
 def test_build_preview_response_reroots_self_origin_with_forwarded_proto():
     # End-to-end: a Gradio-style body whose config bakes http://127.0.0.1:PORT must
     # come back rewritten to an ABSOLUTE https URL when X-Forwarded-Proto says so
@@ -394,7 +412,7 @@ def test_build_preview_response_reroots_location_redirect():
     assert resp["Location"] == "/api/containers/15/preview/8000/new"
 
 
-# --- preview token (query stripping + bootstrap cookie) --------------------- #
+# --- Obsolete credential query parameters --------------------------------- #
 def test_strip_preview_token_removes_only_our_param():
     # Our namespaced token is dropped; the guest app's own params pass through.
     out = _strip_preview_token(f"a=1&{PREVIEW_TOKEN_QUERY}=pk_x_y&b=2")
@@ -403,6 +421,7 @@ def test_strip_preview_token_removes_only_our_param():
     # No token param → returned unchanged (fast path).
     assert _strip_preview_token("a=1&b=2") == "a=1&b=2"
     assert _strip_preview_token("") == ""
+    assert _strip_preview_token("%5f_pk_token=obsolete&keep=1") == "keep=1"
 
 
 def test_query_token_never_forwarded_to_guest_app():
@@ -422,29 +441,3 @@ def test_query_token_never_forwarded_to_guest_app():
     assert "pk_x_y" not in captured["path"]
     assert PREVIEW_TOKEN_QUERY not in captured["path"]
     assert "keep=1" in captured["path"]  # the app's own params survive
-
-
-def test_query_token_auth_sets_pathscoped_bootstrap_cookie():
-    # After a query-param token hit, we drop a path-scoped HttpOnly cookie so the
-    # embedded page's subresources (which carry no query string) authenticate too.
-    req = RequestFactory().get(
-        f"/api/containers/15/preview/8000/?{PREVIEW_TOKEN_QUERY}=pk_x_y"
-    )
-    req._preview_query_token = "pk_x_y"  # set by PreviewTokenAuthentication
-    resp = build_preview_response(
-        req, _container(), "8000", "", _service(_env(b"<html></html>"))
-    )
-    cookie = resp.cookies[PREVIEW_TOKEN_COOKIE]
-    assert cookie.value == "pk_x_y"
-    assert cookie["path"] == "/api/containers/15/preview/8000/"
-    assert cookie["httponly"] is True
-    assert cookie["samesite"].lower() == "lax"
-
-
-def test_no_bootstrap_cookie_without_query_token():
-    # Session-authed (IDE) hits have no query token → no cookie is set.
-    req = RequestFactory().get("/api/containers/15/preview/8000/")
-    resp = build_preview_response(
-        req, _container(), "8000", "", _service(_env(b"<html></html>"))
-    )
-    assert PREVIEW_TOKEN_COOKIE not in resp.cookies

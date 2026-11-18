@@ -7,6 +7,7 @@ from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 _THIS_DIR = pathlib.Path(__file__).resolve().parent
 _PKG_ROOT = _THIS_DIR.parent  # vm_service/
@@ -723,7 +724,32 @@ def test_download_file_and_folder(client: TestClient, auth_header, monkeypatch):
     assert r.headers["content-type"].startswith("application/zip")
 
 
-def test_websocket_tty_echo(client: TestClient, store_and_runner):
+@pytest.mark.parametrize(
+    ("configured", "headers"),
+    [
+        ("testtoken", {}),
+        ("testtoken", {"Authorization": "Basic testtoken"}),
+        ("testtoken", {"Authorization": "Bearer invalid"}),
+        ("", {"Authorization": "Bearer testtoken"}),
+        ("N/A", {"Authorization": "Bearer N/A"}),
+    ],
+)
+def test_websocket_tty_rejects_before_store_lookup(
+    client: TestClient, monkeypatch, configured, headers
+):
+    monkeypatch.setattr(settings, "AUTH_TOKEN", configured)
+
+    def unexpected_lookup(*args):
+        pytest.fail("Unauthenticated requests must never look up a VM")
+
+    monkeypatch.setattr(main.store, "get", unexpected_lookup)
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with client.websocket_connect("/vms/unused/tty", headers=headers):
+            pytest.fail("Unauthenticated WebSocket was accepted")
+    assert exc.value.code == 1008
+
+
+def test_websocket_tty_echo(client: TestClient, store_and_runner, auth_header):
     store, runner, base_dir = store_and_runner
 
     # Manually create a VM to ensure running state and SSH fields for /tty
@@ -750,7 +776,7 @@ def test_websocket_tty_echo(client: TestClient, store_and_runner):
     )
     store.put(vm)
 
-    with client.websocket_connect(f"/vms/{vm_id}/tty") as ws:
+    with client.websocket_connect(f"/vms/{vm_id}/tty", headers=auth_header) as ws:
         ws.send_text("hello")
         msg = ws.receive_text()
         # WS handler appends newline if not present before calling bridge.send

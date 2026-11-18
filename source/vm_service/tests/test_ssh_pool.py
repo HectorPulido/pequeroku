@@ -50,11 +50,14 @@ def reset_pool(monkeypatch):
         return c
 
     monkeypatch.setattr(ssh_pool, "_connect", fake_connect)
+    monkeypatch.setattr(ssh_pool, "assert_vm_identity", lambda cli, workdir: None)
     return made
 
 
 def _vm(vm_id="vm-pool"):
-    return types.SimpleNamespace(id=vm_id, ssh_port=2222, ssh_user="root")
+    return types.SimpleNamespace(
+        id=vm_id, workdir=f"/tmp/{vm_id}", ssh_port=2222, ssh_user="root"
+    )
 
 
 def test_borrow_yields_cli_and_sftp(reset_pool):

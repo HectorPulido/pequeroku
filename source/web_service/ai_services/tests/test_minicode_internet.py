@@ -1,7 +1,6 @@
 """Tests for the internet tools (web search / fetch) without real network.
 
-``ddgs`` is injected as a fake module; ``requests.get`` is monkeypatched (bs4 runs
-for real over the fake HTML).
+``ddgs`` is injected as a fake module; the HTTP session is monkeypatched.
 """
 
 from __future__ import annotations
@@ -9,7 +8,9 @@ from __future__ import annotations
 import sys
 import types
 
-import requests as requests_mod
+from contextlib import nullcontext
+
+from ai_services.minicode.tools import internet
 
 from ai_services.minicode.tools.internet import WebSearchTool, WebReadTool
 
@@ -64,9 +65,8 @@ def test_web_read_strips_scripts_and_returns_text(monkeypatch):
         def raise_for_status(self):
             return None
 
-    monkeypatch.setattr(
-        requests_mod, "get", lambda url, headers=None, timeout=None: FakeResp()
-    )
+    session = types.SimpleNamespace(get=lambda *args, **kwargs: FakeResp())
+    monkeypatch.setattr(internet, "public_http_session", lambda: nullcontext(session))
     out = WebReadTool().execute({"url": "http://x"}, None)
     assert "Hi" in out and "Body text" in out
     assert "var x=1" not in out  # script content stripped
@@ -76,7 +76,7 @@ def test_web_read_reports_errors(monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("conn refused")
 
-    monkeypatch.setattr(requests_mod, "get", boom)
+    monkeypatch.setattr(internet, "public_http_session", boom)
     out = WebReadTool().execute({"url": "http://x"}, None)
     assert "Error" in out and "conn refused" in out
 

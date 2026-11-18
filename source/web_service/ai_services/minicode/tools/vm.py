@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import posixpath
 from typing import Any
+from requests import Session
 
 from vm_manager.vm_client import VMServiceClient
 from internal_config.audit import audit_agent_tool
@@ -26,6 +27,17 @@ from internal_config.audit import audit_agent_tool
 
 class VMUnavailable(Exception):
     """There is no ``container`` associated with the Config (session badly initialized)."""
+
+
+class _AuthorizedNodeSession(Session):
+    def __init__(self, check_access):
+        super().__init__()
+        self._check_access = check_access
+
+    def send(self, request, **kwargs):
+        if not self._check_access():
+            raise VMUnavailable("VM access was revoked")
+        return super().send(request, **kwargs)
 
 
 def client_for_config(config: Any) -> tuple[VMServiceClient | None, str | None]:
@@ -41,7 +53,13 @@ def client_for_config(config: Any) -> tuple[VMServiceClient | None, str | None]:
         return None, None
     client = getattr(config, "_vm_client", None)
     if client is None:
-        client = VMServiceClient(container.node)
+        check_access = getattr(config, "check_vm_request", None)
+        if check_access is None:
+            client = VMServiceClient(container.node)
+        else:
+            client = VMServiceClient(
+                container.node, session=_AuthorizedNodeSession(check_access)
+            )
         try:
             config._vm_client = client
         except Exception:

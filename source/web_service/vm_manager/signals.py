@@ -88,12 +88,16 @@ def create_default_node(sender, **kwargs):
         return
 
     vcpus, mem_mb = _default_node_capacity()
+    local_node_host = "http://vm_services:8080/"
+    token = os.environ.get("BASE_NODE_AUTH_TOKEN", "").strip()
+    if token == "N/A":
+        token = ""
     node, created = Node.objects.get_or_create(
         name="base",
         defaults={
-            "node_host": "http://vm_services:8080/",
-            "active": True,
-            "auth_token": "N/A",
+            "node_host": local_node_host,
+            "active": bool(token),
+            "auth_token": token,
             "capacity_vcpus": vcpus,
             "capacity_mem_mb": mem_mb,
         },
@@ -101,7 +105,18 @@ def create_default_node(sender, **kwargs):
 
     if created:
         logger.info("Base node created (%s vCPU / %s MB)", vcpus, mem_mb)
-    elif node.capacity_vcpus == 1 and node.capacity_mem_mb == 1024:
+        return
+
+    if token and node.node_host == local_node_host:
+        updates = {}
+        if node.auth_token != token:
+            updates["auth_token"] = token
+        if not node.auth_token:
+            updates["active"] = True
+        if updates:
+            Node.objects.filter(pk=node.pk, node_host=local_node_host).update(**updates)
+
+    if node.capacity_vcpus == 1 and node.capacity_mem_mb == 1024:
         # Heal a node still at the untouched model default (1 vCPU / 1 GB) — too
         # small to schedule anything. Any other capacity is left untouched.
         node.capacity_vcpus = vcpus

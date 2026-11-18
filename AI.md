@@ -202,9 +202,10 @@ turn, with no persistent session process**:
   `Tool` named `<server>_<tool>` and appended to the `build`/`general` toolset for that
   turn. Native tools win on a name collision; total MCP tools are capped at 60
   (context-budget guard).
-- **Egress guard (SSRF):** requests leave the shared server, so user URLs pointing at
-  private/loopback/link-local hosts are blocked unless `PEQUENIN_MCP_ALLOW_PRIVATE` is
-  set. (Hostnames are not DNS-resolved here — a known limit.)
+- **Egress guard (SSRF):** MCP and the web reader check the DNS results for each
+  request and connect to a validated public IP. HTTPS still verifies the original
+  hostname. Use the final endpoint URL for MCP. The web reader checks each redirect
+  destination independently.
 - Everything is **sync** (`requests`), matching the worker-thread model — no async
   bridge, no new dependency. Best-effort: a bad/slow server is skipped and never breaks
   the turn (but each declared server adds one connect + `tools/list` round-trip/turn).

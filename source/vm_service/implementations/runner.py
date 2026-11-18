@@ -35,13 +35,12 @@ class Runner:
         def _run():
             try:
                 vm_ssh_user = settings.VM_SSH_USER
-                proc = start_vm(vm.workdir, vm.vcpus, vm.mem_mib, vm.disk_gib, vm.id)
+                proc = start_vm(vm.workdir, vm.vcpus, vm.mem_mib, vm.disk_gib)
                 vm.proc = proc
                 vm.ssh_port = proc.port_ssh
                 vm.ssh_user = vm_ssh_user
 
-                # start_vm already waited for SSH and warmed the SSH cache
-                # (see wait_ssh / finalize_and_cache); no second probe needed.
+                # start_vm already verified SSH reaches this VM's QEMU process.
                 self.store.set_status(vm, VMState.running)
             except Exception as e:  # pylint: disable=broad-except
                 # Surface the reason: this used to be swallowed into error_reason

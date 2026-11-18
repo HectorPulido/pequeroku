@@ -91,11 +91,12 @@ def borrow(container: Any) -> Iterator["_Conn"]:
             conn = None
         if conn is None:
             cli = _connect(container.ssh_port, container.ssh_user)
-            conn = _Conn(cli, cli.open_sftp())
-            # Fresh connection: confirm the port really hosts THIS vm before use.
-            # A mismatch raises; the finally below closes the connection so it never
-            # enters the pool and no file/exec op ever lands on the wrong VM.
-            assert_vm_identity(conn.cli, getattr(container, "id", None))
+            try:
+                assert_vm_identity(cli, container.workdir)
+                conn = _Conn(cli, cli.open_sftp())
+            except Exception:
+                cli.close()
+                raise
         yield conn
     except Exception:
         failed = True

@@ -88,7 +88,7 @@ def test_start_vm_success_x86(monkeypatch, tmp_path):
     monkeypatch.setattr(qvm, "_pid_alive", lambda pid: False)
 
     # Run
-    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8, vm_id="vm-1")
+    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8)
 
     # Asserts
     overlay_path = os.path.join(workdir, "disk.qcow2")
@@ -164,7 +164,7 @@ def test_start_vm_skips_seed_when_cloud_init_disabled(monkeypatch, tmp_path):
     monkeypatch.setattr(qvm.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(qvm, "wait_ssh", lambda **kwargs: True)
 
-    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8, vm_id="vm-baked")
+    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8)
 
     # No cloud-init seed is built and none is passed to the args builder.
     assert seed_called["n"] == 0
@@ -238,7 +238,7 @@ def test_start_vm_timeout_shows_tail(monkeypatch, tmp_path):
     monkeypatch.setattr(qvm.subprocess, "run", fake_run)
 
     with pytest.raises(TimeoutError):
-        _ = qvm.start_vm(workdir, vcpus=1, mem_mib=512, disk_gib=4, vm_id="vm-2")
+        _ = qvm.start_vm(workdir, vcpus=1, mem_mib=512, disk_gib=4)
 
     console_log_path = os.path.join(workdir, "console.log")
     assert run_calls["args"] == ["tail", "-n", "120", console_log_path]
@@ -286,7 +286,7 @@ def test_start_vm_uses_arm64_args(monkeypatch, tmp_path):
     monkeypatch.setattr(qvm.subprocess, "Popen", lambda *a, **k: FakePopen(a[0]))
     monkeypatch.setattr(qvm, "wait_ssh", lambda **kwargs: True)
 
-    proc = qvm.start_vm(workdir, vcpus=3, mem_mib=1536, disk_gib=12, vm_id="vm-arm")
+    proc = qvm.start_vm(workdir, vcpus=3, mem_mib=1536, disk_gib=12)
 
     overlay_path = os.path.join(workdir, "disk.qcow2")
     seed_iso_path = os.path.join(workdir, "seed.iso")
@@ -332,7 +332,7 @@ def test_start_vm_ensures_paths_when_uid_gid_set(monkeypatch, tmp_path):
 
     monkeypatch.setattr(qvm, "_ensure_paths_for_vm", fake_ensure_paths)
 
-    _ = qvm.start_vm(workdir, vcpus=1, mem_mib=512, disk_gib=6, vm_id="vm-uid")
+    _ = qvm.start_vm(workdir, vcpus=1, mem_mib=512, disk_gib=6)
 
     console_log_path = os.path.join(workdir, "console.log")
     overlay_path = os.path.join(workdir, "disk.qcow2")
@@ -380,7 +380,7 @@ def test_start_vm_adopts_running_vm(monkeypatch, tmp_path):
         qvm, "make_overlay", lambda *a, **k: overlay_recreated.__setitem__("v", True)
     )
 
-    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8, vm_id="vm-1")
+    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8)
 
     assert isinstance(proc, models.VMProc)
     assert proc.proc is None  # adopted, not freshly spawned
@@ -420,7 +420,7 @@ def test_start_vm_relaunches_when_running_vm_unusable(monkeypatch, tmp_path):
 
     monkeypatch.setattr(qvm.subprocess, "Popen", fake_popen)
 
-    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8, vm_id="vm-1")
+    proc = qvm.start_vm(workdir, vcpus=2, mem_mib=1024, disk_gib=8)
 
     assert killed["v"] is True
     assert launched["v"] is True

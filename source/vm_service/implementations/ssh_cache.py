@@ -1,20 +1,13 @@
-from typing import cast
-import shlex
+from pathlib import Path
 import socket
+from typing import cast
+
 import paramiko
+
 import settings
 from models import VMRecord
 from qemu_manager.crypto import load_pkey
-
-# Identity marker: each VM stamps its own vm_id into the guest at boot (see
-# qemu_manager.ssh_ready.wait_ssh) so a consumer can verify the machine behind a
-# loopback SSH port is really the VM it asked for — defending against ssh_port
-# collisions that would otherwise route one container to another's VM.
-VM_ID_MARKER_PATH = "/etc/pequeroku-vm-id"
-
-
-class VMIdentityMismatch(Exception):
-    """Raised when the VM behind an SSH port is not the vm_id we expected."""
+from qemu_manager.ssh_peer import VMIdentityMismatch, verify_ssh_peer
 
 
 cache_data: dict[
@@ -82,48 +75,11 @@ def exec_and_close_status(
             pass
 
 
-def write_vm_id_marker(cli: paramiko.SSHClient, vm_id: str) -> None:
-    """Best-effort: stamp ``vm_id`` into the guest at ``VM_ID_MARKER_PATH``.
-
-    Written on EVERY boot to the CURRENT vm_id, so a duplicated disk (which carries
-    the source's stamp) is corrected as soon as the clone boots. Never raises — a
-    VM that can't be stamped just stays 'legacy' and is treated tolerantly on read.
-    """
-    if not vm_id:
-        return
-    try:
-        cmd = f"printf %s {shlex.quote(str(vm_id))} > {VM_ID_MARKER_PATH}"
-        _ = exec_and_close(cli, cmd, timeout=5)
-    except Exception as e:
-        print("Could not write vm-id marker:", e)
-
-
-def read_vm_id_marker(cli: paramiko.SSHClient) -> str | None:
-    """Read the guest's stamped vm_id, or ``None`` if absent/unreadable (tolerant)."""
-    try:
-        out, _ = exec_and_close(cli, f"cat {VM_ID_MARKER_PATH} 2>/dev/null", timeout=5)
-        marker = out.decode(errors="ignore").strip()
-        return marker or None
-    except Exception:
-        return None
-
-
-def assert_vm_identity(cli: paramiko.SSHClient, expected_vm_id: str | None) -> None:
-    """
-    Verify the VM reachable over ``cli`` is ``expected_vm_id``; raise otherwise.
-
-    TOLERANT by design so it deploys without disrupting VMs booted before the marker
-    existed: a MISSING marker (legacy VM, or transiently unreadable) is accepted.
-    Only a marker that is PRESENT and DIFFERENT — i.e. a real cross-wiring where
-    operating would touch the wrong machine — raises :class:`VMIdentityMismatch`.
-    """
-    if not expected_vm_id:
-        return
-    marker = read_vm_id_marker(cli)
-    if marker is not None and marker != str(expected_vm_id):
-        raise VMIdentityMismatch(
-            f"VM identity mismatch: expected {expected_vm_id}, port hosts {marker}"
-        )
+def assert_vm_identity(cli: paramiko.SSHClient, workdir: str) -> None:
+    transport = cli.get_transport()
+    if transport is None:
+        raise VMIdentityMismatch("Cannot verify SSH peer for VM")
+    verify_ssh_peer(transport.sock, str(Path(workdir) / "qemu.pid"))
 
 
 def clear_cache(vm_id: str):
@@ -140,9 +96,7 @@ def finalize_and_cache(container_id: str, cli: paramiko.SSHClient):
     Take an already-connected SSH client, tune it, open the sftp/shell channels
     and store the full entry in ``cache_data``.
 
-    This is the single place where a cache entry is built, so every code path
-    (lazy generation and the boot-time warmup in ``wait_ssh``) produces an
-    identical, consistent entry (cli + sftp + chan + transport tuning).
+    The calling code must verify the peer before opening these channels.
     """
     # Disable Nagle on the SSH transport: tiny keystroke packets must not wait to be
     # coalesced (~40ms otherwise). Keepalive avoids idle drops. Guarded so test fakes
@@ -172,6 +126,8 @@ def finalize_and_cache(container_id: str, cli: paramiko.SSHClient):
 
 def _connect(ssh_port: int | None, ssh_user: str | None) -> paramiko.SSHClient:
     """Open and TCP-tune a fresh SSH connection (no caching, no channels)."""
+    if not ssh_port or not ssh_user:
+        raise VMIdentityMismatch("VM has no assigned SSH endpoint")
     # Use the shared multi-format loader (Ed25519/RSA/ECDSA) instead of hardcoding
     # Ed25519Key: prod's VM_SSH_PRIVKEY is not necessarily an ed25519 key, and a
     # hardcoded Ed25519Key.from_private_key_file raises SSHException("Invalid key")
@@ -182,8 +138,8 @@ def _connect(ssh_port: int | None, ssh_user: str | None) -> paramiko.SSHClient:
     cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     cli.connect(
         "127.0.0.1",
-        port=ssh_port or 22,
-        username=ssh_user or "root",
+        port=ssh_port,
+        username=ssh_user,
         pkey=key,
         look_for_keys=False,
     )
@@ -208,8 +164,14 @@ def _generate_ssh_and_sftp_by_id(
     ssh_user: str | None,
 ):
     print("Generating cache for: ", container_id)
+    workdir = Path(settings.VM_BASE_DIR) / "vms" / container_id
     cli = _connect(ssh_port, ssh_user)
-    return finalize_and_cache(container_id, cli)
+    try:
+        assert_vm_identity(cli, str(workdir))
+        return finalize_and_cache(container_id, cli)
+    except Exception:
+        cli.close()
+        raise
 
 
 def _generate_ssh_and_sftp(container: VMRecord):
@@ -295,7 +257,8 @@ def generate_console(container: VMRecord):
     # Never open a terminal onto the wrong VM: if the port hosts a different vm_id
     # (collision), refuse instead of handing the user someone else's machine.
     try:
-        assert_vm_identity(cli, container.id)
+        assert_vm_identity(cli, container.workdir)
+        chan = cli.invoke_shell(width=120, height=32)
     except Exception:
         try:
             cli.close()
@@ -303,7 +266,6 @@ def generate_console(container: VMRecord):
             pass
         raise
 
-    chan = cli.invoke_shell(width=120, height=32)
     # Small timeout (not 0.0): recv() blocks until data arrives (zero added latency)
     # and only wakes periodically to honor shutdown, instead of busy-polling.
     chan.settimeout(0.2)

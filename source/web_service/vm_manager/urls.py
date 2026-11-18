@@ -1,10 +1,10 @@
 from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 from .preview_proxy import (
-    CSRFExemptSessionAuthentication,
     PreviewPassthroughRenderer,
     PreviewTokenAuthentication,
 )
+from .preview_access import PreviewBrowserAuthentication, launch_preview
 from .views import (
     ContainersViewSet,
     UserViewSet,
@@ -22,7 +22,7 @@ router.register(r"container-types", ContainerTypeViewSet, basename="container-ty
 # without a trailing slash and any method. Registered outside the router (whose
 # forced trailing slash would 404 a slash-less POST → APPEND_SLASH RuntimeError)
 # and with CSRF disabled (the guest form carries its own token, not ours).
-_preview_view = ContainersViewSet.as_view(
+preview_view = ContainersViewSet.as_view(
     {
         "get": "preview",
         "post": "preview",
@@ -32,11 +32,10 @@ _preview_view = ContainersViewSet.as_view(
         "head": "preview",
         "options": "preview",
     },
-    # Token auth (agents / browser embeds) is tried first; session auth (the IDE)
-    # is the fallback. Either reaches the same preview URL.
+    # Browser grants are tied to the dedicated preview hostname.
     authentication_classes=[
         PreviewTokenAuthentication,
-        CSRFExemptSessionAuthentication,
+        PreviewBrowserAuthentication,
     ],
     # Wildcard renderer: a previewed app may demand any media type (e.g. Gradio's
     # SSE `Accept: text/event-stream`), which DRF's default renderers would 406.
@@ -44,9 +43,18 @@ _preview_view = ContainersViewSet.as_view(
 )
 
 urlpatterns = [
+    path(
+        "containers/<int:pk>/preview-launch/<int:port>/",
+        launch_preview,
+        name="container-preview-launch",
+    ),
+    path(
+        "containers/<int:pk>/preview-launch/<int:port>/<path:path>",
+        launch_preview,
+    ),
     re_path(
         r"^containers/(?P<pk>[^/]+)/preview/(?P<port>\d+)(?:/(?P<path>.*))?$",
-        _preview_view,
+        preview_view,
         name="container-preview",
     ),
     path("", include(router.urls)),

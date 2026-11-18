@@ -3,8 +3,7 @@
 # start.sh — one command to bring PequeRoku up from a fresh checkout.
 #
 # Idempotent: runs the local bootstrap (setup.sh) and then `docker compose up`.
-# Re-running is always safe — setup.sh never overwrites existing files and
-# compose only recreates containers whose config changed.
+# setup.sh preserves existing settings and fills in missing node credentials.
 #
 # Usage:
 #   ./start.sh                 # setup + build + up -d
@@ -73,7 +72,10 @@ echo
 # 1) Idempotent bootstrap (env files + KVM override)
 # --------------------------------------------------------------------------- #
 log "Bootstrapping local config..."
-bash ./setup.sh
+if ! bash ./setup.sh; then
+  err "Local configuration failed."
+  exit 1
+fi
 
 # --------------------------------------------------------------------------- #
 # 1.5) Keep each Poetry lockfile in sync with its pyproject (auto-relock)

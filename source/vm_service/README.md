@@ -84,7 +84,9 @@ Runtime Requirements
 Configuration (Environment Variables)
 All configuration is read in vm_service/settings.py. Key variables:
 
-- AUTH_TOKEN: Bearer token required for all protected endpoints (everything except /health).
+- AUTH_TOKEN: Set a strong, unique Bearer token for each node and use that same
+  value in the node's Django configuration. An unset token or the old `N/A`
+  placeholder disables access to protected endpoints, including the terminal.
 - REDIS_URL: e.g. redis://redis:6379/1
 - REDIS_PREFIX: Namespace/prefix for Redis keys (default: vmservice:)
 - NODE_NAME: Logical name of the node running the VMs (displayed in responses)
@@ -99,8 +101,16 @@ All configuration is read in vm_service/settings.py. Key variables:
 
 API Overview
 Auth
-- All /vms/* routes require Authorization: Bearer <AUTH_TOKEN>.
+- All `/vms/*` routes require `Authorization: Bearer <AUTH_TOKEN>`, including
+  the WebSocket terminal.
 - /health is public.
+
+The node-only Compose file binds port 8080 to loopback by default. For a
+separate Django host, set `VM_SERVICE_BIND_IP` to the node's private interface
+and restrict ingress to the Django host. The VM controller must share QEMU's
+process and network namespaces. It verifies that each SSH connection belongs
+to the VM's QEMU process using its `qemu.pid` and the kernel socket table, and
+rejects the connection when that ownership cannot be established.
 
 Health
 - GET /health

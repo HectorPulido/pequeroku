@@ -22,6 +22,7 @@ class FakeTransport:
     def __init__(self, active=True):
         self.active = active
         self.keepalive = None
+        self.sock = None
 
     def is_active(self):
         return self.active
@@ -72,6 +73,9 @@ class FakeSSHClient:
         ch = FakeChannel()
         return ch
 
+    def close(self):
+        self.connected = False
+
 
 @pytest.fixture(autouse=True)
 def reset_cache(monkeypatch):
@@ -95,6 +99,7 @@ def fake_paramiko(monkeypatch):
         sc.paramiko, "AutoAddPolicy", lambda: DummyPolicy(), raising=True
     )
     monkeypatch.setattr(sc.paramiko, "SSHClient", FakeSSHClient, raising=True)
+    monkeypatch.setattr(sc, "verify_ssh_peer", lambda sock, pidfile: None)
     return FakeSSHClient
 
 
@@ -245,6 +250,22 @@ def test_open_helpers_and_generate_console(monkeypatch, fake_paramiko, vm_record
     assert c2.channels_created == 1  # its own shell channel
     assert cli.channels_created == 1  # cached cli left untouched
     assert chan._timeout == 0.2  # generate_console sets a small blocking timeout
+
+
+def test_console_rejects_unverified_peer_before_opening_shell(monkeypatch, vm_record):
+    cli = FakeSSHClient()
+    cli.connected = True
+    monkeypatch.setattr(sc, "_connect", lambda port, user: cli)
+
+    def reject_peer(sock, pidfile):
+        assert pidfile == "/tmp/qemu.pid"
+        raise sc.VMIdentityMismatch("Cannot verify SSH peer for VM")
+
+    monkeypatch.setattr(sc, "verify_ssh_peer", reject_peer)
+    with pytest.raises(sc.VMIdentityMismatch):
+        sc.generate_console(vm_record)
+    assert cli.channels_created == 0
+    assert cli.connected is False
 
 
 def test_exec_and_close_status_returns_exit_code():

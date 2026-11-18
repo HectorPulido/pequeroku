@@ -53,9 +53,9 @@ port, and start it detached so the command returns — e.g. \
 call `get_preview` to list the listening ports, each with a ready-to-use \
 `preview_url`. To verify the app end-to-end, call `get_preview(container_id, port, \
 path)`: it fetches the LIVE response (status + body) using your API key, so you \
-see what the app actually serves, not just that a port is open. To hand a human a \
-link, append `?__pk_token=<your key>` to the `preview_url` (owner-only; the key \
-also works as an `Authorization: Bearer` header). Long-running processes started \
+see what the app actually serves, not just that a port is open. To open a \
+`browser_preview_url` in a browser, sign in to PequeRoku with access to that VM. \
+Long-running processes started \
 with `background=true` return a `process_id` you poll with `process_status`.
 
 # Conventions

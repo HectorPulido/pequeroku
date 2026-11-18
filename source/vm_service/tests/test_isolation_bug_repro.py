@@ -1,30 +1,4 @@
-"""Reproduction of the container ISOLATION bug.
-
-Symptom (seen in prod): two distinct ``Container`` records — two different
-``container_id`` UUIDs (e.g. ``773111b2…`` and ``458db977…``) — open the terminal
-and the file tree of the SAME physical VM. A file created from one container
-appears in the other; writes cross over.
-
-Root cause proven here: the vm-service routes EVERY operation to
-``127.0.0.1:<ssh_port>`` (see ``ssh_cache._connect`` / ``ssh_pool.borrow``). That
-port is the ONLY thing that identifies the physical machine, and it is fragile:
-
-1. ``pick_free_port()`` binds ``:0``, reads the number and CLOSES the socket, so
-   the port is not reserved until QEMU finally binds it — two concurrent
-   ``start_vm`` calls can hand out the SAME port (TOCTOU).
-2. ``Runner.stop`` never clears ``ssh_port``: a stopped VM keeps a stale port in
-   Redis, which the next boot can reuse.
-3. ``store._reconcile`` marks a VM "running" when *anything* answers on its port —
-   it never checks that the machine behind the port is the intended VM.
-
-When two ``VMRecord``s end up with the same ``ssh_port``, both resolve to the one
-live QEMU behind it. These tests reproduce each broken link, plus the end-to-end
-break, WITHOUT booting real QEMU: the only thing faked is the transport at the
-exact boundary the code trusts — ``connect to 127.0.0.1:<port>``. Physical
-machines are modeled as a registry keyed BY PORT, so the real routing code
-(``store`` + ``_reconcile`` + ``ssh_pool.borrow`` + the ``/execute-sh`` route)
-decides which machine each container reaches.
-"""
+"""Regression tests for SSH port reuse and cross-VM routing."""
 
 from __future__ import annotations
 
@@ -36,7 +10,7 @@ from fastapi.testclient import TestClient
 
 import main
 import settings
-from implementations import ssh_pool
+from implementations import ssh_cache, ssh_pool
 from implementations import runner as runner_mod
 from implementations.store import RedisStore
 from qemu_manager.ports import pick_free_port
@@ -123,7 +97,9 @@ class FakeExecClient:
         return object()  # borrow() stores it but the exec path never uses it
 
     def get_transport(self):
-        return _FakeTransport()
+        transport = _FakeTransport()
+        transport.sock = self.machine
+        return transport
 
     def close(self):
         return None
@@ -195,6 +171,11 @@ def _fake_connect(ssh_port, ssh_user):
     return FakeExecClient(machine)
 
 
+def _verify_fake_peer(peer, pidfile):
+    if pidfile != f"/tmp/{peer.hostname}/qemu.pid":
+        raise ssh_cache.VMIdentityMismatch("Cannot verify SSH peer for VM")
+
+
 def _fake_create_connection(addr, timeout=1.5):
     """A port is 'alive' iff a machine is bound to it (identity-blind, like prod)."""
     _host, port = addr
@@ -205,6 +186,7 @@ def _fake_create_connection(addr, timeout=1.5):
 
 def _install(monkeypatch) -> RedisStore:
     monkeypatch.setattr(ssh_pool, "_connect", _fake_connect, raising=True)
+    monkeypatch.setattr(ssh_cache, "verify_ssh_peer", _verify_fake_peer)
     monkeypatch.setattr(
         "implementations.store.socket.create_connection", _fake_create_connection
     )
@@ -378,8 +360,8 @@ def test_reconcile_reports_running_even_when_port_belongs_to_another_vm(monkeypa
 # ---------------------------------------------------------------------------
 def test_baseline_isolation_holds_with_distinct_ports(monkeypatch):
     store = _install(monkeypatch)
-    MACHINES[5001] = FakeMachine("vm-A")
-    MACHINES[5002] = FakeMachine("vm-B")
+    MACHINES[5001] = FakeMachine("id-A")
+    MACHINES[5002] = FakeMachine("id-B")
 
     a = _vm("id-A", 5001)
     b = _vm("id-B", 5002)
@@ -406,96 +388,26 @@ def test_baseline_isolation_holds_with_distinct_ports(monkeypatch):
     h = client.post(
         f"/vms/{b.id}/execute-sh", json={"command": "hostname"}, headers=AUTH
     )
-    assert h.json()["stdout"].strip() == "vm-B"
+    assert h.json()["stdout"].strip() == "id-B"
 
 
-# ---------------------------------------------------------------------------
-# THE BUG (residual, tolerant path): if a collision somehow exists on UNMARKED
-# (legacy) VMs, routing is still by port. The fixes PREVENT the collision from
-# forming (reserved ports + clear-on-stop); the identity marker (next test) BLOCKS
-# operating on it once VMs are stamped. This documents the tolerant fallback.
-# ---------------------------------------------------------------------------
-def test_unmarked_vms_still_route_by_port_tolerant(monkeypatch):
+def test_peer_check_blocks_cross_wiring_on_shared_port(monkeypatch):
     store = _install(monkeypatch)
-
-    # ONE surviving QEMU on port 5001, booted from container 232's disk (a
-    # duplicate copies the disk verbatim, so it carries 232's baked hostname).
-    # No identity marker set -> assert_vm_identity is tolerant and allows it.
-    survivor = FakeMachine("773111b2-39c2-418c-b90e-2ee5f4b61890")
-    MACHINES[5001] = survivor
-
-    # Container 232 (hectorpulido.net) — legitimately on 5001.
-    c232 = _vm("773111b2-39c2-418c-b90e-2ee5f4b61890", 5001)
-    # Container 257 (heyform) — a DIFFERENT container_id, but the port picker
-    # handed it 5001 too; its own QEMU lost the bind and died.
-    c257 = _vm("458db977-dc99-4925-a324-c93f9025ef00", 5001)
-    store.put(c232)
-    store.put(c257)
-
+    owner = _vm("vm-owner", 5001)
+    other = _vm("vm-other", 5001)
+    store.put(owner)
+    store.put(other)
+    MACHINES[5001] = FakeMachine(owner.id)
     client = TestClient(main.app)
 
-    # Both are reported RUNNING though only one machine exists.
-    assert store.get(c232.id).state == VMState.running
-    assert store.get(c257.id).state == VMState.running
-
-    # Create a file FROM container 232.
-    w = client.post(
-        f"/vms/{c232.id}/execute-sh",
-        json={
-            "command": "printf %s 'Archivo creado desde 232' > /app/heyform/test.txt"
-        },
-        headers=AUTH,
+    authorized = client.post(
+        f"/vms/{owner.id}/execute-sh", json={"command": "hostname"}, headers=AUTH
     )
-    assert w.status_code == 200 and w.json()["ok"]
+    assert authorized.json()["ok"]
+    assert authorized.json()["stdout"].strip() == owner.id
 
-    # Read it FROM container 257 — it is there. Same machine. Isolation broken.
-    r = client.post(
-        f"/vms/{c257.id}/execute-sh",
-        json={"command": "cat /app/heyform/test.txt"},
-        headers=AUTH,
+    denied = client.post(
+        f"/vms/{other.id}/execute-sh", json={"command": "hostname"}, headers=AUTH
     )
-    assert r.json()["ok"]
-    assert r.json()["stdout"] == "Archivo creado desde 232"
-
-    # And 257's terminal reports 232's hostname, exactly like the screenshots.
-    h = client.post(
-        f"/vms/{c257.id}/execute-sh", json={"command": "hostname"}, headers=AUTH
-    )
-    assert h.json()["stdout"].strip() == "773111b2-39c2-418c-b90e-2ee5f4b61890"
-
-
-# ---------------------------------------------------------------------------
-# THE FIX, end to end: with the identity marker stamped, container 257 can NO
-# LONGER reach container 232's machine even if their ports collide.
-# ---------------------------------------------------------------------------
-def test_identity_marker_blocks_cross_wiring(monkeypatch):
-    store = _install(monkeypatch)
-
-    # The one live QEMU on port 5001 is container 232, and it is STAMPED with 232's
-    # id (write_vm_id_marker does this on every boot).
-    survivor = FakeMachine("773111b2-39c2-418c-b90e-2ee5f4b61890")
-    survivor.fs["/etc/pequeroku-vm-id"] = "773111b2-39c2-418c-b90e-2ee5f4b61890"
-    MACHINES[5001] = survivor
-
-    c232 = _vm("773111b2-39c2-418c-b90e-2ee5f4b61890", 5001)
-    c257 = _vm("458db977-dc99-4925-a324-c93f9025ef00", 5001)  # collided onto 5001
-    store.put(c232)
-    store.put(c257)
-
-    client = TestClient(main.app)
-
-    # 232 reaches its own machine fine (marker matches).
-    r232 = client.post(
-        f"/vms/{c232.id}/execute-sh", json={"command": "hostname"}, headers=AUTH
-    )
-    assert r232.json()["ok"]
-    assert r232.json()["stdout"].strip() == "773111b2-39c2-418c-b90e-2ee5f4b61890"
-
-    # 257 tries to operate on port 5001 -> marker says 773111b2 != 458db977 ->
-    # assert_vm_identity raises -> the endpoint refuses. No cross-wiring.
-    r257 = client.post(
-        f"/vms/{c257.id}/execute-sh",
-        json={"command": "cat /app/heyform/test.txt"},
-        headers=AUTH,
-    )
-    assert r257.json()["ok"] is False  # blocked, did not read 232's machine
+    assert denied.json()["ok"] is False
+    assert not denied.json().get("stdout")

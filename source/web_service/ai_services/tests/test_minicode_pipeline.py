@@ -10,6 +10,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import ai_services.minicode.frontends.pipeline as pipeline
+from ai_services.minicode.events import ToolCallStarted
 from ai_services.minicode.session import Session
 
 
@@ -43,6 +44,47 @@ class _FakeAgent:
         yield AssistantTextEnd(depth=0)
         self.session.add_assistant("Hi there", [])
         return "Hi there"
+
+
+async def test_run_pipeline_does_not_execute_another_tool_after_revocation(monkeypatch):
+    monkeypatch.setattr(pipeline, "_read_ai_config", _fake_config)
+    monkeypatch.setattr(pipeline, "LLM", _FakeLLM)
+    ran = []
+    revoked = False
+
+    class TwoTools:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self):
+            yield ToolCallStarted(name="read", args={}, depth=0)
+            ran.append("read")
+            yield ToolCallStarted(name="write", args={}, depth=1)
+            ran.append("write")
+
+    async def check_access():
+        return not revoked
+
+    async def on_tool_call(name, **kwargs):
+        nonlocal revoked
+        if name == "write":
+            revoked = True
+
+    async def noop(*args):
+        pass
+
+    monkeypatch.setattr(pipeline, "Agent", TwoTools)
+    await pipeline.run_pipeline(
+        query="test",
+        messages=[],
+        container_obj=SimpleNamespace(node=object()),
+        on_chunk=noop,
+        on_tool_call=on_tool_call,
+        on_start_chunking=noop,
+        on_finish_chunking=noop,
+        check_access=check_access,
+    )
+    assert ran == ["read"]
 
 
 async def test_run_pipeline_streams_events_and_returns_messages(monkeypatch):

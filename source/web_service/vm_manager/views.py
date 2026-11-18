@@ -17,12 +17,16 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, MultiPartParser
+from rest_framework.permissions import SAFE_METHODS
 from rest_framework.response import Response
 
 from drf_spectacular.utils import extend_schema
 
 from internal_config.audit import audit_log_http
+from pequeroku.live_access import api_key_can_access_vm, session_can_access_vm
+from platform_api.models import APIKey
 
+from .preview_access import preview_grant_is_live
 from .preview_proxy import build_preview_response
 from .serializers import (
     ContainerSerializer,
@@ -727,6 +731,9 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
     @xframe_options_exempt
     def preview(self, request, pk=None, port=None, path=None, format=None):
         """Binary-safe HTTP proxy to an app listening inside the container's VM."""
+        if request.headers.get("Service-Worker") == "script":
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
         obj: Container = self.get_object()
         if not port:
             return Response("No port", status=status.HTTP_400_BAD_REQUEST)
@@ -736,7 +743,38 @@ class ContainersViewSet(viewsets.ModelViewSet, VMSyncMixin):
         if format:
             path = f"{path}.{format}" if path else format
         service = self._get_service(obj)
-        return build_preview_response(request, obj, port, path, service)
+        browser_grant = request.auth if isinstance(request.auth, dict) else None
+        key = request.auth if isinstance(request.auth, APIKey) else None
+        scope = (
+            APIKey.SCOPE_READ if request.method in SAFE_METHODS else APIKey.SCOPE_EXEC
+        )
+
+        async def access_check():
+            if browser_grant is not None:
+                return await preview_grant_is_live(
+                    request._preview_grant
+                ) and await session_can_access_vm(
+                    browser_grant["session_key"], browser_grant["user_id"], obj.pk
+                )
+            if key is not None:
+                return await api_key_can_access_vm(key.pk, key.user_id, obj.pk, scope)
+            return False
+
+        response = build_preview_response(
+            request, obj, port, path, service, access_check=access_check
+        )
+        if browser_grant is None:
+            response["Content-Security-Policy"] = (
+                "sandbox; default-src 'none'; frame-ancestors 'none'"
+            )
+            response["X-Frame-Options"] = "DENY"
+        else:
+            response["Content-Security-Policy"] = (
+                f"frame-ancestors {browser_grant['control_origin']}; base-uri 'self'"
+            )
+            response["Referrer-Policy"] = "same-origin"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
 
     @action(detail=True, methods=["get"])
     def conversations(self, request, pk=None):

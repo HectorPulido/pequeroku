@@ -11,15 +11,22 @@ passed through untouched — rewriting their string literals is exactly what bro
 ES modules and JSON before.
 """
 
+import asyncio
 import base64
+from contextlib import suppress
+from time import monotonic
 import re
 from urllib.parse import parse_qsl, urlencode
 
 import httpx
+from django.core.cache import cache
 from django.http import HttpResponse, StreamingHttpResponse
-from rest_framework import authentication
-from rest_framework.authentication import SessionAuthentication
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import SAFE_METHODS
 from rest_framework.renderers import BaseRenderer
+
+from platform_api.auth import APIKeyAuthentication
+from .preview_access import _GRANT_AGE
 
 
 class PreviewPassthroughRenderer(BaseRenderer):
@@ -41,96 +48,24 @@ class PreviewPassthroughRenderer(BaseRenderer):
         return data
 
 
-class CSRFExemptSessionAuthentication(SessionAuthentication):
-    """Session auth without CSRF enforcement, for the preview proxy only.
-
-    The previewed app's own forms POST through this endpoint and carry the
-    *guest* app's CSRF token, never pequeroku's — so DRF's CSRF check would block
-    every form. Skipping it here is safe: ``sessionid`` is ``SameSite=Lax``, so a
-    cross-site POST never carries the session and thus can't be forged through
-    this endpoint.
-    """
-
-    def enforce_csrf(self, request):  # noqa: D401 - intentional no-op
-        return
-
-
-# Preview token auth: agents (and browser embeds that can't set request headers)
-# present their platform API key to the SAME preview URL the IDE uses. It travels
-# as ``Authorization: Bearer pk_...``, the ``__pk_token`` query param, or the
-# short-lived ``__pk_preview_token`` cookie we set after a query-param hit so an
-# embedded page's subresources authenticate too. The query param is namespaced
-# (``__pk_``) so it won't collide with the guest app's own params, and it is
-# STRIPPED before the request is forwarded upstream (the guest app must never see
-# the key). Header/cookie tokens are never forwarded either (see the header
-# allowlist / server-side cookie jar).
+# Keep stripping obsolete credential parameters from bookmarked links before
+# relaying to a guest, even when the browser now authenticates by session.
 PREVIEW_TOKEN_QUERY = "__pk_token"
-PREVIEW_TOKEN_COOKIE = "__pk_preview_token"
-PREVIEW_TOKEN_TTL = 3600  # seconds the bootstrap cookie stays valid
 
 
-class PreviewTokenAuthentication(authentication.BaseAuthentication):
-    """Authenticate the preview with a platform API key (header / query / cookie).
-
-    Registered BEFORE session auth on the preview view so scripts and agents can
-    reach the preview without a login cookie. Any failure returns ``None`` (it
-    never raises) so DRF falls through to session auth — the IDE keeps working and
-    a bad/expired token just yields a clean 401. Ownership is still enforced by the
-    view's ``get_object()``: the key owner only ever sees their own containers.
-    """
+class PreviewTokenAuthentication(APIKeyAuthentication):
+    """Accept platform keys in the Authorization header and enforce method scope."""
 
     def authenticate(self, request):
-        raw, via = self._extract(request)
-        if not raw:
+        result = super().authenticate(request)
+        if result is None:
             return None
-        # Lazy import: platform_api imports vm_manager, so importing it at module
-        # load could race Django's app registry.
-        from platform_api.models import APIKey
 
-        key = self._verify(APIKey, raw)
-        if key is None or not key.has_scope(APIKey.SCOPE_READ):
-            return None
-        if via == "query":
-            # Flag it so the view drops a path-scoped cookie for the subresources
-            # (which load via the injected <base> and carry no query string).
-            request._preview_query_token = raw
-        return (key.user, key)
-
-    def authenticate_header(self, request):
-        return "Bearer"
-
-    @staticmethod
-    def _extract(request):
-        parts = authentication.get_authorization_header(request).split()
-        if len(parts) == 2 and parts[0].lower() == b"bearer":
-            token = parts[1].decode("latin-1")
-            if token.startswith("pk_"):
-                return token, "header"
-        params = getattr(request, "query_params", None)
-        if params is None:
-            params = request.GET
-        query_token = params.get(PREVIEW_TOKEN_QUERY)
-        if query_token and query_token.startswith("pk_"):
-            return query_token, "query"
-        cookie_token = request.COOKIES.get(PREVIEW_TOKEN_COOKIE)
-        if cookie_token and cookie_token.startswith("pk_"):
-            return cookie_token, "cookie"
-        return None, None
-
-    @staticmethod
-    def _verify(api_key_model, raw):
-        prefix, _, secret = raw[3:].partition("_")
-        if not prefix or not secret:
-            return None
-        try:
-            key = api_key_model.objects.select_related("user").get(
-                prefix=prefix, revoked=False
-            )
-        except api_key_model.DoesNotExist:
-            return None
-        if not key.verify_secret(secret) or not key.user.is_active:
-            return None
-        return key
+        user, key = result
+        scope = key.SCOPE_READ if request.method in SAFE_METHODS else key.SCOPE_EXEC
+        if not key.has_scope(scope):
+            raise PermissionDenied(f"Preview requires the {scope} scope")
+        return user, key
 
 
 def _strip_preview_token(query: str) -> str:
@@ -140,14 +75,14 @@ def _strip_preview_token(query: str) -> str:
     the browser put in the URL. Only our namespaced param is removed, so the app's
     own query params pass through untouched.
     """
-    if not query or PREVIEW_TOKEN_QUERY not in query:
+    if not query:
         return query
-    kept = [
-        (key, value)
-        for key, value in parse_qsl(query, keep_blank_values=True)
-        if key != PREVIEW_TOKEN_QUERY
-    ]
-    return urlencode(kept)
+    pairs = parse_qsl(query, keep_blank_values=True)
+    if not any(key == PREVIEW_TOKEN_QUERY for key, _ in pairs):
+        return query
+    return urlencode(
+        [(key, value) for key, value in pairs if key != PREVIEW_TOKEN_QUERY]
+    )
 
 
 # Request headers we forward upstream. Deliberately tiny: never leak pequeroku's
@@ -171,7 +106,9 @@ _DROP_RESPONSE_HEADERS = frozenset(
         "content-encoding",  # upstream was forced to identity
         "x-frame-options",  # frame-busting: we must be embeddable
         "content-security-policy",  # may carry frame-ancestors
-        "set-cookie",  # v1: don't drop app cookies onto our origin
+        "set-cookie",  # guest cookies stay in the server-side jar
+        "service-worker-allowed",
+        "clear-site-data",
     }
 )
 
@@ -195,6 +132,7 @@ def _no_cache(resp):
     """
     resp["Cache-Control"] = "no-store, max-age=0, must-revalidate"
     resp["Pragma"] = "no-cache"
+    resp["Referrer-Policy"] = "no-referrer"
     return resp
 
 
@@ -394,8 +332,9 @@ def _update_cookie_jar(request, jar_key: str, jar: dict, up_headers) -> None:
     app's ``sessionid``/``csrftoken`` can't collide with pequeroku's own cookies
     on the shared origin. This is what lets login + CSRF-protected forms work.
     """
+    grant = getattr(request, "_preview_grant", None)
     session = getattr(request, "session", None)
-    if session is None:
+    if grant is None and session is None:
         return
     changed = False
     for key, value in up_headers:
@@ -411,6 +350,9 @@ def _update_cookie_jar(request, jar_key: str, jar: dict, up_headers) -> None:
             jar[name] = val
             changed = True
     if changed:
+        if grant is not None:
+            cache.set(f"preview-cookie-jar:{grant}", jar, _GRANT_AGE)
+            return
         all_jars = dict(session.get("preview_cookies", {}))
         all_jars[jar_key] = jar
         session["preview_cookies"] = all_jars  # top-level set -> modified
@@ -432,8 +374,12 @@ def _forward_payload(request, container, port, path):
 
     session = getattr(request, "session", None)
     jar_key = f"{container.pk}:{port}"
-    stored = session.get("preview_cookies", {}) if session is not None else {}
-    jar = dict(stored.get(jar_key, {}))
+    grant = getattr(request, "_preview_grant", None)
+    if grant is not None:
+        jar = dict(cache.get(f"preview-cookie-jar:{grant}", {}))
+    else:
+        stored = session.get("preview_cookies", {}) if session is not None else {}
+        jar = dict(stored.get(jar_key, {}))
     fwd_headers = _pick_request_headers(request)
     if jar:
         fwd_headers["Cookie"] = _cookie_header(jar)
@@ -474,10 +420,12 @@ def _public_origin(request) -> str:
         proto = "http"
     if not proto:
         proto = (request.META.get("HTTP_X_FORWARDED_PROTO") or "").split(",")[0].strip()
-    return f"{proto or request.scheme}://{request.get_host()}"
+    if proto not in ("http", "https"):
+        proto = request.scheme
+    return f"{proto}://{request.get_host()}"
 
 
-def _streaming_preview_response(request, container, port, path, service):
+def _streaming_preview_response(request, container, port, path, service, access_check):
     """Relay an SSE/streamed response from the VM app to the browser, live.
 
     The DRF view stays SYNC (auth/get_object/cookie-jar untouched); this just
@@ -494,11 +442,15 @@ def _streaming_preview_response(request, container, port, path, service):
         # connect timeout bounded; read timeout disabled so the stream can idle.
         timeout = httpx.Timeout(15.0, read=None)
         try:
+            if access_check is not None and not await access_check():
+                return
             async with httpx.AsyncClient(timeout=timeout) as client:
                 async with client.stream(
                     "POST", url, json=payload, headers=node_headers
                 ) as upstream:
-                    async for chunk in upstream.aiter_raw():
+                    async for chunk in _authorized_chunks(
+                        upstream.aiter_raw(), access_check
+                    ):
                         yield chunk
         except Exception:
             # End the stream; the browser's EventSource will retry/surface it.
@@ -511,12 +463,50 @@ def _streaming_preview_response(request, container, port, path, service):
     return resp
 
 
-def build_preview_response(request, container, port, path, service) -> HttpResponse:
+_ACCESS_INTERVAL = 2
+
+
+async def _authorized_chunks(chunks, access_check):
+    if access_check is None:
+        async for chunk in chunks:
+            yield chunk
+        return
+
+    deadline = monotonic()
+    while True:
+        pending = asyncio.ensure_future(anext(chunks))
+        try:
+            while True:
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    if not await access_check():
+                        return
+                    deadline = monotonic() + _ACCESS_INTERVAL
+                ready, _ = await asyncio.wait(
+                    {pending}, timeout=max(0, deadline - monotonic())
+                )
+                if ready and monotonic() < deadline:
+                    yield pending.result()
+                    break
+        except StopAsyncIteration:
+            return
+        finally:
+            if not pending.done():
+                pending.cancel()
+            with suppress(asyncio.CancelledError, StopAsyncIteration):
+                await pending
+
+
+def build_preview_response(
+    request, container, port, path, service, *, access_check=None
+) -> HttpResponse:
     """Relay ``request`` to ``container``'s app on ``port`` and return the response."""
     # SSE (AI chatbots, Gradio's queue) must stream, not buffer — route it to the
     # streaming proxy. Everything else (HTML, assets, JSON, redirects) is buffered.
     if _is_sse_request(request):
-        return _streaming_preview_response(request, container, port, path, service)
+        return _streaming_preview_response(
+            request, container, port, path, service, access_check
+        )
 
     payload, jar_key, jar = _forward_payload(request, container, port, path)
 
@@ -560,7 +550,11 @@ def build_preview_response(request, container, port, path, service) -> HttpRespo
     )
     for key, value in up_headers:
         lkey = key.lower()
-        if lkey in _DROP_RESPONSE_HEADERS or lkey == "content-type":
+        if (
+            lkey in _DROP_RESPONSE_HEADERS
+            or lkey == "content-type"
+            or lkey.startswith(("x-accel-", "access-control-"))
+        ):
             continue
         if lkey == "location" and value.startswith("/"):
             value = prefix + value.lstrip("/")  # keep redirects inside the proxy
@@ -568,30 +562,4 @@ def build_preview_response(request, container, port, path, service) -> HttpRespo
     resp["X-Robots-Tag"] = "noindex"
     # Allow embedding: bypass XFrameOptionsMiddleware (which would add DENY).
     resp.xframe_options_exempt = True
-    _bootstrap_preview_cookie(request, resp, prefix)
     return _no_cache(resp)
-
-
-def _bootstrap_preview_cookie(request, resp, prefix: str) -> None:
-    """Drop a short-lived, path-scoped cookie after a query-param token auth.
-
-    A page reached with ``?__pk_token=`` loads its assets via the injected
-    ``<base>`` (no query string), so those subresource requests would be
-    unauthenticated. Setting the token as an ``HttpOnly`` cookie scoped to this
-    exact preview path lets them authenticate too — without ever leaking the key
-    into the URL of every asset. The cookie stays server-visible only (it is never
-    forwarded to the guest app, which uses the server-side cookie jar).
-    """
-    token = getattr(request, "_preview_query_token", None)
-    if not token:
-        return
-    secure = _public_origin(request).lower().startswith("https")
-    resp.set_cookie(
-        PREVIEW_TOKEN_COOKIE,
-        token,
-        max_age=PREVIEW_TOKEN_TTL,
-        path=prefix,
-        httponly=True,
-        samesite="Lax",
-        secure=secure,
-    )

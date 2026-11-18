@@ -8,8 +8,34 @@ public contract. Errors from the API's stable envelope are raised as
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
+
+
+def _is_within_preview(url: httpx.URL, preview: httpx.URL) -> bool:
+    if url.userinfo or (url.scheme, url.host, url.port) != (
+        preview.scheme,
+        preview.host,
+        preview.port,
+    ):
+        return False
+    if not url.raw_path.partition(b"?")[0].startswith(preview.raw_path):
+        return False
+
+    # Check the decoded route too, since proxies can normalize escaped path
+    # components before choosing an upstream.
+    path = url.path
+    while "%" in path:
+        decoded = unquote(path)
+        if decoded == path:
+            break
+        path = decoded
+    return (
+        path.startswith(preview.path)
+        and "\\" not in path
+        and not ({".", ".."} & set(path.split("/")))
+    )
 
 
 class PlatformError(Exception):
@@ -155,8 +181,10 @@ class PlatformClient:
             rel = p.get("preview_path") or (
                 f"/api/containers/{container_id}/preview/{p.get('port')}/"
             )
-            # Absolute, ready to fetch (with your API key) or embed in a browser.
+            # Raw API clients and browsers enter through different routes.
             p["preview_url"] = f"{self._root}{rel}"
+            if browser_path := p.get("browser_preview_path"):
+                p["browser_preview_url"] = f"{self._root}{browser_path}"
         return ports
 
     def fetch_preview(self, container_id, port, path="/") -> dict:
@@ -164,12 +192,40 @@ class PlatformClient:
 
         The preview endpoint accepts our ``Authorization: Bearer`` header (already
         set on the client), so an agent can read what the app actually serves
-        without a browser session. Redirects are followed inside the preview.
+        without a browser session. Redirects must stay within the same VM preview.
         """
-        rel = path if path.startswith("/") else "/" + path
-        url = f"{self._root}/api/containers/{container_id}/preview/{port}{rel}"
+        container_id, port = str(container_id), str(port)
+        if not all(
+            part.isascii() and part.isdecimal() for part in (container_id, port)
+        ):
+            raise PlatformError(
+                "invalid_request", "Preview requires a numeric VM ID and port"
+            )
+        prefix = f"{self._root}/api/containers/{container_id}/preview/{port}/"
+        url = prefix + path.removeprefix("/")
         try:
-            resp = self._client.request("GET", url, follow_redirects=True)
+            preview = httpx.URL(prefix)
+            request = self._client.build_request("GET", url)
+            if not _is_within_preview(request.url, preview):
+                raise PlatformError(
+                    "invalid_request", "Path must stay inside the preview"
+                )
+            for _ in range(self._client.max_redirects + 1):
+                resp = self._client.send(request, follow_redirects=False)
+                next_request = resp.next_request
+                if next_request is None:
+                    break
+                if not _is_within_preview(next_request.url, preview):
+                    raise PlatformError(
+                        "preview_redirect_blocked", "Redirect left the preview"
+                    )
+                request = next_request
+            else:
+                raise PlatformError(
+                    "preview_redirect_limit", "Too many preview redirects"
+                )
+        except httpx.InvalidURL:
+            raise PlatformError("invalid_request", "Invalid preview URL") from None
         except httpx.TimeoutException:
             raise PlatformError("timeout", "The preview request timed out")
         except httpx.HTTPError as e:
@@ -182,7 +238,11 @@ class PlatformClient:
             or "xml" in lowered
             or "javascript" in lowered
         )
-        body = resp.text if is_text else f"<{len(resp.content)} bytes of {ctype or 'binary'}>"
+        body = (
+            resp.text
+            if is_text
+            else f"<{len(resp.content)} bytes of {ctype or 'binary'}>"
+        )
         return {
             "status": resp.status_code,
             "content_type": ctype,

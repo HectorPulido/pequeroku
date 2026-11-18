@@ -75,10 +75,10 @@ def test_url_allowed_blocks(url):
     assert ok is False and reason
 
 
-def test_url_allowed_private_override(monkeypatch):
+def test_old_private_override_does_not_allow_private_destinations(monkeypatch):
     monkeypatch.setenv("PEQUENIN_MCP_ALLOW_PRIVATE", "true")
     ok, _ = mcp._url_allowed("http://127.0.0.1/mcp")
-    assert ok
+    assert not ok
 
 
 # --------------------------------------------------------------------------- #
@@ -258,7 +258,16 @@ class FakeSession:
         self.posts = []
         self.closed = False
 
-    def post(self, url, json=None, headers=None, timeout=None, stream=None):
+    def post(
+        self,
+        url,
+        json=None,
+        headers=None,
+        timeout=None,
+        stream=None,
+        allow_redirects=None,
+    ):
+        assert allow_redirects is False
         self.posts.append({"url": url, "json": json, "headers": headers})
         return self._responses.pop(0)
 

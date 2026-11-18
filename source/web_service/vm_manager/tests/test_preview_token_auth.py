@@ -1,16 +1,10 @@
-"""Token auth for the preview endpoint.
-
-An agent (or a browser embed that can't set request headers) reaches the SAME
-preview URL the IDE uses by presenting its platform API key as an
-``Authorization: Bearer`` header, an ``__pk_token`` query param, or the
-short-lived ``__pk_preview_token`` cookie. Ownership stays enforced by the view's
-``get_object()``.
-"""
+"""Authorization and method scopes for the real preview endpoint."""
 
 import base64
 import types
 
 import pytest
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.request import Request
 from rest_framework.test import APIClient, APIRequestFactory
 
@@ -18,7 +12,6 @@ from platform_api.models import APIKey
 from vm_manager import orchestration
 from vm_manager.models import Container
 from vm_manager.preview_proxy import (
-    PREVIEW_TOKEN_COOKIE,
     PREVIEW_TOKEN_QUERY,
     PreviewTokenAuthentication,
 )
@@ -35,7 +28,7 @@ def _drf_request(*, header=None, query=None, cookie=None):
         path += f"?{PREVIEW_TOKEN_QUERY}={query}"
     raw = APIRequestFactory().get(path, **extra)
     if cookie:
-        raw.COOKIES[PREVIEW_TOKEN_COOKIE] = cookie
+        raw.COOKIES["__pk_preview_token"] = cookie
     return Request(raw)
 
 
@@ -55,41 +48,28 @@ def test_header_bearer_token_authenticates():
     assert isinstance(key, APIKey)
 
 
-def test_query_token_authenticates_and_flags_bootstrap_cookie():
-    user = create_user("qry")
-    req = _drf_request(query=(token := _read_key(user)))
-    result = PreviewTokenAuthentication().authenticate(req)
-    assert result is not None and result[0] == user
-    # The flag tells the view to drop the path-scoped subresource cookie.
-    assert getattr(req, "_preview_query_token", None) == token
-
-
-def test_cookie_token_authenticates_without_reflagging():
-    user = create_user("cke")
-    req = _drf_request(cookie=_read_key(user))
-    result = PreviewTokenAuthentication().authenticate(req)
-    assert result is not None and result[0] == user
-    assert getattr(req, "_preview_query_token", None) is None
+@pytest.mark.parametrize("via", ["query", "cookie"])
+def test_legacy_token_transports_do_not_authenticate(via):
+    user = create_user("legacy")
+    request = _drf_request(**{via: _read_key(user)})
+    assert PreviewTokenAuthentication().authenticate(request) is None
 
 
 def test_no_token_returns_none():
     assert PreviewTokenAuthentication().authenticate(_drf_request()) is None
 
 
-def test_unknown_token_returns_none_not_raises():
-    # Must fall through (None), never raise, so session auth can still run.
-    got = PreviewTokenAuthentication().authenticate(
-        _drf_request(header="pk_deadbeef_nope")
-    )
-    assert got is None
-
-
-def test_revoked_key_returns_none():
-    user = create_user("rev")
-    obj, token = APIKey.create_key(user=user, name="k", scopes=["read"])
-    obj.revoked = True
-    obj.save(update_fields=["revoked"])
-    assert PreviewTokenAuthentication().authenticate(_drf_request(header=token)) is None
+@pytest.mark.parametrize("revoke", [False, True])
+def test_invalid_and_revoked_header_credentials_are_rejected(revoke):
+    if revoke:
+        user = create_user("rev")
+        key, token = APIKey.create_key(user=user, name="k", scopes=["read"])
+        key.revoked = True
+        key.save(update_fields=["revoked"])
+    else:
+        token = "pk_deadbeef_nope"
+    with pytest.raises(AuthenticationFailed):
+        PreviewTokenAuthentication().authenticate(_drf_request(header=token))
 
 
 def test_key_without_read_scope_denied():
@@ -99,7 +79,8 @@ def test_key_without_read_scope_denied():
     obj, token = APIKey.create_key(user=user, name="k", scopes=["read"])
     obj.scopes = []
     obj.save(update_fields=["scopes"])
-    assert PreviewTokenAuthentication().authenticate(_drf_request(header=token)) is None
+    with pytest.raises(PermissionDenied):
+        PreviewTokenAuthentication().authenticate(_drf_request(header=token))
 
 
 # --- integration: through the real URL + auth stack ------------------------- #
@@ -136,14 +117,32 @@ def test_preview_via_header_token(running_container):
     resp = client.get(_url(container))
     assert resp.status_code == 200
     assert b"ok" in resp.content
+    assert resp["Content-Security-Policy"].startswith("sandbox;")
 
 
-def test_preview_via_query_token_sets_pathscoped_cookie(running_container):
+def test_legacy_preview_link_and_panel_session_cannot_open_raw_preview(
+    running_container,
+):
     user, container = running_container
-    resp = APIClient().get(f"{_url(container)}?{PREVIEW_TOKEN_QUERY}={_read_key(user)}")
-    assert resp.status_code == 200
-    assert PREVIEW_TOKEN_COOKIE in resp.cookies
-    assert resp.cookies[PREVIEW_TOKEN_COOKIE]["path"] == _url(container)
+    client = APIClient()
+    url = f"{_url(container)}?{PREVIEW_TOKEN_QUERY}={_read_key(user)}"
+    assert client.get(url).status_code == 401
+    client.force_login(user)
+    response = client.get(url)
+    assert response.status_code == 401
+    assert "__pk_preview_token" not in response.cookies
+
+
+@pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
+def test_preview_unsafe_methods_require_exec_scope(running_container, method):
+    user, container = running_container
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {_read_key(user)}")
+    request = getattr(client, method)
+    assert request(_url(container)).status_code == 403
+    token = _read_key(user, scopes=("exec",))
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    assert request(_url(container)).status_code == 200
 
 
 def test_preview_without_auth_rejected(running_container):

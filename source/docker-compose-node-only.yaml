@@ -2,6 +2,9 @@ services:
   vm_services:
     build: ./vm_service/.
     command: ./entrypoint.sh
+    env_file:
+      - path: ./vm_service/.env
+        required: false
     volumes:
       - ./vm_data:/app/vm_data
       - /Users/hectorpulido/.ssh/id_ed25519:/root/.ssh/id_vm_pequeroku:ro
@@ -23,7 +26,7 @@ services:
       - redis
     restart: unless-stopped
     ports:
-      - "8080:8080" # Change this for your wished port
+      - "${VM_SERVICE_BIND_IP:-127.0.0.1}:8080:8080"
 
   redis:
     image: redis:7-alpine

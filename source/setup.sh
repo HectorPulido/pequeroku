@@ -8,9 +8,10 @@
 #   - on a Linux host with /dev/kvm, write docker-compose.override.yaml so the VM
 #     service gets KVM (fast boots). On macOS nothing is written.
 #
-# Never overwrites an existing file. Next step after running: `docker compose up -d`.
+# Keeps existing settings and fills in missing node credentials.
 #
 set -uo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -77,6 +78,17 @@ SECRET_KEY="$(read_env_var web_service/.env SECRET_KEY)"
 [ -n "$SECRET_KEY" ] || SECRET_KEY="$(read_env_var .env SECRET_KEY)"
 [ -n "$SECRET_KEY" ] || SECRET_KEY="$(gen_hex 32)"
 
+BASE_NODE_AUTH_TOKEN="$(read_env_var .env BASE_NODE_AUTH_TOKEN)"
+case "$BASE_NODE_AUTH_TOKEN" in
+  ""|N/A) BASE_NODE_AUTH_TOKEN="$(read_env_var vm_service/.env AUTH_TOKEN)" ;;
+esac
+case "$BASE_NODE_AUTH_TOKEN" in
+  ""|N/A) BASE_NODE_AUTH_TOKEN="$(gen_hex 32)" ;;
+esac
+case "$BASE_NODE_AUTH_TOKEN" in
+  ""|N/A) c_warn "Could not generate the base node credential"; exit 1 ;;
+esac
+
 DB_NAME="$(read_env_var .env DB_NAME)"
 [ -n "$DB_NAME" ] || DB_NAME="$(read_env_var web_service/.env DB_NAME)"
 [ -n "$DB_NAME" ] || DB_NAME="mydb"
@@ -91,7 +103,7 @@ DB_USER="$(read_env_var .env DB_USER)"
 echo "Environment files:"
 
 if [ -f .env ]; then
-  c_skip ".env (exists, left untouched)"; SKIPPED+=(".env")
+  c_skip ".env (existing settings preserved)"; SKIPPED+=(".env")
 else
   cp .env.template .env
   set_env_var .env DB_NAME "$DB_NAME"
@@ -99,6 +111,9 @@ else
   set_env_var .env DB_PASSWORD "$DB_PASSWORD"
   set_env_var .env SECRET_KEY "$SECRET_KEY"
   c_ok ".env (created; secrets generated or adopted from existing config)"; CREATED+=(".env")
+fi
+if [ "$(read_env_var .env BASE_NODE_AUTH_TOKEN)" != "$BASE_NODE_AUTH_TOKEN" ]; then
+  set_env_var .env BASE_NODE_AUTH_TOKEN "$BASE_NODE_AUTH_TOKEN" || exit 1
 fi
 
 if [ -f web_service/.env ]; then
@@ -114,11 +129,15 @@ else
 fi
 
 if [ -f vm_service/.env ]; then
-  c_skip "vm_service/.env (exists, left untouched)"; SKIPPED+=("vm_service/.env")
+  c_skip "vm_service/.env (existing settings preserved)"; SKIPPED+=("vm_service/.env")
 else
   cp vm_service/.env.template vm_service/.env
   c_ok "vm_service/.env (created from template)"; CREATED+=("vm_service/.env")
 fi
+case "$(read_env_var vm_service/.env AUTH_TOKEN)" in
+  ""|N/A) set_env_var vm_service/.env AUTH_TOKEN "$BASE_NODE_AUTH_TOKEN" || exit 1 ;;
+esac
+chmod 600 .env web_service/.env vm_service/.env || exit 1
 
 # --------------------------------------------------------------------------- #
 # KVM compose override (Linux + /dev/kvm only) — Change 6

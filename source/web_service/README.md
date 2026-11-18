@@ -60,7 +60,7 @@ If you test WebSockets intensively, you can also run the ASGI server explicitly:
 From `pequeroku/settings.py` and scripts:
 
 - `SECRET_KEY` (default: "thisisnotasecretkey")
-- `DEBUG` (default: true. Set to "false" in production)
+- `DEBUG` is off by default. Use `DEBUG=true` for local development.
 - `ALLOWED_HOSTS`: comma-separated (e.g. `localhost,127.0.0.1,api.example.com`)
 - `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`: PostgreSQL connection
 - `REDIS_URL` (default: `redis://redis:6379/1`)

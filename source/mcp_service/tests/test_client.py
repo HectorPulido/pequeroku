@@ -141,6 +141,7 @@ def test_get_preview_adds_absolute_preview_url():
                     "port": 8000,
                     "process": "python3",
                     "preview_path": "/api/containers/7/preview/8000/",
+                    "browser_preview_path": "/api/containers/7/preview-launch/8000/",
                 },
                 {"port": 5173, "process": "node"},  # no preview_path → derived
             ],
@@ -149,12 +150,19 @@ def test_get_preview_adds_absolute_preview_url():
     ports = make_client(handler).get_preview(7)
     assert ports[0]["preview_url"] == "http://web:8000/api/containers/7/preview/8000/"
     assert ports[1]["preview_url"] == "http://web:8000/api/containers/7/preview/5173/"
+    assert (
+        ports[0]["browser_preview_url"]
+        == "http://web:8000/api/containers/7/preview-launch/8000/"
+    )
+    assert "browser_preview_url" not in ports[1]
 
 
 def test_fetch_preview_returns_live_response_with_token():
     def handler(request):
         # Hits the preview endpoint (NOT /api/v1) with the caller's bearer token.
-        assert str(request.url) == "http://web:8000/api/containers/7/preview/8000/health"
+        assert (
+            str(request.url) == "http://web:8000/api/containers/7/preview/8000/health"
+        )
         assert request.headers["authorization"] == "Bearer pk_test_secret"
         return httpx.Response(
             200, text='{"ok": true}', headers={"content-type": "application/json"}
@@ -173,10 +181,59 @@ def test_fetch_preview_normalizes_path_and_summarizes_binary():
     def handler(request):
         seen["url"] = str(request.url)
         return httpx.Response(
-            200, content=b"\x89PNG" + b"\x00" * 30, headers={"content-type": "image/png"}
+            200,
+            content=b"\x89PNG" + b"\x00" * 30,
+            headers={"content-type": "image/png"},
         )
 
     out = make_client(handler).fetch_preview(7, 8000, "logo.png")  # no leading slash
     assert seen["url"] == "http://web:8000/api/containers/7/preview/8000/logo.png"
     assert out["content_type"] == "image/png"
     assert "bytes of image/png" in out["body"]  # binary summarized, not decoded
+
+
+def test_fetch_preview_follows_redirect_inside_same_preview():
+    paths = []
+
+    def handler(request):
+        paths.append(request.url.path)
+        assert request.headers["authorization"] == "Bearer pk_test_secret"
+        if len(paths) == 1:
+            return httpx.Response(302, headers={"Location": "ready"})
+        return httpx.Response(200, text="ready")
+
+    result = make_client(handler).fetch_preview(7, 8000, "/start")
+    assert result["body"] == "ready"
+    assert paths == [
+        "/api/containers/7/preview/8000/start",
+        "/api/containers/7/preview/8000/ready",
+    ]
+
+
+@pytest.mark.parametrize(
+    "destination",
+    [
+        "https://elsewhere.invalid/",
+        "/api/v1/types/",
+        "/api/containers/8/preview/8000/",
+        "/api/containers/7/preview/8001/",
+    ],
+)
+def test_fetch_preview_never_sends_redirect_outside_preview(destination):
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(302, headers={"Location": destination})
+
+    with pytest.raises(PlatformError, match="preview_redirect_blocked"):
+        make_client(handler).fetch_preview(7, 8000)
+    assert calls == ["/api/containers/7/preview/8000/"]
+
+
+def test_fetch_preview_rejects_initial_path_outside_preview():
+    def handler(request):
+        pytest.fail("A path outside the preview must not reach the transport")
+
+    with pytest.raises(PlatformError, match="invalid_request"):
+        make_client(handler).fetch_preview(7, 8000, "../")

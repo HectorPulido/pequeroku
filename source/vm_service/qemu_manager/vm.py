@@ -160,7 +160,6 @@ def _adopt_running_vm(
     console_log: str,
     pidfile: str,
     user: str,
-    vm_id: str | None,
 ) -> VMProc | None:
     """
     A QEMU is already running for this VM (it holds the pidfile lock — e.g. it
@@ -181,7 +180,7 @@ def _adopt_running_vm(
             timeout=probe_timeout,
             user=user,
             is_vm_alive=lambda: _pid_alive(pid),
-            vm_id=vm_id,
+            pidfile=pidfile,
         )
     except Exception as e:
         print("Adopt failed; running VM not reachable over SSH:", e)
@@ -219,13 +218,8 @@ def _clear_stale_pidfile(pidfile: str) -> None:
         print("Error clearing stale pidfile", e)
 
 
-def start_vm(
-    workdir: str, vcpus: int, mem_mib: int, disk_gib: int, vm_id: str | None = None
-) -> VMProc:
-    """
-    Start a QEMU VM, wait for SSH to be ready, and return a VMProc handle.
-    This keeps prints, timeouts, and error paths identical to the original.
-    """
+def start_vm(workdir: str, vcpus: int, mem_mib: int, disk_gib: int) -> VMProc:
+    """Start or adopt a QEMU VM and verify its SSH connection before returning."""
     print("Starting vm...")
     os.makedirs(workdir, exist_ok=True)
     overlay = os.path.join(workdir, "disk.qcow2")
@@ -245,7 +239,6 @@ def start_vm(
             console_log,
             pidfile,
             settings.VM_SSH_USER or "",
-            vm_id,
         )
         if adopted is not None:
             return adopted
@@ -324,7 +317,7 @@ def start_vm(
                 timeout=vm_timeout_boot_s,
                 user=vm_ssh_user,
                 is_vm_alive=lambda: proc.poll() is None,
-                vm_id=vm_id,
+                pidfile=pidfile,
             )
             if not ok:
                 raise TimeoutError("SSH not ready (returned False early)")

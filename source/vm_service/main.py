@@ -6,6 +6,7 @@ import base64
 import re
 import uvicorn
 from fastapi import (
+    Depends,
     FastAPI,
     WebSocket,
     WebSocketDisconnect,
@@ -23,6 +24,7 @@ from implementations import (
 )
 
 from routes import vms_router
+from middleware.security import verify_websocket_bearer_token
 
 
 store = RedisStore(settings.REDIS_URL, settings.REDIS_PREFIX)
@@ -37,7 +39,9 @@ async def health():
     return JSONResponse({"ok": "True"})
 
 
-@app.websocket("/vms/{vm_id}/tty")
+@app.websocket(
+    "/vms/{vm_id}/tty", dependencies=[Depends(verify_websocket_bearer_token)]
+)
 async def tty_ws(websocket: WebSocket, vm_id: str):
     def _try_to_resize(raw: bytes):
         # Any frame with this prefix is a control message: always consume it (return
